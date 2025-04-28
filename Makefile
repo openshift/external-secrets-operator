@@ -323,4 +323,4 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
-include build-machinery-go/make/targets/openshift/operator.mk
+include build-machinery-go/make/operator.mk
