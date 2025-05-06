@@ -1,3 +1,0 @@
-[submodule "build-machinery-go"]
-	path = build-machinery-go
-	url = https://github.com/openshift/build-machinery-go
