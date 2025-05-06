@@ -1,32 +1,11 @@
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  labels:
+    app.kubernetes.io/name: external-secrets-operator
+    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups:
-  - operator.operator.openshift.io
-  resources:
-  - externalsecrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.operator.openshift.io
-  resources:
-  - externalsecrets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.operator.openshift.io
-  resources:
-  - externalsecrets/status
-  verbs:
-  - get
-  - patch
-  - update
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
