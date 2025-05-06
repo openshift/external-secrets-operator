@@ -19,26 +19,35 @@ package controller
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
+
+var (
+	Scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(operatorv1alpha1.AddToScheme(Scheme))
+}
 
 var _ = Describe("ExternalSecrets Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "cluster"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		externalsecrets := &operatorv1alpha1.ExternalSecrets{}
 
@@ -48,10 +57,8 @@ var _ = Describe("ExternalSecrets Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &operatorv1alpha1.ExternalSecrets{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

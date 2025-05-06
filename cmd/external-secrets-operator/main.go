@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/internal/controller"
+	"github.com/openshift/external-secrets-operator/pkg/controller"
 	// +kubebuilder:scaffold:imports
 )
 
