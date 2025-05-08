@@ -9,4 +9,5 @@ package tools
 import (
 	// Makefile
 	_ "github.com/openshift/build-machinery-go"
+	_ "github.com/go-bindata/go-bindata/go-bindata"
 )
