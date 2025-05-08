@@ -55,7 +55,7 @@ type ExternalSecretsOperator struct {
 
 // ExternalSecretsOperatorSpec is the specification of the desired behavior of the ExternalSecretsOperator.
 type ExternalSecretsOperatorSpec struct {
-	// globalConfig is for configuring the external-secrets-operator behavior.
+	// globalConfig is for configuring the external-secrets-operator behaviour.
 	// +kubebuilder:validation:Optional
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
 

@@ -151,7 +151,7 @@ type WebhookConfig struct {
 
 	// CertManagerConfig is for configuring cert-manager specifics.
 	// +kubebuilder:validation:Optional
-	CertManager *CertManagerConfig `json:"certManager,omitempty"`
+	CertManagerConfig *CertManagerConfig `json:"certManagerConfig,omitempty"`
 }
 
 // CertManagerConfig is for configuring cert-manager specifics.
