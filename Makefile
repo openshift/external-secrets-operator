@@ -4,6 +4,7 @@
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.1.0
+EXTERNAL_SECRETS_VERSION ?= v0.14.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -76,9 +77,13 @@ COMMIT ?= $(shell git rev-parse HEAD)
 SHORTCOMMIT ?= $(shell git rev-parse --short HEAD)
 GOBUILD_VERSION_ARGS = -ldflags "-X $(PACKAGE)/pkg/version.SHORTCOMMIT=$(SHORTCOMMIT) -X $(PACKAGE)/pkg/version.COMMIT=$(COMMIT)"
 
+# Include the library makefiles
 include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
     targets/openshift/bindata.mk \
 )
+
+# generate bindata targets
+$(call add-bindata,assets,./bindata/...,bindata,assets,pkg/operator/assets/bindata.go)
 
 .PHONY: all
 all: build verify
@@ -121,6 +126,10 @@ vet: ## Run go vet against code.
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+update-manifests: $(HELM_BIN)
+	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
+.PHONY: update-manifests
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
@@ -336,4 +345,8 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt golangci-lint
+verify: vet fmt golangci-lint verify-bindata
+
+## update the relevant data based on new changes.
+.PHONY: update
+update: generate update-manifests update-bindata
