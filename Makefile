@@ -4,6 +4,8 @@
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.1.0
+
+# EXTERNAL_SECRETS_VERSION defines the external-secrets release version to fetch helm charts.
 EXTERNAL_SECRETS_VERSION ?= v0.14.0
 
 # CHANNELS define the bundle channels used in the bundle.
@@ -80,6 +82,7 @@ GOBUILD_VERSION_ARGS = -ldflags "-X $(PACKAGE)/pkg/version.SHORTCOMMIT=$(SHORTCO
 # Include the library makefiles
 include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
     targets/openshift/bindata.mk \
+    targets/openshift/yq.mk \
 )
 
 # generate bindata targets
@@ -127,7 +130,7 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-update-manifests: $(HELM_BIN)
+update-manifests: helm yq
 	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
 .PHONY: update-manifests
 
@@ -227,12 +230,16 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+YQ = $(LOCALBIN)/yq
+HELM ?= $(LOCALBIN)/helm
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_VERSION ?= release-0.19
 GOLANGCI_LINT_VERSION ?= v1.59.1
+YQ_VERSION = v4.45.2
+HELM_VERSION ?= v3.17.3
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -284,6 +291,26 @@ ifeq (, $(shell which operator-sdk 2>/dev/null))
 	}
 else
 OPERATOR_SDK = $(shell which operator-sdk)
+endif
+endif
+
+.PHONY: yq
+yq: $(LOCALBIN) ensure-yq  ## Download yq locally if necessary.
+
+.PHONY: helm
+helm: ## Download helm locally if necessary.
+ifeq (,$(wildcard $(HELM)))
+ifeq (, $(shell ls $(HELM) 2>/dev/null))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(HELM)) ;\
+	temp_dir=$(shell mktemp -d) && OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	curl -sSLo $${temp_dir}/helm.tar.gz https://get.helm.sh/helm-${HELM_VERSION}-$${OS}-$${ARCH}.tar.gz ;\
+	tar -xf $${temp_dir}/helm.tar.gz -C $${temp_dir} ;\
+	cp $${temp_dir}/$${OS}-$${ARCH}/helm $(HELM) ;\
+	chmod +x $(HELM) ;\
+	rm -r $${temp_dir} ;\
+	}
 endif
 endif
 
