@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ex
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM registry.access.redhat.com/ubi9-minimal:9.4
 WORKDIR /
-COPY --from=builder /workspace/external-secrets-operator .
+COPY --from=builder /workspace/external-secrets-operator /bin/external-secrets-operator
 USER 65532:65532
 
-ENTRYPOINT ["/external-secrets-operator"]
+ENTRYPOINT ["/bin/external-secrets-operator"]
