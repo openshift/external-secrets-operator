@@ -14,7 +14,7 @@ bin/helm template external-secrets external-secrets/external-secrets -n external
 
 echo "---- Patching manifest ----"
 
-#remove nonessential fields from each resource manifests.
+# remove non-essential fields from each resource manifests.
 ./bin/yq e 'del(.metadata.labels."helm.sh/chart")' -i ${MANIFESTS_PATH}/manifests.yaml
 ./bin/yq e 'del(.spec.template.metadata.labels."helm.sh/chart")' -i ${MANIFESTS_PATH}/manifests.yaml
 
@@ -28,10 +28,13 @@ rm -rf bindata/external-secrets
 rm -f config/crd/bases/customresourcedefinition_*
 
 # split into individual manifest files
-yq '... comments=""' -s '"_output/manifests/" + .kind + "_" + .metadata.name + ".yml" | downcase' ${MANIFESTS_PATH}/manifests.yaml
+./bin/yq '... comments=""' -s '"_output/manifests/" + .kind + "_" + .metadata.name + ".yml" | downcase' ${MANIFESTS_PATH}/manifests.yaml
 
-#customize manifests
-yq -i '.spec.template.spec.containers[] |= select (.name == "external-secrets") |= .args += ["--enable-leader-election=false", "--enable-cluster-store-reconciler=false", "--enable-cluster-external-secret-reconciler=false", "--enable-push-secret-reconciler=false"]' ${MANIFESTS_PATH}/deployment_external-secrets.yml
+# customize manifests
+./bin/yq -i '.spec.template.spec.containers[] |= select (.name == "external-secrets") |= .args += ["--enable-leader-election=false", "--enable-cluster-store-reconciler=false", "--enable-cluster-external-secret-reconciler=false", "--enable-push-secret-reconciler=false"]' ${MANIFESTS_PATH}/deployment_external-secrets.yml
+
+# remobe non-essential manifests
+rm ${MANIFESTS_PATH}/customresourcedefinition_fakes.generators.external-secrets.io.yml
 
 # Move resource manifests to appropriate location
 mkdir -p bindata/external-secrets/resources
