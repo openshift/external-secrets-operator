@@ -28,6 +28,6 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ex
 FROM registry.access.redhat.com/ubi9-minimal:9.4
 WORKDIR /
 COPY --from=builder /workspace/external-secrets-operator /bin/external-secrets-operator
-USER 65532:65532
+USER 65534:65534
 
 ENTRYPOINT ["/bin/external-secrets-operator"]
