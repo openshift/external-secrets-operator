@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -124,6 +125,12 @@ func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
 			&corev1.Secret{}: {
 				Label: managedResourceLabelReqSelector,
 			},
+			&corev1.ConfigMap{}: {
+				Label: managedResourceLabelReqSelector,
+			},
+			&webhook.ValidatingWebhookConfiguration{}: {
+				Label: managedResourceLabelReqSelector,
+			},
 		},
 		ReaderFailOnMissingInformer: true,
 	}
@@ -162,6 +169,9 @@ func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
 		return nil, err
 	}
 	if _, err = customCache.GetInformer(context.Background(), &corev1.ConfigMap{}); err != nil {
+		return nil, err
+	}
+	if _, err = customCache.GetInformer(context.Background(), &webhook.ValidatingWebhookConfiguration{}); err != nil {
 		return nil, err
 	}
 
@@ -307,6 +317,7 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerManagedResourcePredicates).
 		Watches(&corev1.ServiceAccount{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerManagedResourcePredicates).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerWatchResourcePredicates).
+		WatchesMetadata(&webhook.ValidatingWebhookConfiguration{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerWatchResourcePredicates).
 		Complete(r)
 }
 
