@@ -4,6 +4,25 @@
 resources:
 - bases/operator.openshift.io_externalsecrets.yaml
 - bases/operator.openshift.io_externalsecretsoperators.yaml
+- bases/customresourcedefinition_acraccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_clusterexternalsecrets.external-secrets.io.yml
+- bases/customresourcedefinition_clustergenerators.generators.external-secrets.io.yml
+- bases/customresourcedefinition_clustersecretstores.external-secrets.io.yml
+- bases/customresourcedefinition_ecrauthorizationtokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_externalsecrets.external-secrets.io.yml
+- bases/customresourcedefinition_gcraccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_generatorstates.generators.external-secrets.io.yml
+- bases/customresourcedefinition_githubaccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_grafanas.generators.external-secrets.io.yml
+- bases/customresourcedefinition_passwords.generators.external-secrets.io.yml
+- bases/customresourcedefinition_pushsecrets.external-secrets.io.yml
+- bases/customresourcedefinition_quayaccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_secretstores.external-secrets.io.yml
+- bases/customresourcedefinition_stssessiontokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_uuids.generators.external-secrets.io.yml
+- bases/customresourcedefinition_vaultdynamicsecrets.generators.external-secrets.io.yml
+- bases/customresourcedefinition_webhooks.generators.external-secrets.io.yml
+
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
