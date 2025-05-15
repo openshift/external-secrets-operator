@@ -272,7 +272,6 @@ package=$(2) ;\
 echo "Downloading $${package}" ;\
 rm -f $(1) || true ;\
 GOBIN=$(LOCALBIN) go install $${package} ;\
-mv $(1) $(1) ;\
 }
 endef
 
