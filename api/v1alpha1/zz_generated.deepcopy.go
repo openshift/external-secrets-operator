@@ -432,8 +432,8 @@ func (in *ObjectReference) DeepCopy() *ObjectReference {
 func (in *WebhookConfig) DeepCopyInto(out *WebhookConfig) {
 	*out = *in
 	out.CertificateCheckInterval = in.CertificateCheckInterval
-	if in.CertManager != nil {
-		in, out := &in.CertManager, &out.CertManager
+	if in.CertManagerConfig != nil {
+		in, out := &in.CertManagerConfig, &out.CertManagerConfig
 		*out = new(CertManagerConfig)
 		(*in).DeepCopyInto(*out)
 	}
