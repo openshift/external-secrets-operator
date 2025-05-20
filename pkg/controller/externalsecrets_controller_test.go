@@ -76,7 +76,7 @@ var _ = Describe("ExternalSecrets Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ExternalSecretsReconciler{
-				Client: k8sClient,
+				//Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 

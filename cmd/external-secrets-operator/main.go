@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller"
+	resourcecontroller "github.com/openshift/external-secrets-operator/pkg/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -144,11 +144,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.ExternalSecretsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ExternalSecrets")
+	resourceControllerManager, err := resourcecontroller.New(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to set up static resource controller manager")
+		os.Exit(1)
+	}
+	if err = resourceControllerManager.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "failed to set up StaticResourceReconciler controller with manager",
+			"controller", resourcecontroller.ControllerName, "manager")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
