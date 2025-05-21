@@ -29,8 +29,8 @@ type ExternalSecretsList struct {
 // +kubebuilder:resource:scope=Cluster
 
 // ExternalSecrets describes configuration and information about the managed external-secrets
-// deployment. The name must be `cluster` to make ExternalSecrets a singleton that is, to
-// allow only one instance of ExternalSecrets per cluster.
+// deployment. The name must be `cluster` as ExternalSecrets is a singleton,
+// allowing only one instance per cluster.
 //
 // When an ExternalSecrets is created, a new deployment is created which manages the
 // external-secrets and keeps it in the desired state.
@@ -174,11 +174,9 @@ type CertManagerConfig struct {
 	AddInjectorAnnotations string `json:"addInjectorAnnotations,omitempty"`
 
 	// issuerRef contains details to the referenced object used for
-	// obtaining the certificates. When issuerRef.Kind is Issuer, it must exist in the
-	// .spec.istioCSRConfig.istio.namespace.
+	// obtaining the certificates. It must exist in the external-secrets
+	// namespace if not using a cluster-scoped cert-manager issuer.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="issuerRef is immutable once set"
-	// +kubebuilder:validation:XValidation:rule="self.kind.lowerAscii() == 'issuer' || self.kind.lowerAscii() == 'clusterissuer'",message="kind must be either 'Issuer' or 'ClusterIssuer'"
-	// +kubebuilder:validation:XValidation:rule="self.group.lowerAscii() == 'cert-manager.io'",message="group must be 'cert-manager.io'"
 	// +kubebuilder:validation:Required
 	// +required
 	IssuerRef ObjectReference `json:"issuerRef,omitempty"`

@@ -29,12 +29,12 @@ type ExternalSecretsManagerList struct {
 // +kubebuilder:resource:scope=Cluster
 
 // ExternalSecretsManager describes configuration and information about the deployments managed by
-// the operator. The name must be `cluster` to make ExternalSecretsManager a singleton that is, to
-// allow only one instance of ExternalSecretsManager per cluster.
+// the external-secrets-operator. The name must be `cluster` as this is a singleton object allowing
+// only one instance of ExternalSecretsManager per cluster.
 //
-// ExternalSecretsManager is mainly for configuring the global options and enabling the features, which
+// It is mainly for configuring the global options and enabling optional features, which
 // serves as a common/centralized config for managing multiple controllers of the operator. The object
-// will be created during the operator installation.
+// is automatically created during the operator installation.
 //
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'cluster'",message="ExternalSecretsManager is a singleton, .metadata.name must be 'cluster'"
 // +operator-sdk:csv:customresourcedefinitions:displayName="ExternalSecretsManager"
@@ -45,21 +45,23 @@ type ExternalSecretsManager struct {
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// spec is the specification of the desired behavior of the ExternalSecretsManager.
+	// spec is the specification of the desired behavior
 	// +kubebuilder:validation:Required
 	Spec ExternalSecretsManagerSpec `json:"spec,omitempty"`
 
-	// status is the most recently observed status of the ExternalSecretsManager.
+	// status is the most recently observed status of controllers used by
+	// External Secrets Operator.
 	Status ExternalSecretsManagerStatus `json:"status,omitempty"`
 }
 
 // ExternalSecretsManagerSpec is the specification of the desired behavior of the ExternalSecretsManager.
 type ExternalSecretsManagerSpec struct {
-	// globalConfig is for configuring the external-secrets-operator behavior.
+	// globalConfig is for configuring the behavior of deployments that are managed
+	// by external secrets-operator.
 	// +kubebuilder:validation:Optional
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
 
-	// features is for enabling the optional features.
+	// features is for enabling the optional operator features.
 	Features []Feature `json:"features,omitempty"`
 }
 
@@ -102,13 +104,19 @@ type GlobalConfig struct {
 }
 
 // Feature is for enabling the optional features.
+// Feature is for enabling the optional features.
 type Feature struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
+	// name of the optional feature.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// enabled determines if feature should be turned on.
+	// +kubebuilder:validation:Required
+	Enabled bool `json:"enabled"`
 }
 
 // ExternalSecretsManagerStatus is the most recently observed status of the ExternalSecretsManager.
 type ExternalSecretsManagerStatus struct {
-	// conditions holds information of the current state of the external-secrets deployment.
+	// conditions holds information of the current state of the external-secrets-operator controllers.
 	ConditionalStatus `json:",inline,omitempty"`
 }

@@ -5,7 +5,7 @@ import (
 )
 
 type ConditionalStatus struct {
-	// conditions holds information of the current state of the istio-csr agent deployment.
+	// conditions holds information of the current state of deployment.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
