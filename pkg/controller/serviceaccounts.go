@@ -2,11 +2,11 @@ package controller
 
 import (
 	"fmt"
-	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {

@@ -36,9 +36,11 @@ const (
 
 	bitwardenserviceAccountAssetName = "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml"
 
-	// istiocsrImageVersionEnvVarName is the environment variable key name
+	// externalsecretsImageVersionEnvVarName is the environment variable key name
 	// containing the image version of the istiocsr as value.
 	externalsecretsImageVersionEnvVarName = "EXTERNAL_SECRETS_OPERAND_IMAGE_VERSION"
+
+	serviceAssetName = "external-secrets/resources/service_bitwarden-sdk-server.yml"
 )
 
 var (

@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 )
 
@@ -62,7 +63,7 @@ var (
 	// and creates informers for.
 	watchResources = []client.Object{
 		&operatorv1alpha1.ExternalSecrets{},
-		//&certmanagerv1.Certificate{},
+		&certmanagerv1.Certificate{},
 		&appsv1.Deployment{},
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
@@ -277,7 +278,7 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ExternalSecrets{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named(ControllerName).
-		//Watches(&certmanagerv1.Certificate{}, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates).
+		Watches(&certmanagerv1.Certificate{}, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates).
 		Watches(&rbacv1.ClusterRole{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerManagedResourcePredicates).
 		Watches(&rbacv1.ClusterRoleBinding{}, handler.EnqueueRequestsFromMapFunc(mapFunc), controllerManagedResourcePredicates).

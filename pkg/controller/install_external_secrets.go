@@ -24,6 +24,13 @@ func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(externals
 		return err
 	}
 
+	if externalsecrets.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider != nil && externalsecrets.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider.Enabled == "true" {
+		if err := r.createOrApplyServices(externalsecrets, resourceLabels, recon); err != nil {
+			r.log.Error(err, "failed to reconcile service resource")
+			return err
+		}
+	}
+
 	r.log.V(4).Info("finished reconciliation of external-secrets", "namespace", externalsecrets.GetNamespace(), "name", externalsecrets.GetName())
 	return nil
 }
