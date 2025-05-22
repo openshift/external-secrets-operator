@@ -130,9 +130,9 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-update-manifests: helm yq
+update-operand-manifests: helm yq
 	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
-.PHONY: update-manifests
+.PHONY: update-operand-manifests
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
@@ -365,8 +365,8 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt golangci-lint verify-bindata
+verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated
 
 ## update the relevant data based on new changes.
 .PHONY: update
-update: generate update-manifests update-bindata
+update: generate manifests update-operand-manifests update-bindata
