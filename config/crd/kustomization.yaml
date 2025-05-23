@@ -3,7 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/operator.openshift.io_externalsecrets.yaml
-- bases/operator.openshift.io_externalsecretsoperators.yaml
+- bases/operator.openshift.io_externalsecretsmanagers.yaml
 - bases/customresourcedefinition_acraccesstokens.generators.external-secrets.io.yml
 - bases/customresourcedefinition_clusterexternalsecrets.external-secrets.io.yml
 - bases/customresourcedefinition_clustergenerators.generators.external-secrets.io.yml
