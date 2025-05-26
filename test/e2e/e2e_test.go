@@ -46,7 +46,7 @@ var _ = Describe("controller", Ordered, func() {
 			verifyControllerUp := func() error {
 				// Get pod name
 
-				cmd := exec.Command("kubectl", "get",
+				cmd := exec.Command("oc", "get",
 					"pods", "-l", "control-plane=controller-manager",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
@@ -65,7 +65,7 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
 
 				// Validate pod status
-				cmd = exec.Command("kubectl", "get",
+				cmd = exec.Command("oc", "get",
 					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 					"-n", namespace,
 				)
