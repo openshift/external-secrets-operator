@@ -370,3 +370,8 @@ verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-genera
 ## update the relevant data based on new changes.
 .PHONY: update
 update: generate manifests update-operand-manifests update-bindata
+
+## checks for any uncommitted changes.
+.PHONY: check-git-diff
+check-git-diff: manifests generate update-operand-manifests bundle
+	./hack/check-git-diff-clean.sh
