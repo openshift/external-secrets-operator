@@ -52,8 +52,26 @@ spec:
       - command:
         - /bin/external-secrets-operator
         args:
+          - --v=2
           - --leader-elect
           - --health-probe-bind-address=:8081
+        env:
+          - name: WATCH_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.annotations['olm.targetNamespaces']
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: OPERATOR_NAME
+            value: external-secrets-operator
+          - name: OPERATOR_IMAGE_VERSION
+            value: 0.1.0
+          - name: RELATED_IMAGE_EXTERNAL_SECRETS
+            value: oci.external-secrets.io/external-secrets/external-secrets:v0.14.0
+          - name: OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION
+            value: 0.14.0
         image: openshift.io/external-secrets-operator:latest
         name: manager
         securityContext:
