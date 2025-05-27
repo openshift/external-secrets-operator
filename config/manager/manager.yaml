@@ -72,7 +72,7 @@ spec:
             value: oci.external-secrets.io/external-secrets/external-secrets:v0.14.0
           - name: OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION
             value: 0.14.0
-        image: openshift.io/external-secrets-operator:latest
+        image: controller:latest
         name: manager
         securityContext:
           allowPrivilegeEscalation: false

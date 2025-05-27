@@ -45,7 +45,6 @@ type ExternalSecrets struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec is the specification of the desired behavior of the ExternalSecrets.
-	// +kubebuilder:validation:Required
 	Spec ExternalSecretsSpec `json:"spec,omitempty"`
 
 	// status is the most recently observed status of the ExternalSecrets.
@@ -162,7 +161,7 @@ type CertManagerConfig struct {
 	// Use `true` or `false` to indicate the preference.
 	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Enum:="true";"false"
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Required
 	Enabled string `json:"enabled,omitempty"`
 
 	// addInjectorAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the
@@ -178,7 +177,6 @@ type CertManagerConfig struct {
 	// namespace if not using a cluster-scoped cert-manager issuer.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="issuerRef is immutable once set"
 	// +kubebuilder:validation:Required
-	// +required
 	IssuerRef ObjectReference `json:"issuerRef,omitempty"`
 
 	// certificateDuration is the validity period of the webhook certificate.

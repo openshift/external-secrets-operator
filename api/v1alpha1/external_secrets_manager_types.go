@@ -46,7 +46,6 @@ type ExternalSecretsManager struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec is the specification of the desired behavior
-	// +kubebuilder:validation:Required
 	Spec ExternalSecretsManagerSpec `json:"spec,omitempty"`
 
 	// status is the most recently observed status of controllers used by
