@@ -19,15 +19,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -39,6 +34,7 @@ import (
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	externalsecretscontroller "github.com/openshift/external-secrets-operator/pkg/controller"
 	// +kubebuilder:scaffold:imports
@@ -138,48 +134,35 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "de6a4747.operator.openshift.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "failed to create controller manager")
 		os.Exit(1)
 	}
 
 	externalsecrets, err := externalsecretscontroller.New(mgr)
 	if err != nil {
-		setupLog.Error(err, "unable to set up external secrets controller manager")
+		setupLog.Error(err, "failed to create controller", "controller", externalsecretscontroller.ControllerName)
 		os.Exit(1)
 	}
 	if err = externalsecrets.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "failed to set up external secrets controller with manager",
-			"controller", externalsecretscontroller.ControllerName, "manager")
+		setupLog.Error(err, "failed to set up controller with manager",
+			"controller", externalsecretscontroller.ControllerName)
 		os.Exit(1)
 	}
 
-	// +kubebuilder:scaffold:builder
-
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		setupLog.Error(err, "failed to set up health check")
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLog.Error(err, "failed to set up ready check")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("starting the controller manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "failed to start controller manager")
 		os.Exit(1)
 	}
 }

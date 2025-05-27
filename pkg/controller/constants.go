@@ -19,5 +19,11 @@ const (
 	// successful reconciliation by the controller.
 	controllerProcessedAnnotation = "operator.openshift.io/external-secrets-processed"
 
-	externalsecretsObjectName = "default"
+	externalsecretsObjectName = "cluster"
+
+	// certificateCRDGroupVersion is the group and version of the Certificate CRD provided by cert-manager project.
+	certificateCRDGroupVersion = "cert-manager.io/v1"
+
+	// certificateCRDName is the name of the Certificate CRD provided by cert-manager project.
+	certificateCRDName = "certificates"
 )

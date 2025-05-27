@@ -7,9 +7,10 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - Secret
-  - Service
-  - ServiceAccount
+  - events
+  - secrets
+  - serviceaccounts
+  - services
   verbs:
   - create
   - delete
@@ -21,7 +22,7 @@ rules:
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
-  - ValidatingWebhookConfiguration
+  - validatingwebhookconfigurations
   verbs:
   - create
   - delete
@@ -33,7 +34,7 @@ rules:
 - apiGroups:
   - apps
   resources:
-  - Deployment
+  - deployments
   verbs:
   - create
   - delete
@@ -45,7 +46,19 @@ rules:
 - apiGroups:
   - cert-manager.io
   resources:
-  - Certificate
+  - certificates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
   verbs:
   - create
   - delete
@@ -83,10 +96,10 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - ClusterRole
-  - ClusterRoleBinding
-  - Role
-  - RoleBinding
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete

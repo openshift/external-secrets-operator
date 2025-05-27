@@ -31,8 +31,8 @@ type ctrlClient interface {
 	Exists(context.Context, client.ObjectKey, client.Object) (bool, error)
 }
 
-func NewClient(m manager.Manager) (ctrlClient, error) {
-	c, err := BuildCustomClient(m)
+func NewClient(m manager.Manager, r *ExternalSecretsReconciler) (ctrlClient, error) {
+	c, err := BuildCustomClient(m, r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build custom client: %w", err)
 	}
