@@ -67,6 +67,9 @@ type ExternalSecretsSpec struct {
 type ExternalSecretsStatus struct {
 	// conditions holds information of the current state of the external-secrets deployment.
 	ConditionalStatus `json:",inline,omitempty"`
+
+	// externalSecretsImage is the name of the image and the tag used for deploying external-secrets.
+	ExternalSecretsImage string `json:"externalSecretsImage,omitempty"`
 }
 
 // ExternalSecretsConfig is for configuring the external-secrets behavior.
