@@ -5,5 +5,10 @@ import (
 )
 
 func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(externalsecrets *operatorv1alpha1.ExternalSecrets, recon bool) error {
+	if err := r.createOrApplyValidatingWebhookConfiguration(externalsecrets, recon); err != nil {
+		r.log.Error(err, "failed to reconcile validating webhook resource")
+		return err
+	}
+	
 	return nil
 }
