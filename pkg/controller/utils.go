@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap/zapcore"
 	"reflect"
 
 	webhook "k8s.io/api/admissionregistration/v1"
@@ -28,6 +29,18 @@ var (
 )
 
 func init() {
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := certmanagerv1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
 	if err := webhook.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
@@ -386,4 +399,42 @@ func parseBool(val string) bool {
 		return true
 	}
 	return false
+}
+
+// validateExternalSecretsConfig is for validating the ExternalSecrets CR fields, apart from the
+// CEL validations present in CRD.
+func (r *ExternalSecretsReconciler) validateExternalSecretsConfig(es *operatorv1alpha1.ExternalSecrets) error {
+	if isCertManagerConfigEnabled(es) {
+		if _, ok := r.optionalResourcesList[&certmanagerv1.Certificate{}]; !ok {
+			return fmt.Errorf("spec.externalSecretsConfig.webhookConfig.certManagerConfig.enabled is set, but cert-manager is not installed")
+		}
+
+	}
+	return nil
+}
+
+// isESMSpecEmpty returns whether ExternalSecretsManager CR Spec is empty.
+func isESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
+	return esm != nil && !reflect.DeepEqual(esm.Spec, operatorv1alpha1.ExternalSecretsManagerSpec{})
+}
+
+// isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
+func isCertManagerConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
+	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil &&
+		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
+		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
+		parseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.Enabled)
+}
+
+// isBitwardenConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
+func isBitwardenConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
+	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider != nil &&
+		parseBool(es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider.Enabled)
+}
+
+func getLogLevel(config *operatorv1alpha1.ExternalSecretsConfig) string {
+	if config != nil {
+		return zapcore.Level(config.LogLevel).String()
+	}
+	return "info"
 }

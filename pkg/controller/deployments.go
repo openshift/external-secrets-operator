@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
@@ -68,28 +67,8 @@ func (r *ExternalSecretsReconciler) createOrApplyDeploymentFromAsset(externalsec
 ) error {
 	deployment := decodeDeploymentObjBytes(assets.MustAsset(assetName))
 
-	updateNamespace(deployment, externalsecrets.GetNamespace())
-	updateResourceLabels(deployment, resourceLabels)
-	updatePodTemplateLabels(deployment, resourceLabels)
-
-	if argUpdater != nil {
-		argUpdater(deployment, externalsecrets)
-	}
-
-	if err := updateResourceRequirement(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update resource requirements: %w", err)
-	}
-	if err := updateAffinityRules(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update affinity rules: %w", err)
-	}
-	if err := updatePodTolerations(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update pod tolerations: %w", err)
-	}
-	if err := updateNodeSelector(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update node selector: %w", err)
-	}
-	if err := r.updateImage(deployment); err != nil {
-		return NewIrrecoverableError(err, "failed to update image %s/%s", externalsecrets.GetNamespace(), externalsecrets.GetName())
+	if err := r.getDeploymentObject(deployment, externalsecrets, resourceLabels, argUpdater); err != nil {
+		return err
 	}
 
 	deploymentName := fmt.Sprintf("%s/%s", deployment.GetNamespace(), deployment.GetName())
@@ -126,23 +105,60 @@ func (r *ExternalSecretsReconciler) createOrApplyDeploymentFromAsset(externalsec
 	return nil
 }
 
+func (r *ExternalSecretsReconciler) getDeploymentObject(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, argUpdater func(*appsv1.Deployment, *operatorv1alpha1.ExternalSecrets)) error {
+	updateNamespace(deployment, externalsecrets.GetNamespace())
+	updateResourceLabels(deployment, resourceLabels)
+	updatePodTemplateLabels(deployment, resourceLabels)
+
+	if argUpdater != nil {
+		argUpdater(deployment, externalsecrets)
+	}
+
+	if err := r.updateResourceRequirement(deployment, externalsecrets); err != nil {
+		return fmt.Errorf("failed to update resource requirements: %w", err)
+	}
+	if err := updateAffinityRules(deployment, externalsecrets); err != nil {
+		return fmt.Errorf("failed to update affinity rules: %w", err)
+	}
+	if err := updatePodTolerations(deployment, externalsecrets); err != nil {
+		return fmt.Errorf("failed to update pod tolerations: %w", err)
+	}
+	if err := updateNodeSelector(deployment, externalsecrets); err != nil {
+		return fmt.Errorf("failed to update node selector: %w", err)
+	}
+	if err := r.updateImage(deployment); err != nil {
+		return NewIrrecoverableError(err, "failed to update image %s/%s", externalsecrets.GetNamespace(), externalsecrets.GetName())
+	}
+
+	return nil
+}
+
 // updatePodTemplateLabels sets labels on the pod template spec.
 func updatePodTemplateLabels(deployment *appsv1.Deployment, resourceLabels map[string]string) {
 	deployment.Spec.Template.ObjectMeta.Labels = resourceLabels
 }
 
 // updateResourceRequirement sets validated resource requirements to all containers.
-func updateResourceRequirement(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	if reflect.ValueOf(externalsecrets.Spec.ExternalSecretsConfig.Resources).IsZero() {
+func (r *ExternalSecretsReconciler) updateResourceRequirement(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+	rscReqs := corev1.ResourceRequirements{}
+	if externalsecrets.Spec.ExternalSecretsConfig != nil && !reflect.ValueOf(externalsecrets.Spec.ExternalSecretsConfig.Resources).IsZero() {
+		externalsecrets.Spec.ExternalSecretsConfig.Resources.DeepCopyInto(&rscReqs)
+	} else if r.esm.Spec.GlobalConfig != nil && !reflect.ValueOf(r.esm.Spec.GlobalConfig.Resources).IsZero() {
+		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
+	} else {
 		return nil
 	}
-	if err := validateResourceRequirements(externalsecrets.Spec.ExternalSecretsConfig.Resources,
-		field.NewPath("spec", "externalsecretsConfig")); err != nil {
-		return err
+
+	// Validate the resource requirements
+	if err := validateResourceRequirements(rscReqs, field.NewPath("spec")); err != nil {
+		return fmt.Errorf("invalid resource requirements: %w", err)
 	}
+
+	// Apply the resource requirements to all containers in the pod template
 	for i := range deployment.Spec.Template.Spec.Containers {
-		deployment.Spec.Template.Spec.Containers[i].Resources = externalsecrets.Spec.ExternalSecretsConfig.Resources
+		deployment.Spec.Template.Spec.Containers[i].Resources = rscReqs
 	}
+
 	return nil
 }
 
@@ -238,18 +254,16 @@ func (r *ExternalSecretsReconciler) updateImageInStatus(externalsecrets *operato
 
 // argument list for external-secrets deployment resource
 func updateArgList(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	externalsecretsConfigs := externalsecrets.Spec.ExternalSecretsConfig
-	logLevelInt := externalsecretsConfigs.LogLevel
-	level := zapcore.Level(logLevelInt)
-	levelStr := level.String()
-
+	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
+	namespace := externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
 	args := []string{
 		"--concurrent=1",
 		"--metrics-port=9402",
-		fmt.Sprintf("--loglevel=%s", levelStr),
+		fmt.Sprintf("--loglevel=%s", level),
 		"--zap-time-encoding=epoch",
-		"--enable-leader-election=false", "--enable-cluster-store-reconciler=false", "--enable-cluster-external-secret-reconciler=false",
-		"--enable-push-secret-reconciler=false",
+		"--enable-leader-election=true", "--enable-cluster-store-reconciler=true", "--enable-cluster-external-secret-reconciler=true",
+		"--enable-push-secret-reconciler=true",
+		fmt.Sprintf("--namespace=%s", namespace),
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
@@ -262,11 +276,7 @@ func updateArgList(deployment *appsv1.Deployment, externalsecrets *operatorv1alp
 
 // argument list for webhook deployment resource
 func updateWebhookArgs(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	externalsecretsConfigs := externalsecrets.Spec.ExternalSecretsConfig
-	logLevelInt := externalsecretsConfigs.LogLevel
-	level := zapcore.Level(logLevelInt)
-	levelStr := level.String()
-
+	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
 	args := []string{
 		"webhook",
 		fmt.Sprintf("--dns-name=external-secrets-webhook.%s.svc", externalsecrets.GetNamespace()),
@@ -275,7 +285,7 @@ func updateWebhookArgs(deployment *appsv1.Deployment, externalsecrets *operatorv
 		"--check-interval=5m",
 		"--metrics-addr=:8080",
 		"--healthz-addr=:8081",
-		fmt.Sprintf("--loglevel=%s", levelStr),
+		fmt.Sprintf("--loglevel=%s", level),
 		"--zap-time-encoding=epoch",
 	}
 
@@ -289,22 +299,18 @@ func updateWebhookArgs(deployment *appsv1.Deployment, externalsecrets *operatorv
 
 // argument list for cert controller deployment resource
 func updateCertControllerArgs(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	externalsecretsConfigs := externalsecrets.Spec.ExternalSecretsConfig
-	nameSpace := externalsecrets.GetNamespace()
-	logLevelInt := externalsecretsConfigs.LogLevel
-	level := zapcore.Level(logLevelInt)
-	levelStr := level.String()
-
+	namespace := externalsecrets.GetNamespace()
+	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
 	args := []string{
 		"certcontroller",
 		"--crd-requeue-interval=5m",
 		"--service-name=external-secrets-webhook",
-		fmt.Sprintf("--service-namespace=%s", nameSpace),
+		fmt.Sprintf("--service-namespace=%s", namespace),
 		"--secret-name=external-secrets-webhook",
-		fmt.Sprintf("--secret-namespace=%s", nameSpace),
+		fmt.Sprintf("--secret-namespace=%s", namespace),
 		"--metrics-addr=:8080",
 		"--healthz-addr=:8081",
-		fmt.Sprintf("--loglevel=%s", levelStr),
+		fmt.Sprintf("--loglevel=%s", level),
 		"--zap-time-encoding=epoch",
 		"--enable-partial-cache=true",
 	}
