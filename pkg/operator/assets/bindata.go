@@ -1,5 +1,6 @@
 // Code generated for package assets by go-bindata DO NOT EDIT. (@generated)
 // sources:
+// bindata/external-secrets/external-secrets-namespace.yaml
 // bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-controller.yml
@@ -74,6 +75,27 @@ func (fi bindataFileInfo) IsDir() bool {
 // Sys return file is sys mode
 func (fi bindataFileInfo) Sys() interface{} {
 	return nil
+}
+
+var _externalSecretsExternalSecretsNamespaceYaml = []byte(`apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+`)
+
+func externalSecretsExternalSecretsNamespaceYamlBytes() ([]byte, error) {
+	return _externalSecretsExternalSecretsNamespaceYaml, nil
+}
+
+func externalSecretsExternalSecretsNamespaceYaml() (*asset, error) {
+	bytes, err := externalSecretsExternalSecretsNamespaceYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/external-secrets-namespace.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
 }
 
 var _externalSecretsResourcesCertificate_externalSecretsWebhookYml = []byte(`---
@@ -1367,6 +1389,7 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
+	"external-secrets/external-secrets-namespace.yaml":                                      externalSecretsExternalSecretsNamespaceYaml,
 	"external-secrets/resources/certificate_external-secrets-webhook.yml":                   externalSecretsResourcesCertificate_externalSecretsWebhookYml,
 	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":           externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
 	"external-secrets/resources/clusterrole_external-secrets-controller.yml":                externalSecretsResourcesClusterrole_externalSecretsControllerYml,
@@ -1436,6 +1459,7 @@ type bintree struct {
 
 var _bintree = &bintree{nil, map[string]*bintree{
 	"external-secrets": {nil, map[string]*bintree{
+		"external-secrets-namespace.yaml": {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
 		"resources": {nil, map[string]*bintree{
 			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
 			"clusterrole_external-secrets-cert-controller.yml":           {externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},
