@@ -31,6 +31,14 @@ func init() {
 	if err := webhook.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
+
+	if err := certmanagerv1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+
+	if err := corev1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
 }
 
 // addFinalizer adds finalizer to externalsecrets.openshift.operator.io resource.
@@ -238,6 +246,7 @@ func hasObjectChanged(desired, fetched client.Object) bool {
 		objectModified = serviceSpecModified(desired.(*corev1.Service), fetched.(*corev1.Service))
 	case *webhook.ValidatingWebhookConfiguration:
 		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
+	case *corev1.Secret:
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", desired))
 	}
@@ -377,6 +386,14 @@ func validatingWebHookSpecModified(desired, fetched *webhook.ValidatingWebhookCo
 	}
 
 	return false
+}
+
+// isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
+func isCertManagerConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
+	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil &&
+		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
+		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
+		parseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.Enabled)
 }
 
 // parseBool is for parsing a string value as a boolean value. This is very specific to the values
