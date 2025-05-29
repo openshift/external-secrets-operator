@@ -16,6 +16,8 @@ import (
 
 	"github.com/go-logr/logr/testr"
 
+	v1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
@@ -25,6 +27,8 @@ const (
 	testResourcesName = "externalsecrets-test-resource"
 
 	testImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
+
+	testNamespace = "test-external-secrets"
 )
 
 var (
@@ -132,4 +136,16 @@ func testDeployment(name string) *appsv1.Deployment {
 			},
 		},
 	}
+}
+
+func testCertificate() *v1.Certificate {
+	validateCertificate := decodeCertificateObjBytes(assets.MustAsset(webhookCertificateAssetName))
+	validateCertificate.SetLabels(controllerDefaultResourceLabels)
+	return validateCertificate
+}
+
+func testSecret() *corev1.Secret {
+	validateSecret := decodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
+	validateSecret.SetLabels(controllerDefaultResourceLabels)
+	return validateSecret
 }
