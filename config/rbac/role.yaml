@@ -71,6 +71,7 @@ rules:
   - operator.openshift.io
   resources:
   - externalsecrets
+  - externalsecretsmanagers
   verbs:
   - create
   - delete

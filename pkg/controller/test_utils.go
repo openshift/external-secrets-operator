@@ -3,19 +3,19 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr/testr"
-	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
 	webhook "k8s.io/api/admissionregistration/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-)
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-var (
-	testError = fmt.Errorf("test client error")
+	"github.com/go-logr/logr/testr"
+
+	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 const (
@@ -23,18 +23,21 @@ const (
 	testResourcesName = "externalsecrets-test-resource"
 )
 
+var (
+	// testError is the error to return for client failure scenarios.
+	testError = fmt.Errorf("test client error")
+)
+
+// testReconciler returns a sample ExternalSecretsReconciler instance.
 func testReconciler(t *testing.T) *ExternalSecretsReconciler {
 	return &ExternalSecretsReconciler{
-		ctx:           context.Background(),
-		eventRecorder: record.NewFakeRecorder(100),
-		log:           testr.New(t),
-		Scheme:        runtime.NewScheme(),
+		Scheme:                runtime.NewScheme(),
+		ctx:                   context.Background(),
+		eventRecorder:         record.NewFakeRecorder(100),
+		log:                   testr.New(t),
+		esm:                   testExternalSecretsManager(),
+		optionalResourcesList: make(map[client.Object]struct{}),
 	}
-}
-
-func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {
-	validateWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
-	return validateWebhook
 }
 
 // testExternalSecrets returns a sample ExternalSecrets object.
@@ -44,4 +47,46 @@ func testExternalSecrets() *operatorv1alpha1.ExternalSecrets {
 			Name: testResourcesName,
 		},
 	}
+}
+
+// testExternalSecretsManager returns a sample ExternalSecretsManager object.
+func testExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
+	return &operatorv1alpha1.ExternalSecretsManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testResourcesName,
+		},
+	}
+}
+
+// testClusterRole returns ClusterRole object read from provided static asset of same kind.
+func testClusterRole(assetName string) *rbacv1.ClusterRole {
+	role := decodeClusterRoleObjBytes(assets.MustAsset(assetName))
+	role.SetLabels(controllerDefaultResourceLabels)
+	return role
+}
+
+// testClusterRoleBinding returns ClusterRoleBinding object read from provided static asset of same kind.
+func testClusterRoleBinding(assetName string) *rbacv1.ClusterRoleBinding {
+	roleBinding := decodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding.SetLabels(controllerDefaultResourceLabels)
+	return roleBinding
+}
+
+// testRole returns Role object read from provided static asset of same kind.
+func testRole(assetName string) *rbacv1.Role {
+	role := decodeRoleObjBytes(assets.MustAsset(assetName))
+	role.SetLabels(controllerDefaultResourceLabels)
+	return role
+}
+
+// testRoleBinding returns RoleBinding object read from provided static asset of same kind.
+func testRoleBinding(assetName string) *rbacv1.RoleBinding {
+	roleBinding := decodeRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding.SetLabels(controllerDefaultResourceLabels)
+	return roleBinding
+}
+
+func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {
+	validateWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
+	return validateWebhook
 }
