@@ -81,9 +81,11 @@ type ExternalSecretsReconciler struct {
 	eventRecorder         record.EventRecorder
 	log                   logr.Logger
 	optionalResourcesList map[client.Object]struct{}
+	esm                   *operatorv1alpha1.ExternalSecretsManager
 }
 
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsmanagers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
@@ -102,6 +104,7 @@ func New(mgr ctrl.Manager) (*ExternalSecretsReconciler, error) {
 		log:                   ctrl.Log.WithName(ControllerName),
 		Scheme:                mgr.GetScheme(),
 		optionalResourcesList: make(map[client.Object]struct{}),
+		esm:                   new(operatorv1alpha1.ExternalSecretsManager),
 	}
 	c, err := NewClient(mgr, r)
 	if err != nil {
@@ -123,6 +126,10 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 			Label: managedResourceLabelReqSelector,
 		}
 	}
+	ownObject := &operatorv1alpha1.ExternalSecrets{}
+	objectList[ownObject] = cache.ByObject{}
+	esmObject := &operatorv1alpha1.ExternalSecretsManager{}
+	objectList[esmObject] = cache.ByObject{}
 
 	exist, err := isCRDInstalled(mgr.GetConfig(), certificateCRDName, certificateCRDGroupVersion)
 	if err != nil {
@@ -159,8 +166,11 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateObject.GetObjectKind().GroupVersionKind().String(), err)
 		}
 	}
-	ownObject := &operatorv1alpha1.ExternalSecrets{}
 	_, err = customCache.GetInformer(context.Background(), ownObject)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
+	}
+	_, err = customCache.GetInformer(context.Background(), esmObject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
 	}
@@ -236,6 +246,8 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return mgrBuilder.Complete(r)
 }
 
+// isCRDInstalled is for checking whether a CRD with given `group/version` and `name` exists.
+// TODO: Adds watches or polling to dynamically notify when a CRD gets installed.
 func isCRDInstalled(config *rest.Config, name, groupVersion string) (bool, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
@@ -298,6 +310,20 @@ func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Set finalizers on the externalsecrets.openshift.operator.io resource
 	if err := r.addFinalizer(ctx, externalsecrets); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecrets.openshift.operator.io with finalizers: %w", req.NamespacedName, err)
+	}
+
+	// Fetch the externalsecretsmanager.openshift.operator.io CR
+	esmNamespacedName := types.NamespacedName{
+		Name: externalsecretsManagerObjectName,
+	}
+	if err := r.Get(ctx, esmNamespacedName, r.esm); err != nil {
+		if errors.IsNotFound(err) {
+			// NotFound errors, since they can't be fixed by an immediate
+			// requeue (have to wait for a new notification).
+			r.log.V(1).Info("externalsecretsmanager.openshift.operator.io object not found, continuing without it")
+		} else {
+			return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsmanager.openshift.operator.io %q during reconciliation: %w", esmNamespacedName, err)
+		}
 	}
 
 	return r.processReconcileRequest(externalsecrets, req.NamespacedName)

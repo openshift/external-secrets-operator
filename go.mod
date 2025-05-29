@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/cert-manager/cert-manager v1.16.4
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/golangci/golangci-lint v1.59.1
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/onsi/ginkgo/v2 v2.22.0
