@@ -107,7 +107,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 			r.ctrlClient = mock
 			externalSecretsForValidateWebhook := testExternalSecretsForValidateWebhookConfiguration()
 
-			err := r.createOrApplyValidatingWebhookConfiguration(externalSecretsForValidateWebhook, false)
+			err := r.createOrApplyValidatingWebhookConfiguration(externalSecretsForValidateWebhook, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyValidatingWebhookConfiguration() err: %v, wantErr: %v", err, tt.wantErr)
 			}
