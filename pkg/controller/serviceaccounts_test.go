@@ -115,7 +115,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 					return nil
 				})
 			},
-			wantErr: "failed to create serviceaccount /external-secrets: test client error",
+			wantErr: "failed to create serviceaccount external-secrets/external-secrets: test client error",
 		},
 	}
 

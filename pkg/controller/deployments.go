@@ -22,29 +22,24 @@ import (
 func (r *ExternalSecretsReconciler) createOrApplyDeployments(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
 	// Define all Deployment assets to apply based on conditions.
 	deployments := []struct {
-		assetName  string
-		argUpdater func(*appsv1.Deployment, *operatorv1alpha1.ExternalSecrets)
-		condition  bool
+		assetName string
+		condition bool
 	}{
 		{
-			assetName:  controllerDeploymentAssetName,
-			argUpdater: updateArgList,
-			condition:  true,
+			assetName: controllerDeploymentAssetName,
+			condition: true,
 		},
 		{
-			assetName:  webhookDeploymentAssetName,
-			argUpdater: updateWebhookArgs,
-			condition:  true,
+			assetName: webhookDeploymentAssetName,
+			condition: true,
 		},
 		{
-			assetName:  certControllerDeploymentAssetName,
-			argUpdater: updateCertControllerArgs,
-			condition:  externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.Enabled == "false",
+			assetName: certControllerDeploymentAssetName,
+			condition: !isCertManagerConfigEnabled(externalsecrets),
 		},
 		{
-			assetName:  bitwardenDeploymentAssetName,
-			argUpdater: nil,
-			condition:  externalsecrets.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider.Enabled == "true",
+			assetName: bitwardenDeploymentAssetName,
+			condition: isBitwardenConfigEnabled(externalsecrets),
 		},
 	}
 
@@ -53,21 +48,24 @@ func (r *ExternalSecretsReconciler) createOrApplyDeployments(externalsecrets *op
 		if !d.condition {
 			continue
 		}
-		if err := r.createOrApplyDeploymentFromAsset(externalsecrets, d.assetName, resourceLabels, d.argUpdater, externalsecretsCreateRecon); err != nil {
+		if err := r.createOrApplyDeploymentFromAsset(externalsecrets, d.assetName, resourceLabels, externalsecretsCreateRecon); err != nil {
 			return err
 		}
+	}
+
+	if err := r.updateImageInStatus(externalsecrets); err != nil {
+		return FromClientError(err, "failed to update %s/%s status with image info", externalsecrets.GetNamespace(), externalsecrets.GetName())
 	}
 
 	return nil
 }
 
 func (r *ExternalSecretsReconciler) createOrApplyDeploymentFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string,
-	argUpdater func(*appsv1.Deployment, *operatorv1alpha1.ExternalSecrets),
 	externalsecretsCreateRecon bool,
 ) error {
-	deployment := decodeDeploymentObjBytes(assets.MustAsset(assetName))
 
-	if err := r.getDeploymentObject(deployment, externalsecrets, resourceLabels, argUpdater); err != nil {
+	deployment, err := r.getDeploymentObject(assetName, externalsecrets, resourceLabels)
+	if err != nil {
 		return err
 	}
 
@@ -99,38 +97,49 @@ func (r *ExternalSecretsReconciler) createOrApplyDeploymentFromAsset(externalsec
 		r.log.V(4).Info("deployment resource already exists and is in expected state", "name", deploymentName)
 	}
 
-	if err := r.updateImageInStatus(externalsecrets, deployment); err != nil {
-		return FromClientError(err, "failed to update %s/%s status with image info", externalsecrets.GetNamespace(), externalsecrets.GetName())
-	}
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) getDeploymentObject(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, argUpdater func(*appsv1.Deployment, *operatorv1alpha1.ExternalSecrets)) error {
-	updateNamespace(deployment, externalsecrets.GetNamespace())
+func (r *ExternalSecretsReconciler) getDeploymentObject(assetName string, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) (*appsv1.Deployment, error) {
+	deployment := decodeDeploymentObjBytes(assets.MustAsset(assetName))
 	updateResourceLabels(deployment, resourceLabels)
 	updatePodTemplateLabels(deployment, resourceLabels)
 
-	if argUpdater != nil {
-		argUpdater(deployment, externalsecrets)
+	namespace := deployment.GetNamespace()
+	if externalsecrets.Spec.ControllerConfig != nil && externalsecrets.Spec.ControllerConfig.Namespace != "" {
+		namespace = externalsecrets.Spec.ControllerConfig.Namespace
+	}
+	updateNamespace(deployment, namespace)
+
+	image := os.Getenv(externalsecretsImageEnvVarName)
+	if image == "" {
+		return nil, fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName)
+	}
+	logLevel := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
+
+	switch assetName {
+	case controllerDeploymentAssetName:
+		updateContainerSpec(deployment, externalsecrets, image, logLevel)
+	case webhookDeploymentAssetName:
+		updateWebhookContainerSpec(deployment, image, logLevel)
+	case certControllerDeploymentAssetName:
+		updateCertControllerContainerSpec(deployment, image, logLevel)
 	}
 
 	if err := r.updateResourceRequirement(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update resource requirements: %w", err)
+		return nil, fmt.Errorf("failed to update resource requirements: %w", err)
 	}
-	if err := updateAffinityRules(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update affinity rules: %w", err)
+	if err := r.updateAffinityRules(deployment, externalsecrets); err != nil {
+		return nil, fmt.Errorf("failed to update affinity rules: %w", err)
 	}
-	if err := updatePodTolerations(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update pod tolerations: %w", err)
+	if err := r.updatePodTolerations(deployment, externalsecrets); err != nil {
+		return nil, fmt.Errorf("failed to update pod tolerations: %w", err)
 	}
-	if err := updateNodeSelector(deployment, externalsecrets); err != nil {
-		return fmt.Errorf("failed to update node selector: %w", err)
-	}
-	if err := r.updateImage(deployment); err != nil {
-		return NewIrrecoverableError(err, "failed to update image %s/%s", externalsecrets.GetNamespace(), externalsecrets.GetName())
+	if err := r.updateNodeSelector(deployment, externalsecrets); err != nil {
+		return nil, fmt.Errorf("failed to update node selector: %w", err)
 	}
 
-	return nil
+	return deployment, nil
 }
 
 // updatePodTemplateLabels sets labels on the pod template spec.
@@ -170,41 +179,68 @@ func validateResourceRequirements(requirements corev1.ResourceRequirements, fldP
 }
 
 // updateNodeSelector sets and validates node selector constraints.
-func updateNodeSelector(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	if externalsecrets.Spec.ExternalSecretsConfig.NodeSelector == nil {
+func (r *ExternalSecretsReconciler) updateNodeSelector(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+	var nodeSelector map[string]string
+
+	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.NodeSelector != nil {
+		nodeSelector = externalsecrets.Spec.ExternalSecretsConfig.NodeSelector
+	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.NodeSelector != nil {
+		nodeSelector = r.esm.Spec.GlobalConfig.NodeSelector
+	}
+
+	if len(nodeSelector) == 0 {
 		return nil
 	}
-	if err := validateNodeSelectorConfig(externalsecrets.Spec.ExternalSecretsConfig.NodeSelector,
-		field.NewPath("spec", "externalsecretsConfig")); err != nil {
+
+	if err := validateNodeSelectorConfig(nodeSelector, field.NewPath("spec", "externalSecretsConfig")); err != nil {
 		return err
 	}
-	deployment.Spec.Template.Spec.NodeSelector = externalsecrets.Spec.ExternalSecretsConfig.NodeSelector
+
+	deployment.Spec.Template.Spec.NodeSelector = nodeSelector
 	return nil
 }
 
 // updateAffinityRules sets and validates pod affinity/anti-affinity rules.
-func updateAffinityRules(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	if externalsecrets.Spec.ExternalSecretsConfig.Affinity == nil {
+func (r *ExternalSecretsReconciler) updateAffinityRules(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+	var affinity *corev1.Affinity
+
+	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.Affinity != nil {
+		affinity = externalsecrets.Spec.ExternalSecretsConfig.Affinity
+	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Affinity != nil {
+		affinity = r.esm.Spec.GlobalConfig.Affinity
+	}
+
+	if affinity == nil {
 		return nil
 	}
-	if err := validateAffinityRules(externalsecrets.Spec.ExternalSecretsConfig.Affinity,
-		field.NewPath("spec", "istioCSRConfig")); err != nil {
+
+	if err := validateAffinityRules(affinity, field.NewPath("spec", "externalSecretsConfig", "affinity")); err != nil {
 		return err
 	}
-	deployment.Spec.Template.Spec.Affinity = externalsecrets.Spec.ExternalSecretsConfig.Affinity
+
+	deployment.Spec.Template.Spec.Affinity = affinity
 	return nil
 }
 
 // updatePodTolerations sets and validates pod tolerations.
-func updatePodTolerations(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	if externalsecrets.Spec.ExternalSecretsConfig.Tolerations == nil {
+func (r *ExternalSecretsReconciler) updatePodTolerations(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+	var tolerations []corev1.Toleration
+
+	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.Tolerations != nil {
+		tolerations = externalsecrets.Spec.ExternalSecretsConfig.Tolerations
+	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Tolerations != nil {
+		tolerations = r.esm.Spec.GlobalConfig.Tolerations
+	}
+
+	if len(tolerations) == 0 {
 		return nil
 	}
-	if err := validateTolerationsConfig(externalsecrets.Spec.ExternalSecretsConfig.Tolerations,
-		field.NewPath("spec", "istioCSRConfig")); err != nil {
+
+	if err := validateTolerationsConfig(tolerations, field.NewPath("spec", "externalSecretsConfig", "tolerations")); err != nil {
 		return err
 	}
-	deployment.Spec.Template.Spec.Tolerations = externalsecrets.Spec.ExternalSecretsConfig.Tolerations
+
+	deployment.Spec.Template.Spec.Tolerations = tolerations
 	return nil
 }
 
@@ -227,80 +263,68 @@ func validateTolerationsConfig(tolerations []corev1.Toleration, fldPath *field.P
 	return corevalidation.ValidateTolerations(convTolerations, fldPath.Child("tolerations")).ToAggregate()
 }
 
-func (r *ExternalSecretsReconciler) updateImage(deployment *appsv1.Deployment) error {
+func (r *ExternalSecretsReconciler) updateImageInStatus(externalsecrets *operatorv1alpha1.ExternalSecrets) error {
 	image := os.Getenv(externalsecretsImageEnvVarName)
-	if image == "" {
-		return fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName)
-	}
-	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == externalsecretsCommonName {
-			deployment.Spec.Template.Spec.Containers[i].Image = image
-		}
+	if externalsecrets.Status.ExternalSecretsImage != image {
+		externalsecrets.Status.ExternalSecretsImage = image
+		return r.updateStatus(r.ctx, externalsecrets)
 	}
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) updateImageInStatus(externalsecrets *operatorv1alpha1.ExternalSecrets, deployment *appsv1.Deployment) error {
-	for _, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == externalsecretsCommonName {
-			if externalsecrets.Status.ExternalSecretsImage == container.Image {
-				return nil
-			}
-			externalsecrets.Status.ExternalSecretsImage = container.Image
-		}
-	}
-	return r.updateStatus(r.ctx, externalsecrets)
-}
-
 // argument list for external-secrets deployment resource
-func updateArgList(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
-	namespace := externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
+func updateContainerSpec(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets, image, logLevel string) {
+	namespace := getOperatingNamespace(externalsecrets)
 	args := []string{
 		"--concurrent=1",
 		"--metrics-port=9402",
-		fmt.Sprintf("--loglevel=%s", level),
+		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
-		"--enable-leader-election=true", "--enable-cluster-store-reconciler=true", "--enable-cluster-external-secret-reconciler=true",
+		"--enable-leader-election=true",
+		"--enable-cluster-store-reconciler=true",
+		"--enable-cluster-external-secret-reconciler=true",
 		"--enable-push-secret-reconciler=true",
-		fmt.Sprintf("--namespace=%s", namespace),
+	}
+
+	if namespace != "" {
+		args = append(args, fmt.Sprintf("--namespace=%s", namespace))
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == externalsecretsCommonName {
+		if container.Name == "external-secrets" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
+			deployment.Spec.Template.Spec.Containers[i].Image = image
 			break
 		}
 	}
 }
 
 // argument list for webhook deployment resource
-func updateWebhookArgs(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
+func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
 	args := []string{
 		"webhook",
-		fmt.Sprintf("--dns-name=external-secrets-webhook.%s.svc", externalsecrets.GetNamespace()),
+		fmt.Sprintf("--dns-name=external-secrets-webhook.%s.svc", deployment.GetNamespace()),
 		"--port=10250",
 		"--cert-dir=/tmp/certs",
 		"--check-interval=5m",
 		"--metrics-addr=:8080",
 		"--healthz-addr=:8081",
-		fmt.Sprintf("--loglevel=%s", level),
+		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == externalsecretsCommonName {
+		if container.Name == "webhook" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
+			deployment.Spec.Template.Spec.Containers[i].Image = image
 			break
 		}
 	}
 }
 
 // argument list for cert controller deployment resource
-func updateCertControllerArgs(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) {
-	namespace := externalsecrets.GetNamespace()
-	level := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
+func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
+	namespace := deployment.GetNamespace()
 	args := []string{
 		"certcontroller",
 		"--crd-requeue-interval=5m",
@@ -310,14 +334,15 @@ func updateCertControllerArgs(deployment *appsv1.Deployment, externalsecrets *op
 		fmt.Sprintf("--secret-namespace=%s", namespace),
 		"--metrics-addr=:8080",
 		"--healthz-addr=:8081",
-		fmt.Sprintf("--loglevel=%s", level),
+		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 		"--enable-partial-cache=true",
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == externalsecretsCommonName {
+		if container.Name == "cert-controller" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
+			deployment.Spec.Template.Spec.Containers[i].Image = image
 			break
 		}
 	}

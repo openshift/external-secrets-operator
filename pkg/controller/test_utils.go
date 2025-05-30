@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	appsv1 "k8s.io/api/apps/v1"
 	"testing"
 
 	"github.com/go-logr/logr/testr"
@@ -23,8 +24,9 @@ var (
 
 const (
 	// testResourcesName is the name for ExternalSecrets test CR.
-	testResourcesName            = "externalsecrets-test-resource"
-	testExternalSecretsNamespace = "test-namespace"
+	testResourcesName = "externalsecrets-test-resource"
+
+	testImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
 )
 
 func testReconciler(t *testing.T) *ExternalSecretsReconciler {
@@ -38,15 +40,16 @@ func testReconciler(t *testing.T) *ExternalSecretsReconciler {
 	}
 }
 
+// testService returns a Service object decoded from the specified asset file,
 func testService(assetName string) *corev1.Service {
 	service := decodeServiceObjBytes(assets.MustAsset(assetName))
 	service.SetLabels(controllerDefaultResourceLabels)
 	return service
 }
 
+// testServiceAccount returns a ServiceAccount object decoded from the specified asset file,
 func testServiceAccount(assetName string) *corev1.ServiceAccount {
 	serviceAccount := decodeServiceAccountObjBytes(assets.MustAsset(assetName))
-	serviceAccount.SetNamespace(testExternalSecretsNamespace)
 	serviceAccount.SetLabels(controllerDefaultResourceLabels)
 	return serviceAccount
 }
@@ -72,4 +75,29 @@ func testExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
 func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {
 	validateWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
 	return validateWebhook
+}
+
+// Helper function to create a dummy deployment for testing
+func testDeployment(name string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: controllerDefaultResourceLabels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: controllerDefaultResourceLabels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  externalsecretsCommonName,
+							Image: testImageName,
+						},
+					},
+				},
+			},
+		},
+	}
 }

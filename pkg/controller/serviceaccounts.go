@@ -39,7 +39,11 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets
 		}
 
 		desired := decodeServiceAccountObjBytes(assets.MustAsset(serviceAccount.assetName))
-		updateNamespace(desired, externalsecrets.GetNamespace())
+		namespace := desired.GetNamespace()
+		if externalsecrets.Spec.ControllerConfig != nil && externalsecrets.Spec.ControllerConfig.Namespace != "" {
+			namespace = externalsecrets.Spec.ControllerConfig.Namespace
+		}
+		updateNamespace(desired, namespace)
 		updateResourceLabels(desired, resourceLabels)
 
 		serviceAccountName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())

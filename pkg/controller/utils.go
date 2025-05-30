@@ -266,22 +266,28 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
-	// check just the fields which are set by the controller and set in static manifest,
-	// as fields with default values end up in manifest and causes plain check to fail.
-	if *desired.Spec.Replicas != *fetched.Spec.Replicas ||
-		!reflect.DeepEqual(desired.Spec.Selector.MatchLabels, fetched.Spec.Selector.MatchLabels) {
+	if (desired.Spec.Replicas == nil) != (fetched.Spec.Replicas == nil) {
+		return true
+	}
+	if desired.Spec.Replicas != nil && fetched.Spec.Replicas != nil && *desired.Spec.Replicas != *fetched.Spec.Replicas {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) ||
+	if !reflect.DeepEqual(desired.Spec.Selector.MatchLabels, fetched.Spec.Selector.MatchLabels) {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.Template.ObjectMeta.Labels, fetched.Spec.Template.ObjectMeta.Labels) ||
 		len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
 		return true
 	}
 
 	desiredContainer := desired.Spec.Template.Spec.Containers[0]
 	fetchedContainer := fetched.Spec.Template.Spec.Containers[0]
+
 	if !reflect.DeepEqual(desiredContainer.Args, fetchedContainer.Args) ||
-		desiredContainer.Name != fetchedContainer.Name || desiredContainer.Image != fetchedContainer.Image ||
+		desiredContainer.Name != fetchedContainer.Name ||
+		desiredContainer.Image != fetchedContainer.Image ||
 		desiredContainer.ImagePullPolicy != fetchedContainer.ImagePullPolicy {
 		return true
 	}
@@ -302,13 +308,43 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		}
 	}
 
+	// ReadinessProbe nil checks
+	if (desiredContainer.ReadinessProbe == nil) != (fetchedContainer.ReadinessProbe == nil) {
+		return true
+	}
+	if desiredContainer.ReadinessProbe != nil && fetchedContainer.ReadinessProbe != nil {
+		if (desiredContainer.ReadinessProbe.HTTPGet == nil) != (fetchedContainer.ReadinessProbe.HTTPGet == nil) {
+			return true
+		}
+		if desiredContainer.ReadinessProbe.HTTPGet != nil && fetchedContainer.ReadinessProbe.HTTPGet != nil {
+			if desiredContainer.ReadinessProbe.HTTPGet.Path != fetchedContainer.ReadinessProbe.HTTPGet.Path {
+				return true
+			}
+		}
+		if desiredContainer.ReadinessProbe.InitialDelaySeconds != fetchedContainer.ReadinessProbe.InitialDelaySeconds ||
+			desiredContainer.ReadinessProbe.PeriodSeconds != fetchedContainer.ReadinessProbe.PeriodSeconds {
+			return true
+		}
+	}
+
+	// SecurityContext nil check
+	if (desiredContainer.SecurityContext == nil) != (fetchedContainer.SecurityContext == nil) {
+		return true
+	}
+	if desiredContainer.SecurityContext != nil && fetchedContainer.SecurityContext != nil {
+		if !reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
+			return true
+		}
+	}
+
 	if !reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) ||
-		!reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
+		!reflect.DeepEqual(desiredContainer.VolumeMounts, fetchedContainer.VolumeMounts) {
 		return true
 	}
 
 	if desired.Spec.Template.Spec.ServiceAccountName != fetched.Spec.Template.Spec.ServiceAccountName ||
-		!reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
+		!reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) ||
+		!reflect.DeepEqual(desired.Spec.Template.Spec.Volumes, fetched.Spec.Template.Spec.Volumes) {
 		return true
 	}
 
@@ -437,4 +473,11 @@ func getLogLevel(config *operatorv1alpha1.ExternalSecretsConfig) string {
 		return zapcore.Level(config.LogLevel).String()
 	}
 	return "info"
+}
+
+func getOperatingNamespace(externalsecrets *operatorv1alpha1.ExternalSecrets) string {
+	if externalsecrets == nil || externalsecrets.Spec.ExternalSecretsConfig == nil {
+		return ""
+	}
+	return externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
 }

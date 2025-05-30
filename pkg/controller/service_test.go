@@ -72,7 +72,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return false, testError
 				})
 			},
-			wantErr: `failed to check existence of service /external-secrets-webhook: test client error`,
+			wantErr: `failed to check existence of service external-secrets/external-secrets-webhook: test client error`,
 		},
 		{
 			name: "service reconciliation fails while updating to desired state",
@@ -91,7 +91,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return testError
 				})
 			},
-			wantErr: `failed to update service /external-secrets-webhook: test client error`,
+			wantErr: `failed to update service external-secrets/external-secrets-webhook: test client error`,
 		},
 		{
 			name: "service reconciliation fails while creating",
@@ -109,7 +109,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return testError
 				})
 			},
-			wantErr: `failed to create service /external-secrets-webhook: test client error`,
+			wantErr: `failed to create service external-secrets/external-secrets-webhook: test client error`,
 		},
 	}
 
