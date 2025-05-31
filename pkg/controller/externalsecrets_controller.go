@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -44,7 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	"github.com/go-logr/logr"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 )
@@ -80,6 +80,7 @@ type ExternalSecretsReconciler struct {
 	ctx                   context.Context
 	eventRecorder         record.EventRecorder
 	log                   logr.Logger
+	esm                   *operatorv1alpha1.ExternalSecretsManager
 	optionalResourcesList map[client.Object]struct{}
 }
 
@@ -101,6 +102,7 @@ func New(mgr ctrl.Manager) (*ExternalSecretsReconciler, error) {
 		eventRecorder:         mgr.GetEventRecorderFor(ControllerName),
 		log:                   ctrl.Log.WithName(ControllerName),
 		Scheme:                mgr.GetScheme(),
+		esm:                   new(operatorv1alpha1.ExternalSecretsManager),
 		optionalResourcesList: make(map[client.Object]struct{}),
 	}
 	c, err := NewClient(mgr, r)
@@ -123,6 +125,10 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 			Label: managedResourceLabelReqSelector,
 		}
 	}
+	ownObject := &operatorv1alpha1.ExternalSecrets{}
+	objectList[ownObject] = cache.ByObject{}
+	esmObject := &operatorv1alpha1.ExternalSecretsManager{}
+	objectList[esmObject] = cache.ByObject{}
 
 	exist, err := isCRDInstalled(mgr.GetConfig(), certificateCRDName, certificateCRDGroupVersion)
 	if err != nil {
@@ -159,7 +165,6 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateObject.GetObjectKind().GroupVersionKind().String(), err)
 		}
 	}
-	ownObject := &operatorv1alpha1.ExternalSecrets{}
 	_, err = customCache.GetInformer(context.Background(), ownObject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
