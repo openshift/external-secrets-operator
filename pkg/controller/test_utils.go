@@ -3,23 +3,21 @@ package controller
 import (
 	"context"
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
 	"testing"
 
-	"github.com/go-logr/logr/testr"
 	webhook "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/go-logr/logr/testr"
+
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
-)
-
-var (
-	testError = fmt.Errorf("test client error")
 )
 
 const (
@@ -29,6 +27,12 @@ const (
 	testImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
 )
 
+var (
+	// testError is the error to return for client failure scenarios.
+	testError = fmt.Errorf("test client error")
+)
+
+// testReconciler returns a sample ExternalSecretsReconciler instance.
 func testReconciler(t *testing.T) *ExternalSecretsReconciler {
 	return &ExternalSecretsReconciler{
 		Scheme:                runtime.NewScheme(),
@@ -70,6 +74,34 @@ func testExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
 			Name: testResourcesName,
 		},
 	}
+}
+
+// testClusterRole returns ClusterRole object read from provided static asset of same kind.
+func testClusterRole(assetName string) *rbacv1.ClusterRole {
+	role := decodeClusterRoleObjBytes(assets.MustAsset(assetName))
+	role.SetLabels(controllerDefaultResourceLabels)
+	return role
+}
+
+// testClusterRoleBinding returns ClusterRoleBinding object read from provided static asset of same kind.
+func testClusterRoleBinding(assetName string) *rbacv1.ClusterRoleBinding {
+	roleBinding := decodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding.SetLabels(controllerDefaultResourceLabels)
+	return roleBinding
+}
+
+// testRole returns Role object read from provided static asset of same kind.
+func testRole(assetName string) *rbacv1.Role {
+	role := decodeRoleObjBytes(assets.MustAsset(assetName))
+	role.SetLabels(controllerDefaultResourceLabels)
+	return role
+}
+
+// testRoleBinding returns RoleBinding object read from provided static asset of same kind.
+func testRoleBinding(assetName string) *rbacv1.RoleBinding {
+	roleBinding := decodeRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding.SetLabels(controllerDefaultResourceLabels)
+	return roleBinding
 }
 
 func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {

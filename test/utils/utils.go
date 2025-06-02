@@ -22,8 +22,32 @@ import (
 	"os/exec"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientscheme "k8s.io/client-go/kubernetes/scheme"
+
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+
+	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+
 	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive
 )
+
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
+	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
+	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
+}
 
 func warnError(err error) {
 	_, _ = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)

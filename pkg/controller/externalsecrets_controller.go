@@ -85,6 +85,7 @@ type ExternalSecretsReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsmanagers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
@@ -94,6 +95,17 @@ type ExternalSecretsReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events;secrets;services;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create
+
+// +kubebuilder:rbac:groups="",resources=endpoints,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets;clustersecretstores;externalsecrets;pushsecrets;secretstores,verbs=get;list;watch;create;update;patch;delete;deletecollection
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/finalizers;clustersecretstores/finalizers;externalsecrets/finalizers;pushsecrets/finalizers;secretstores/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/status;clustersecretstores/status;externalsecrets/status;pushsecrets/status;secretstores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=generators.external-secrets.io,resources=acraccesstokens;clustergenerators;ecrauthorizationtokens;fakes;gcraccesstokens;generatorstates,verbs=get;list;watch;create;delete;update;patch;deletecollection
+// +kubebuilder:rbac:groups=generators.external-secrets.io,resources=githubaccesstokens;grafanas;passwords;quayaccesstokens;stssessiontokens;uuids;vaultdynamicsecrets;webhooks,verbs=get;list;watch;create;delete;update;patch;deletecollection
 
 // New is for building the reconciler instance consumed by the Reconcile method.
 func New(mgr ctrl.Manager) (*ExternalSecretsReconciler, error) {
@@ -169,6 +181,10 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 	if err != nil {
 		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
 	}
+	_, err = customCache.GetInformer(context.Background(), esmObject)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
+	}
 
 	err = mgr.Add(customCache)
 	if err != nil {
@@ -225,7 +241,7 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	for _, res := range controllerManagedResources {
 		switch res {
-		case &operatorv1alpha1.ExternalSecretsManager{}, &appsv1.Deployment{}:
+		case &appsv1.Deployment{}:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
 		case &certmanagerv1.Certificate{}:
 			if _, ok := r.optionalResourcesList[res]; ok {
@@ -237,10 +253,13 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
 	}
+	mgrBuilder.Watches(&operatorv1alpha1.ExternalSecretsManager{}, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
 
 	return mgrBuilder.Complete(r)
 }
 
+// isCRDInstalled is for checking whether a CRD with given `group/version` and `name` exists.
+// TODO: Adds watches or polling to dynamically notify when a CRD gets installed.
 func isCRDInstalled(config *rest.Config, name, groupVersion string) (bool, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
@@ -303,6 +322,20 @@ func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Set finalizers on the externalsecrets.openshift.operator.io resource
 	if err := r.addFinalizer(ctx, externalsecrets); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecrets.openshift.operator.io with finalizers: %w", req.NamespacedName, err)
+	}
+
+	// Fetch the externalsecretsmanager.openshift.operator.io CR
+	esmNamespacedName := types.NamespacedName{
+		Name: externalsecretsManagerObjectName,
+	}
+	if err := r.Get(ctx, esmNamespacedName, r.esm); err != nil {
+		if errors.IsNotFound(err) {
+			// NotFound errors, since they can't be fixed by an immediate
+			// requeue (have to wait for a new notification).
+			r.log.V(1).Info("externalsecretsmanager.openshift.operator.io object not found, continuing without it")
+		} else {
+			return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsmanager.openshift.operator.io %q during reconciliation: %w", esmNamespacedName, err)
+		}
 	}
 
 	return r.processReconcileRequest(externalsecrets, req.NamespacedName)

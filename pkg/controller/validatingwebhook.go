@@ -11,8 +11,8 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
-func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(externalsecrets *operatorv1alpha1.ExternalSecrets, recon bool) error {
-	desiredWebhooks, err := r.getValidatingWebhookObjects(externalsecrets)
+func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+	desiredWebhooks, err := r.getValidatingWebhookObjects(externalsecrets, resourceLabels)
 	if err != nil {
 		return fmt.Errorf("failed to generate validatingWebhook resource for creation: %w", err)
 	}
@@ -53,13 +53,14 @@ func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(
 
 }
 
-func (r *ExternalSecretsReconciler) getValidatingWebhookObjects(externalsecrets *operatorv1alpha1.ExternalSecrets) ([]*webhook.ValidatingWebhookConfiguration, error) {
+func (r *ExternalSecretsReconciler) getValidatingWebhookObjects(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) ([]*webhook.ValidatingWebhookConfiguration, error) {
 	var webhooks []*webhook.ValidatingWebhookConfiguration
 
 	for _, assetName := range []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName} {
 
 		validatingWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
+		updateResourceLabels(validatingWebhook, resourceLabels)
 		if err := updateValidatingWebhookAnnotation(externalsecrets, validatingWebhook); err != nil {
 			return nil, fmt.Errorf("failed to update validatingWebhook resource for %s external secrets: %s", externalsecrets.GetName(), err.Error())
 		}

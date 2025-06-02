@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - events
   - secrets
   - serviceaccounts
@@ -20,9 +21,37 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - namespaces
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
   - admissionregistration.k8s.io
   resources:
   - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
   verbs:
   - create
   - delete
@@ -68,9 +97,70 @@ rules:
   - update
   - watch
 - apiGroups:
+  - external-secrets.io
+  resources:
+  - clusterexternalsecrets
+  - clustersecretstores
+  - externalsecrets
+  - pushsecrets
+  - secretstores
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - external-secrets.io
+  resources:
+  - clusterexternalsecrets/finalizers
+  - clusterexternalsecrets/status
+  - clustersecretstores/finalizers
+  - clustersecretstores/status
+  - externalsecrets/finalizers
+  - externalsecrets/status
+  - pushsecrets/finalizers
+  - pushsecrets/status
+  - secretstores/finalizers
+  - secretstores/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - generators.external-secrets.io
+  resources:
+  - acraccesstokens
+  - clustergenerators
+  - ecrauthorizationtokens
+  - fakes
+  - gcraccesstokens
+  - generatorstates
+  - githubaccesstokens
+  - grafanas
+  - passwords
+  - quayaccesstokens
+  - stssessiontokens
+  - uuids
+  - vaultdynamicsecrets
+  - webhooks
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - operator.openshift.io
   resources:
   - externalsecrets
+  - externalsecretsmanagers
   verbs:
   - create
   - delete
