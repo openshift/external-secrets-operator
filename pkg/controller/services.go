@@ -30,7 +30,7 @@ func (r *ExternalSecretsReconciler) createOrApplyServices(externalsecrets *opera
 		if !service.condition {
 			continue
 		}
-		if err := r.createOrApplyServiceFromAsset(service.assetName, externalsecrets, resourceLabels, externalsecretsCreateRecon); err != nil {
+		if err := r.createOrApplyServiceFromAsset(externalsecrets, service.assetName, resourceLabels, externalsecretsCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -39,13 +39,9 @@ func (r *ExternalSecretsReconciler) createOrApplyServices(externalsecrets *opera
 }
 
 // createOrApplyServiceFromAsset decodes a Service YAML asset and ensures it exists in the cluster.
-func (r *ExternalSecretsReconciler) createOrApplyServiceFromAsset(assetName string, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *ExternalSecretsReconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
 	service := decodeServiceObjBytes(assets.MustAsset(assetName))
-	namespace := service.GetNamespace()
-	if externalsecrets.Spec.ControllerConfig != nil && externalsecrets.Spec.ControllerConfig.Namespace != "" {
-		namespace = externalsecrets.Spec.ControllerConfig.Namespace
-	}
-	updateNamespace(service, namespace)
+	updateNamespace(service, externalsecrets)
 	updateResourceLabels(service, resourceLabels)
 
 	serviceName := fmt.Sprintf("%s/%s", service.GetNamespace(), service.GetName())

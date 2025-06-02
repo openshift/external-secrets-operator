@@ -27,7 +27,7 @@ echo "---- Patching manifest ----"
    -i ${MANIFESTS_PATH}/manifests.yaml
 
 # regenerate all bindata
-rm -rf bindata/external-secrets
+rm -rf bindata/external-secrets/resources
 rm -f config/crd/bases/customresourcedefinition_*
 
 # split into individual manifest files

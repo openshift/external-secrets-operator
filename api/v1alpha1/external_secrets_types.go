@@ -120,10 +120,12 @@ type ExternalSecretsConfig struct {
 
 // ControllerConfig is for configuring the operator for setting up
 // defaults to install external-secrets.
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.namespace) && !has(self.namespace) || has(oldSelf.namespace) && has(self.namespace)",message="namespace may only be configured during creation"
 type ControllerConfig struct {
 	// namespace is for configuring the namespace to install the external-secret operand.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="external-secrets"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="namespace is immutable once set"
 	Namespace string `json:"namespace,omitempty"`
 
 	// labels to apply to all resources created for external-secrets deployment.

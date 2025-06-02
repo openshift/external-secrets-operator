@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/cert-manager/cert-manager v1.16.4
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/golangci/golangci-lint v1.59.1
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/onsi/ginkgo/v2 v2.22.0
@@ -15,7 +15,9 @@ require (
 	k8s.io/api v0.32.1
 	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.1
+	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubernetes v1.32.1
+	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	sigs.k8s.io/controller-runtime v0.20.1
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250308055145-5fe7bb3edc86
 	sigs.k8s.io/controller-tools v0.16.1
@@ -275,11 +277,9 @@ require (
 	k8s.io/component-base v0.32.1 // indirect
 	k8s.io/component-helpers v0.32.1 // indirect
 	k8s.io/controller-manager v0.32.1 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kms v0.32.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect
 	k8s.io/kubelet v0.32.1 //indirect
-	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.1 // indirect

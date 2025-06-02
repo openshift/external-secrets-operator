@@ -62,7 +62,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					},
 				}
 			},
-			wantErr: `failed to create service /bitwarden-sdk-server: test client error`,
+			wantErr: `failed to create service external-secrets/bitwarden-sdk-server: test client error`,
 		},
 
 		{

@@ -86,12 +86,24 @@ func (r *ExternalSecretsReconciler) removeFinalizer(ctx context.Context, externa
 	return nil
 }
 
-func updateNamespace(obj client.Object, newNamespace string) {
-	obj.SetNamespace(newNamespace)
+func getNamespace(es *operatorv1alpha1.ExternalSecrets) string {
+	ns := externalsecretsDefaultNamespace
+	if es.Spec.ControllerConfig != nil && es.Spec.ControllerConfig.Namespace != "" {
+		ns = es.Spec.ControllerConfig.Namespace
+	}
+	return ns
+}
+
+func updateNamespace(obj client.Object, es *operatorv1alpha1.ExternalSecrets) {
+	obj.SetNamespace(getNamespace(es))
 }
 
 func updateResourceLabels(obj client.Object, labels map[string]string) {
-	obj.SetLabels(labels)
+	l := obj.GetLabels()
+	for k, v := range labels {
+		l[k] = v
+	}
+	obj.SetLabels(l)
 }
 
 func containsProcessedAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets) bool {
@@ -266,19 +278,55 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
-	if (desired.Spec.Replicas == nil) != (fetched.Spec.Replicas == nil) {
-		return true
-	}
-	if desired.Spec.Replicas != nil && fetched.Spec.Replicas != nil && *desired.Spec.Replicas != *fetched.Spec.Replicas {
+	if desired.Spec.Replicas != nil && !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Selector.MatchLabels, fetched.Spec.Selector.MatchLabels) {
+	if desired.Spec.Template.Spec.ServiceAccountName != fetched.Spec.Template.Spec.ServiceAccountName ||
+		desired.Spec.Template.Spec.AutomountServiceAccountToken != nil {
+		if !reflect.DeepEqual(desired.Spec.Template.Spec.AutomountServiceAccountToken, fetched.Spec.Template.Spec.AutomountServiceAccountToken) {
+			return true
+		}
+	}
+
+	if desired.Spec.Template.Spec.DNSPolicy != "" && desired.Spec.Template.Spec.DNSPolicy != fetched.Spec.Template.Spec.DNSPolicy {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.ObjectMeta.Labels, fetched.Spec.Template.ObjectMeta.Labels) ||
-		len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
+	if desired.Spec.Template.ObjectMeta.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.ObjectMeta.Labels, fetched.Spec.Template.ObjectMeta.Labels) {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.Volumes != nil && len(desired.Spec.Template.Spec.Volumes) != len(fetched.Spec.Template.Spec.Volumes) {
+		return true
+	}
+	for _, desiredVolume := range desired.Spec.Template.Spec.Volumes {
+		if desiredVolume.Secret != nil && desiredVolume.Secret.Items != nil {
+			for _, fetchedVolume := range fetched.Spec.Template.Spec.Volumes {
+				if !reflect.DeepEqual(desiredVolume.Secret.Items, fetchedVolume.Secret.Items) {
+					return true
+				}
+				if desiredVolume.Secret.SecretName != fetchedVolume.Secret.SecretName {
+					return true
+				}
+			}
+
+		}
+	}
+
+	if desired.Spec.Template.Spec.NodeSelector != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.Affinity != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Affinity, fetched.Spec.Template.Spec.Affinity) {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.Tolerations != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+		return true
+	}
+
+	if len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
 		return true
 	}
 
@@ -321,30 +369,19 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 				return true
 			}
 		}
-		if desiredContainer.ReadinessProbe.InitialDelaySeconds != fetchedContainer.ReadinessProbe.InitialDelaySeconds ||
-			desiredContainer.ReadinessProbe.PeriodSeconds != fetchedContainer.ReadinessProbe.PeriodSeconds {
-			return true
-		}
 	}
 
 	// SecurityContext nil check
-	if (desiredContainer.SecurityContext == nil) != (fetchedContainer.SecurityContext == nil) {
-		return true
-	}
-	if desiredContainer.SecurityContext != nil && fetchedContainer.SecurityContext != nil {
-		if !reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
-			return true
-		}
-	}
-
-	if !reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) ||
-		!reflect.DeepEqual(desiredContainer.VolumeMounts, fetchedContainer.VolumeMounts) {
+	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
 		return true
 	}
 
-	if desired.Spec.Template.Spec.ServiceAccountName != fetched.Spec.Template.Spec.ServiceAccountName ||
-		!reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) ||
-		!reflect.DeepEqual(desired.Spec.Template.Spec.Volumes, fetched.Spec.Template.Spec.Volumes) {
+	if desiredContainer.VolumeMounts != nil && !reflect.DeepEqual(desiredContainer.VolumeMounts, fetchedContainer.VolumeMounts) {
+		return true
+	}
+
+	if reflect.DeepEqual(desiredContainer.Resources, corev1.ResourceRequirements{}) &&
+		!reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) {
 		return true
 	}
 
@@ -412,17 +449,12 @@ func validatingWebHookSpecModified(desired, fetched *webhook.ValidatingWebhookCo
 
 		if !reflect.DeepEqual(desiredWh.SideEffects, fetchedWh.SideEffects) ||
 			!reflect.DeepEqual(desiredWh.TimeoutSeconds, fetchedWh.TimeoutSeconds) ||
-			!reflect.DeepEqual(desiredWh.FailurePolicy, fetchedWh.FailurePolicy) ||
-			!reflect.DeepEqual(desiredWh.MatchPolicy, fetchedWh.MatchPolicy) ||
-			!reflect.DeepEqual(desiredWh.NamespaceSelector, fetchedWh.NamespaceSelector) ||
-			!reflect.DeepEqual(desiredWh.ObjectSelector, fetchedWh.ObjectSelector) ||
-			!reflect.DeepEqual(desiredWh.MatchConditions, fetchedWh.MatchConditions) ||
 			!reflect.DeepEqual(desiredWh.AdmissionReviewVersions, fetchedWh.AdmissionReviewVersions) ||
-			!reflect.DeepEqual(desiredWh.ClientConfig, fetchedWh.ClientConfig) ||
+			!reflect.DeepEqual(desiredWh.ClientConfig.Service.Name, fetchedWh.ClientConfig.Service.Name) ||
+			!reflect.DeepEqual(desiredWh.ClientConfig.Service.Path, fetchedWh.ClientConfig.Service.Path) ||
 			!reflect.DeepEqual(desiredWh.Rules, fetchedWh.Rules) {
 			return true
 		}
-
 	}
 
 	return false

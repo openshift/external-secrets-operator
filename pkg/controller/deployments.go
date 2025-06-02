@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
+	"k8s.io/utils/ptr"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
@@ -102,18 +103,13 @@ func (r *ExternalSecretsReconciler) createOrApplyDeploymentFromAsset(externalsec
 
 func (r *ExternalSecretsReconciler) getDeploymentObject(assetName string, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) (*appsv1.Deployment, error) {
 	deployment := decodeDeploymentObjBytes(assets.MustAsset(assetName))
+	updateNamespace(deployment, externalsecrets)
 	updateResourceLabels(deployment, resourceLabels)
 	updatePodTemplateLabels(deployment, resourceLabels)
 
-	namespace := deployment.GetNamespace()
-	if externalsecrets.Spec.ControllerConfig != nil && externalsecrets.Spec.ControllerConfig.Namespace != "" {
-		namespace = externalsecrets.Spec.ControllerConfig.Namespace
-	}
-	updateNamespace(deployment, namespace)
-
 	image := os.Getenv(externalsecretsImageEnvVarName)
 	if image == "" {
-		return nil, fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName)
+		return nil, NewIrrecoverableError(fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
 	}
 	logLevel := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
 
@@ -143,8 +139,29 @@ func (r *ExternalSecretsReconciler) getDeploymentObject(assetName string, extern
 }
 
 // updatePodTemplateLabels sets labels on the pod template spec.
-func updatePodTemplateLabels(deployment *appsv1.Deployment, resourceLabels map[string]string) {
-	deployment.Spec.Template.ObjectMeta.Labels = resourceLabels
+func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]string) {
+	l := deployment.Spec.Template.ObjectMeta.GetLabels()
+	for k, v := range labels {
+		l[k] = v
+	}
+	deployment.Spec.Template.ObjectMeta.SetLabels(l)
+}
+
+func updateContainerSecurityContext(container *corev1.Container) {
+	container.SecurityContext = &corev1.SecurityContext{
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{
+				"ALL",
+			},
+		},
+		ReadOnlyRootFilesystem: ptr.To(true),
+		RunAsNonRoot:           ptr.To(true),
+		RunAsUser:              nil,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
 }
 
 // updateResourceRequirement sets validated resource requirements to all containers.
@@ -277,7 +294,7 @@ func updateContainerSpec(deployment *appsv1.Deployment, externalsecrets *operato
 	namespace := getOperatingNamespace(externalsecrets)
 	args := []string{
 		"--concurrent=1",
-		"--metrics-port=9402",
+		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 		"--enable-leader-election=true",
@@ -294,6 +311,7 @@ func updateContainerSpec(deployment *appsv1.Deployment, externalsecrets *operato
 		if container.Name == "external-secrets" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
 			deployment.Spec.Template.Spec.Containers[i].Image = image
+			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
 		}
 	}
@@ -317,6 +335,7 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel s
 		if container.Name == "webhook" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
 			deployment.Spec.Template.Spec.Containers[i].Image = image
+			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
 		}
 	}
@@ -343,6 +362,7 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 		if container.Name == "cert-controller" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
 			deployment.Spec.Template.Spec.Containers[i].Image = image
+			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
 		}
 	}

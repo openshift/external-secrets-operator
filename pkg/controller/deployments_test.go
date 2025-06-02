@@ -52,7 +52,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			skipEnvVar: true,
-			wantErr:    `RELATED_IMAGE_EXTERNAL_SECRETS environment variable with externalsecrets image not set`,
+			wantErr:    `failed to update image in external-secrets deployment object: RELATED_IMAGE_EXTERNAL_SECRETS environment variable with externalsecrets image not set`,
 		},
 		{
 			name: "deployment reconciliation fails while checking if exists",
