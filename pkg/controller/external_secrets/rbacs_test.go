@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -9,19 +9,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 func TestCreateOrApplyRBACResource(t *testing.T) {
 	tests := []struct {
 		name                     string
-		preReq                   func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq                   func(*Reconciler, *fakes.FakeCtrlClient)
 		updateExternalSecretsObj func(*operatorv1alpha1.ExternalSecrets)
 		wantErr                  string
 	}{
 		{
 			name: "clusterrole reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRole:
@@ -39,7 +39,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterrolebindings reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRoleBinding:
@@ -52,7 +52,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "role reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.Role:
@@ -65,7 +65,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "rolebindings reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.RoleBinding:
@@ -78,7 +78,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterrolebindings reconciliation updating to desired state fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch o := object.(type) {
 					case *rbacv1.ClusterRoleBinding:
@@ -100,7 +100,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterrolebindings reconciliation updating to desired state successful",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch o := object.(type) {
 					case *rbacv1.ClusterRoleBinding:
@@ -114,7 +114,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "cert-controller clusterrolebindings reconciliation creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch object.(type) {
 					case *rbacv1.ClusterRoleBinding:
@@ -136,7 +136,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterrole reconciliation updating to desired state fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch o := object.(type) {
 					case *rbacv1.ClusterRole:
@@ -158,7 +158,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "cert-controller clusterrole reconciliation creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch object.(type) {
 					case *rbacv1.ClusterRole:
@@ -180,7 +180,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "role reconciliation updating to desired state fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch o := object.(type) {
 					case *rbacv1.Role:
@@ -202,7 +202,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "role reconciliation creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch object.(type) {
 					case *rbacv1.Role:
@@ -222,7 +222,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "rolebindings reconciliation updating to desired state fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch o := object.(type) {
 					case *rbacv1.RoleBinding:
@@ -244,7 +244,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "rolebindings reconciliation creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, object client.Object) (bool, error) {
 					switch object.(type) {
 					case *rbacv1.RoleBinding:
@@ -302,7 +302,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 
 			es := testExternalSecrets()
 			if tt.updateExternalSecretsObj != nil {

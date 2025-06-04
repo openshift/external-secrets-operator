@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -12,20 +12,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 func TestCreateOrApplyDeployments(t *testing.T) {
 	tests := []struct {
 		name                  string
-		preReq                func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq                func(*Reconciler, *fakes.FakeCtrlClient)
 		updateExternalSecrets func(*v1alpha1.ExternalSecrets)
 		skipEnvVar            bool
 		wantErr               string
 	}{
 		{
 			name: "deployment reconciliation successful",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -41,7 +41,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation fails as image env var is empty",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -56,7 +56,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *appsv1.Deployment:
@@ -69,7 +69,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation failed while restoring to desired state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -91,7 +91,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with user custom config successful",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -180,7 +180,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation fails while updating image in externalsecrets status",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *appsv1.Deployment:
@@ -208,7 +208,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid toleration configuration",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -234,7 +234,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid nodeSelector configuration",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -254,7 +254,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid affinity configuration",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -323,7 +323,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid resource requirement configuration",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -360,7 +360,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 			externalsecrets := testExternalSecrets()
 			//externalsecrets.SetNamespace(testExternalSecretsNamespace)
 			if tt.updateExternalSecrets != nil {

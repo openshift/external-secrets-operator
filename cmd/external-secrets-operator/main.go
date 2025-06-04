@@ -37,7 +37,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	externalsecretscontroller "github.com/openshift/external-secrets-operator/pkg/controller"
+	"github.com/openshift/external-secrets-operator/pkg/operator"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -129,7 +129,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "de6a4747.operator.openshift.io",
+		LeaderElectionID:       "de6a4747.externalsecretsoperator.operator.openshift.io",
 		Logger:                 ctrl.Log.WithName("operator-manager"),
 	})
 	if err != nil {
@@ -137,14 +137,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	externalsecrets, err := externalsecretscontroller.New(mgr)
-	if err != nil {
-		setupLog.Error(err, "failed to create controller", "controller", externalsecretscontroller.ControllerName)
-		os.Exit(1)
-	}
-	if err = externalsecrets.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "failed to set up controller with manager",
-			"controller", externalsecretscontroller.ControllerName)
+	if err := operator.StartControllers(mgr); err != nil {
+		setupLog.Error(err, "failed to start controllers")
 		os.Exit(1)
 	}
 

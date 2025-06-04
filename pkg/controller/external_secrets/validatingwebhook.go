@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"fmt"
@@ -8,10 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
-func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
 	desiredWebhooks, err := r.getValidatingWebhookObjects(externalsecrets, resourceLabels)
 	if err != nil {
 		return fmt.Errorf("failed to generate validatingWebhook resource for creation: %w", err)
@@ -26,16 +27,16 @@ func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(
 		}
 		exist, err := r.Exists(r.ctx, key, fetched)
 		if err != nil {
-			return FromClientError(err, "failed to check %s validatingWebhook resource already exists", validatingWebhookName)
+			return common.FromClientError(err, "failed to check %s validatingWebhook resource already exists", validatingWebhookName)
 		}
 
 		if exist && recon {
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s validatingWebhook resource already exists, maybe from previous installation", validatingWebhookName)
 		}
-		if exist && hasObjectChanged(desired, fetched) {
+		if exist && common.HasObjectChanged(desired, fetched) {
 			r.log.V(1).Info("validatingWebhook has been modified", "updating to desired state", "name", validatingWebhookName)
 			if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
-				return FromClientError(err, "failed to update %s validatingWebhook resource with desired state", validatingWebhookName)
+				return common.FromClientError(err, "failed to update %s validatingWebhook resource with desired state", validatingWebhookName)
 			}
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "validatingWebhook resource %s reconciled back to desired state", validatingWebhookName)
 		} else {
@@ -44,7 +45,7 @@ func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(
 
 		if !exist {
 			if err := r.Create(r.ctx, desired); err != nil {
-				return FromClientError(err, "failed to create validatingWebhook resource %s", validatingWebhookName)
+				return common.FromClientError(err, "failed to create validatingWebhook resource %s", validatingWebhookName)
 			}
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "validatingWebhook resource %s created", validatingWebhookName)
 		}
@@ -53,14 +54,14 @@ func (r *ExternalSecretsReconciler) createOrApplyValidatingWebhookConfiguration(
 
 }
 
-func (r *ExternalSecretsReconciler) getValidatingWebhookObjects(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) ([]*webhook.ValidatingWebhookConfiguration, error) {
+func (r *Reconciler) getValidatingWebhookObjects(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) ([]*webhook.ValidatingWebhookConfiguration, error) {
 	var webhooks []*webhook.ValidatingWebhookConfiguration
 
 	for _, assetName := range []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName} {
 
-		validatingWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
+		validatingWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
-		updateResourceLabels(validatingWebhook, resourceLabels)
+		common.UpdateResourceLabels(validatingWebhook, resourceLabels)
 		if err := updateValidatingWebhookAnnotation(externalsecrets, validatingWebhook); err != nil {
 			return nil, fmt.Errorf("failed to update validatingWebhook resource for %s external secrets: %s", externalsecrets.GetName(), err.Error())
 		}
@@ -76,11 +77,11 @@ func updateValidatingWebhookAnnotation(externalsecrets *operatorv1alpha1.Externa
 		externalsecrets.Spec.ExternalSecretsConfig != nil &&
 		externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
 		externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil {
-		if parseBool(externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations) {
+		if common.ParseBool(externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations) {
 			if webhook.Annotations == nil {
 				webhook.Annotations = map[string]string{}
 			}
-			webhook.Annotations[certManagerInjectCAFromAnnotation] = certManagerInjectCAFromAnnotationValue
+			webhook.Annotations[common.CertManagerInjectCAFromAnnotation] = common.CertManagerInjectCAFromAnnotationValue
 		}
 	}
 	return nil

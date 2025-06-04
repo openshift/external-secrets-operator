@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"fmt"
@@ -7,10 +7,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
-func (r *ExternalSecretsReconciler) createOrApplySecret(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplySecret(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
 	// secrets are only created if isCertManagerConfigEnabled disabled
 	if isCertManagerConfigEnabled(es) {
 		return nil
@@ -31,17 +32,17 @@ func (r *ExternalSecretsReconciler) createOrApplySecret(es *operatorv1alpha1.Ext
 
 	exist, err := r.Exists(r.ctx, key, fetched)
 	if err != nil {
-		return FromClientError(err, "failed to check %s secret resource already exists", secretName)
+		return common.FromClientError(err, "failed to check %s secret resource already exists", secretName)
 	}
 
 	if exist && recon {
 		r.eventRecorder.Eventf(es, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s secret resource already exists, maybe from previous installation", secretName)
 	}
 
-	if exist && objectMetadataModified(desired, fetched) {
+	if exist && common.ObjectMetadataModified(desired, fetched) {
 		r.log.V(1).Info("secret has been modified, updating to desired state", "name", secretName)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
-			return FromClientError(err, "failed to update %s secret resource", secretName)
+			return common.FromClientError(err, "failed to update %s secret resource", secretName)
 		}
 		r.eventRecorder.Eventf(es, corev1.EventTypeNormal, "Reconciled", "secret resource %s reconciled back to desired state", secretName)
 	} else {
@@ -50,7 +51,7 @@ func (r *ExternalSecretsReconciler) createOrApplySecret(es *operatorv1alpha1.Ext
 
 	if !exist {
 		if err := r.Create(r.ctx, desired); err != nil {
-			return FromClientError(err, "failed to create %s secret resource", secretName)
+			return common.FromClientError(err, "failed to create %s secret resource", secretName)
 		}
 		r.eventRecorder.Eventf(es, corev1.EventTypeNormal, "Reconciled", "secret resource %s created", secretName)
 	}
@@ -58,10 +59,10 @@ func (r *ExternalSecretsReconciler) createOrApplySecret(es *operatorv1alpha1.Ext
 
 }
 
-func (r *ExternalSecretsReconciler) getSecretObject(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) (*corev1.Secret, error) {
-	secret := decodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
+func (r *Reconciler) getSecretObject(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) (*corev1.Secret, error) {
+	secret := common.DecodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
 
 	updateNamespace(secret, es)
-	updateResourceLabels(secret, resourceLabels)
+	common.UpdateResourceLabels(secret, resourceLabels)
 	return secret, nil
 }

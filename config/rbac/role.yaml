@@ -76,6 +76,8 @@ rules:
   - cert-manager.io
   resources:
   - certificates
+  - clusterissuers
+  - issuers
   verbs:
   - create
   - delete

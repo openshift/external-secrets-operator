@@ -1,4 +1,4 @@
-package controller
+package client
 
 import (
 	"context"
@@ -10,16 +10,15 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-type ctrlClientImpl struct {
+type CtrlClientImpl struct {
 	client.Client
 }
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
-//counterfeiter:generate -o fakes . ctrlClient
-type ctrlClient interface {
+//counterfeiter:generate -o fakes . CtrlClient
+type CtrlClient interface {
 	Get(context.Context, client.ObjectKey, client.Object) error
 	List(context.Context, client.ObjectList, ...client.ListOption) error
 	StatusUpdate(context.Context, client.Object, ...client.SubResourceUpdateOption) error
@@ -31,47 +30,37 @@ type ctrlClient interface {
 	Exists(context.Context, client.ObjectKey, client.Object) (bool, error)
 }
 
-func NewClient(m manager.Manager, r *ExternalSecretsReconciler) (ctrlClient, error) {
-	c, err := BuildCustomClient(m, r)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build custom client: %w", err)
-	}
-	return &ctrlClientImpl{
-		Client: c,
-	}, nil
-}
-
-func (c *ctrlClientImpl) Get(
+func (c *CtrlClientImpl) Get(
 	ctx context.Context, key client.ObjectKey, obj client.Object,
 ) error {
 	return c.Client.Get(ctx, key, obj)
 }
 
-func (c *ctrlClientImpl) List(
+func (c *CtrlClientImpl) List(
 	ctx context.Context, list client.ObjectList, opts ...client.ListOption,
 ) error {
 	return c.Client.List(ctx, list, opts...)
 }
 
-func (c *ctrlClientImpl) Create(
+func (c *CtrlClientImpl) Create(
 	ctx context.Context, obj client.Object, opts ...client.CreateOption,
 ) error {
 	return c.Client.Create(ctx, obj, opts...)
 }
 
-func (c *ctrlClientImpl) Delete(
+func (c *CtrlClientImpl) Delete(
 	ctx context.Context, obj client.Object, opts ...client.DeleteOption,
 ) error {
 	return c.Client.Delete(ctx, obj, opts...)
 }
 
-func (c *ctrlClientImpl) Update(
+func (c *CtrlClientImpl) Update(
 	ctx context.Context, obj client.Object, opts ...client.UpdateOption,
 ) error {
 	return c.Client.Update(ctx, obj, opts...)
 }
 
-func (c *ctrlClientImpl) UpdateWithRetry(
+func (c *CtrlClientImpl) UpdateWithRetry(
 	ctx context.Context, obj client.Object, opts ...client.UpdateOption,
 ) error {
 	key := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
@@ -92,19 +81,19 @@ func (c *ctrlClientImpl) UpdateWithRetry(
 	return nil
 }
 
-func (c *ctrlClientImpl) StatusUpdate(
+func (c *CtrlClientImpl) StatusUpdate(
 	ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption,
 ) error {
 	return c.Client.Status().Update(ctx, obj, opts...)
 }
 
-func (c *ctrlClientImpl) Patch(
+func (c *CtrlClientImpl) Patch(
 	ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption,
 ) error {
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
-func (c *ctrlClientImpl) Exists(ctx context.Context, key client.ObjectKey, obj client.Object) (bool, error) {
+func (c *CtrlClientImpl) Exists(ctx context.Context, key client.ObjectKey, obj client.Object) (bool, error) {
 	if err := c.Client.Get(ctx, key, obj); err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil

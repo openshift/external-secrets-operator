@@ -1,4 +1,4 @@
-package controller
+package common
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +16,7 @@ import (
  */
 
 // validateAffinity checks if given affinities are valid
-func validateAffinity(affinity *core.Affinity, opts corevalidation.PodValidationOptions, fldPath *field.Path) field.ErrorList {
+func ValidateAffinity(affinity *core.Affinity, opts corevalidation.PodValidationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
 	if affinity != nil {

@@ -1,9 +1,7 @@
-package controller
+package common
 
 import (
-	"context"
 	"fmt"
-	"go.uber.org/zap/zapcore"
 	"reflect"
 
 	webhook "k8s.io/api/admissionregistration/v1"
@@ -12,11 +10,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
@@ -46,59 +40,7 @@ func init() {
 	}
 }
 
-// addFinalizer adds finalizer to externalsecrets.openshift.operator.io resource.
-func (r *ExternalSecretsReconciler) addFinalizer(ctx context.Context, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	namespacedName := types.NamespacedName{Name: externalsecrets.Name, Namespace: externalsecrets.Namespace}
-	if !controllerutil.ContainsFinalizer(externalsecrets, finalizer) {
-		if !controllerutil.AddFinalizer(externalsecrets, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers added", namespacedName)
-		}
-
-		// update externalsecrets.openshift.operator.io on adding finalizer.
-		if err := r.UpdateWithRetry(ctx, externalsecrets); err != nil {
-			return fmt.Errorf("failed to add finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
-		}
-
-		updated := &operatorv1alpha1.ExternalSecrets{}
-		if err := r.Get(ctx, namespacedName, updated); err != nil {
-			return fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q after updating finalizers: %w", namespacedName, err)
-		}
-		updated.DeepCopyInto(externalsecrets)
-		return nil
-	}
-	return nil
-}
-
-// removeFinalizer removes finalizers added to externalsecrets.openshift.operator.io resource.
-func (r *ExternalSecretsReconciler) removeFinalizer(ctx context.Context, externalsecrets *operatorv1alpha1.ExternalSecrets, finalizer string) error {
-	namespacedName := types.NamespacedName{Name: externalsecrets.Name, Namespace: externalsecrets.Namespace}
-	if controllerutil.ContainsFinalizer(externalsecrets, finalizer) {
-		if !controllerutil.RemoveFinalizer(externalsecrets, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers removed", namespacedName)
-		}
-
-		if err := r.UpdateWithRetry(ctx, externalsecrets); err != nil {
-			return fmt.Errorf("failed to remove finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
-		}
-		return nil
-	}
-
-	return nil
-}
-
-func getNamespace(es *operatorv1alpha1.ExternalSecrets) string {
-	ns := externalsecretsDefaultNamespace
-	if es.Spec.ControllerConfig != nil && es.Spec.ControllerConfig.Namespace != "" {
-		ns = es.Spec.ControllerConfig.Namespace
-	}
-	return ns
-}
-
-func updateNamespace(obj client.Object, es *operatorv1alpha1.ExternalSecrets) {
-	obj.SetNamespace(getNamespace(es))
-}
-
-func updateResourceLabels(obj client.Object, labels map[string]string) {
+func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 	l := obj.GetLabels()
 	for k, v := range labels {
 		l[k] = v
@@ -106,59 +48,7 @@ func updateResourceLabels(obj client.Object, labels map[string]string) {
 	obj.SetLabels(l)
 }
 
-func containsProcessedAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets) bool {
-	_, exist := externalsecrets.GetAnnotations()[controllerProcessedAnnotation]
-	return exist
-}
-
-func addProcessedAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets) bool {
-	annotations := externalsecrets.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string, 1)
-	}
-	if _, exist := annotations[controllerProcessedAnnotation]; !exist {
-		annotations[controllerProcessedAnnotation] = "true"
-		externalsecrets.SetAnnotations(annotations)
-		return true
-	}
-	return false
-}
-
-func (r *ExternalSecretsReconciler) updateCondition(externalsecrets *operatorv1alpha1.ExternalSecrets, prependErr error) error {
-	if err := r.updateStatus(r.ctx, externalsecrets); err != nil {
-		errUpdate := fmt.Errorf("failed to update %s/%s status: %w", externalsecrets.GetNamespace(), externalsecrets.GetName(), err)
-		if prependErr != nil {
-			return utilerrors.NewAggregate([]error{err, errUpdate})
-		}
-		return errUpdate
-	}
-	return prependErr
-}
-
-// updateStatus is for updating the status subresource of externalsecrets.openshift.operator.io.
-func (r *ExternalSecretsReconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecrets) error {
-	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		r.log.V(4).Info("updating externalsecrets.openshift.operator.io status", "request", namespacedName)
-		current := &operatorv1alpha1.ExternalSecrets{}
-		if err := r.Get(ctx, namespacedName, current); err != nil {
-			return fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q for status update: %w", namespacedName, err)
-		}
-		changed.Status.DeepCopyInto(&current.Status)
-
-		if err := r.StatusUpdate(ctx, current); err != nil {
-			return fmt.Errorf("failed to update externalsecrets.openshift.operator.io %q status: %w", namespacedName, err)
-		}
-
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func decodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
+func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(certmanagerv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -166,7 +56,7 @@ func decodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
 	return obj.(*certmanagerv1.Certificate)
 }
 
-func decodeClusterRoleObjBytes(objBytes []byte) *rbacv1.ClusterRole {
+func DecodeClusterRoleObjBytes(objBytes []byte) *rbacv1.ClusterRole {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(rbacv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -174,7 +64,7 @@ func decodeClusterRoleObjBytes(objBytes []byte) *rbacv1.ClusterRole {
 	return obj.(*rbacv1.ClusterRole)
 }
 
-func decodeClusterRoleBindingObjBytes(objBytes []byte) *rbacv1.ClusterRoleBinding {
+func DecodeClusterRoleBindingObjBytes(objBytes []byte) *rbacv1.ClusterRoleBinding {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(rbacv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -182,7 +72,7 @@ func decodeClusterRoleBindingObjBytes(objBytes []byte) *rbacv1.ClusterRoleBindin
 	return obj.(*rbacv1.ClusterRoleBinding)
 }
 
-func decodeDeploymentObjBytes(objBytes []byte) *appsv1.Deployment {
+func DecodeDeploymentObjBytes(objBytes []byte) *appsv1.Deployment {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(appsv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -190,7 +80,7 @@ func decodeDeploymentObjBytes(objBytes []byte) *appsv1.Deployment {
 	return obj.(*appsv1.Deployment)
 }
 
-func decodeRoleObjBytes(objBytes []byte) *rbacv1.Role {
+func DecodeRoleObjBytes(objBytes []byte) *rbacv1.Role {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(rbacv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -198,7 +88,7 @@ func decodeRoleObjBytes(objBytes []byte) *rbacv1.Role {
 	return obj.(*rbacv1.Role)
 }
 
-func decodeRoleBindingObjBytes(objBytes []byte) *rbacv1.RoleBinding {
+func DecodeRoleBindingObjBytes(objBytes []byte) *rbacv1.RoleBinding {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(rbacv1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -206,7 +96,7 @@ func decodeRoleBindingObjBytes(objBytes []byte) *rbacv1.RoleBinding {
 	return obj.(*rbacv1.RoleBinding)
 }
 
-func decodeSecretObjBytes(objBytes []byte) *corev1.Secret {
+func DecodeSecretObjBytes(objBytes []byte) *corev1.Secret {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(corev1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -214,7 +104,7 @@ func decodeSecretObjBytes(objBytes []byte) *corev1.Secret {
 	return obj.(*corev1.Secret)
 }
 
-func decodeServiceObjBytes(objBytes []byte) *corev1.Service {
+func DecodeServiceObjBytes(objBytes []byte) *corev1.Service {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(corev1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -222,7 +112,7 @@ func decodeServiceObjBytes(objBytes []byte) *corev1.Service {
 	return obj.(*corev1.Service)
 }
 
-func decodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
+func DecodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(corev1.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -230,7 +120,7 @@ func decodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
 	return obj.(*corev1.ServiceAccount)
 }
 
-func decodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.ValidatingWebhookConfiguration {
+func DecodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.ValidatingWebhookConfiguration {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(webhook.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
@@ -238,7 +128,7 @@ func decodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.Vali
 	return obj.(*webhook.ValidatingWebhookConfiguration)
 }
 
-func hasObjectChanged(desired, fetched client.Object) bool {
+func HasObjectChanged(desired, fetched client.Object) bool {
 	if reflect.TypeOf(desired) != reflect.TypeOf(fetched) {
 		panic("both objects to be compared must be of same type")
 	}
@@ -266,10 +156,10 @@ func hasObjectChanged(desired, fetched client.Object) bool {
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", desired))
 	}
-	return objectModified || objectMetadataModified(desired, fetched)
+	return objectModified || ObjectMetadataModified(desired, fetched)
 }
 
-func objectMetadataModified(desired, fetched client.Object) bool {
+func ObjectMetadataModified(desired, fetched client.Object) bool {
 	return !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels())
 }
 
@@ -293,7 +183,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
-	if desired.Spec.Template.ObjectMeta.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.ObjectMeta.Labels, fetched.Spec.Template.ObjectMeta.Labels) {
+	if desired.Spec.Template.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) {
 		return true
 	}
 
@@ -460,56 +350,21 @@ func validatingWebHookSpecModified(desired, fetched *webhook.ValidatingWebhookCo
 	return false
 }
 
-// parseBool is for parsing a string value as a boolean value. This is very specific to the values
+// ParseBool is for parsing a string value as a boolean value. This is very specific to the values
 // read from CR which allows only `true` or `false` as values.
-func parseBool(val string) bool {
-	if val == "true" {
-		return true
-	}
-	return false
+func ParseBool(val string) bool {
+	return val == "true"
 }
 
-// validateExternalSecretsConfig is for validating the ExternalSecrets CR fields, apart from the
-// CEL validations present in CRD.
-func (r *ExternalSecretsReconciler) validateExternalSecretsConfig(es *operatorv1alpha1.ExternalSecrets) error {
-	if isCertManagerConfigEnabled(es) {
-		if _, ok := r.optionalResourcesList[&certmanagerv1.Certificate{}]; !ok {
-			return fmt.Errorf("spec.externalSecretsConfig.webhookConfig.certManagerConfig.enabled is set, but cert-manager is not installed")
-		}
-
-	}
-	return nil
-}
-
-// isESMSpecEmpty returns whether ExternalSecretsManager CR Spec is empty.
-func isESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
+// IsESMSpecEmpty returns whether ExternalSecretsManager CR Spec is empty.
+func IsESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
 	return esm != nil && !reflect.DeepEqual(esm.Spec, operatorv1alpha1.ExternalSecretsManagerSpec{})
 }
 
-// isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
-func isCertManagerConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil &&
+// IsInjectCertManagerAnnotationEnabled is for check if add cert-manager annotation is enabled.
+func IsInjectCertManagerAnnotationEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
+	return es.Spec.ExternalSecretsConfig != nil &&
 		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
 		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
-		parseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.Enabled)
-}
-
-// isBitwardenConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
-func isBitwardenConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider != nil &&
-		parseBool(es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider.Enabled)
-}
-
-func getLogLevel(config *operatorv1alpha1.ExternalSecretsConfig) string {
-	if config != nil {
-		return zapcore.Level(config.LogLevel).String()
-	}
-	return "info"
-}
-
-func getOperatingNamespace(externalsecrets *operatorv1alpha1.ExternalSecrets) string {
-	if externalsecrets == nil || externalsecrets.Spec.ExternalSecretsConfig == nil {
-		return ""
-	}
-	return externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
+		ParseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations)
 }

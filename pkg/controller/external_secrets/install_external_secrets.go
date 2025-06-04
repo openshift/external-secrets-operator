@@ -1,6 +1,7 @@
-package controller
+package external_secrets
 
 import (
+	"fmt"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
@@ -8,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
 var (
@@ -18,9 +20,9 @@ var (
 	disallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
 )
 
-func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.ExternalSecrets, recon bool) error {
+func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.ExternalSecrets, recon bool) error {
 	if err := r.validateExternalSecretsConfig(es); err != nil {
-		return NewIrrecoverableError(err, "%s/%s configuration validation failed", es.GetObjectKind().GroupVersionKind().String(), es.GetName())
+		return common.NewIrrecoverableError(err, "%s/%s configuration validation failed", es.GetObjectKind().GroupVersionKind().String(), es.GetName())
 	}
 
 	// if user has set custom labels to be added to all resources created by the controller
@@ -28,7 +30,7 @@ func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(es *opera
 	// Spec will have the lowest priority, followed by the labels in `ExternalSecrets` Spec and
 	// controllerDefaultResourceLabels will have the highest priority.
 	resourceLabels := make(map[string]string)
-	if !isESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
+	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
 		for k, v := range r.esm.Spec.GlobalConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
 				r.log.Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
@@ -89,13 +91,19 @@ func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(es *opera
 		return err
 	}
 
+	if addProcessedAnnotation(es) {
+		if err := r.UpdateWithRetry(r.ctx, es); err != nil {
+			return fmt.Errorf("failed to update processed annotation to %s: %w", es.GetName(), err)
+		}
+	}
+
 	r.log.V(4).Info("finished reconciliation of external-secrets", "namespace", es.GetNamespace(), "name", es.GetName())
 	return nil
 }
 
 // createOrApplyNamespace is for the creating the namespace in which the `external-secrets`
 // resources will be created.
-func (r *ExternalSecretsReconciler) createOrApplyNamespace(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) error {
+func (r *Reconciler) createOrApplyNamespace(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) error {
 	namespace := getNamespace(es)
 	obj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
