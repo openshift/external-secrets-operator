@@ -143,6 +143,13 @@ type BitwardenSecretManagerProvider struct {
 	// +kubebuilder:validation:Enum:="true";"false"
 	// +kubebuilder:validation:Optional
 	Enabled string `json:"enabled,omitempty"`
+
+	// SecretRef is the kubernetes secret containing the TLS key pair to be used for the bitwarden server.
+	// The issuer in CertManagerConfig will be utilized to generate the required certificate if the secret
+	// reference is not provided and CertManagerConfig is configured. The key names in secret for certificate
+	// must be `tls.crt`, for private key must be `tls.key` and for CA certificate key name must be `ca.crt`.
+	// +kubebuilder:validation:Optional
+	SecretRef SecretReference `json:"secretRef,omitempty"`
 }
 
 // WebhookConfig is for configuring external-secrets webhook specifics.

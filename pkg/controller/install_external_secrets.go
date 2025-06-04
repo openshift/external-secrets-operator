@@ -59,6 +59,16 @@ func (r *ExternalSecretsReconciler) reconcileExternalSecretsDeployment(es *opera
 		return err
 	}
 
+	if err := r.createOrApplyCertificates(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile certificates resource")
+		return err
+	}
+
+	if err := r.createOrApplySecret(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile secret resource")
+		return err
+	}
+
 	if err := r.createOrApplyValidatingWebhookConfiguration(es, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err

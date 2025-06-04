@@ -1,5 +1,6 @@
 // Code generated for package assets by go-bindata DO NOT EDIT. (@generated)
 // sources:
+// bindata/external-secrets/certificate_bitwarden-tls-certs.yml
 // bindata/external-secrets/external-secrets-namespace.yaml
 // bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
@@ -75,6 +76,50 @@ func (fi bindataFileInfo) IsDir() bool {
 // Sys return file is sys mode
 func (fi bindataFileInfo) Sys() interface{} {
 	return nil
+}
+
+var _externalSecretsCertificate_bitwardenTlsCertsYml = []byte(`apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bitwarden-tls-certs
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: bitwarden-tls-certs
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.14.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  secretName: bitwarden-tls-certs
+  dnsNames:
+    - bitwarden-sdk-server.external-secrets.svc.cluster.local
+    - external-secrets-bitwarden-sdk-server.external-secrets.svc.cluster.local
+    - localhost
+  ipAddresses:
+    - 127.0.0.1
+    - ::1
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: my-issuer
+  duration: "8760h"`)
+
+func externalSecretsCertificate_bitwardenTlsCertsYmlBytes() ([]byte, error) {
+	return _externalSecretsCertificate_bitwardenTlsCertsYml, nil
+}
+
+func externalSecretsCertificate_bitwardenTlsCertsYml() (*asset, error) {
+	bytes, err := externalSecretsCertificate_bitwardenTlsCertsYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/certificate_bitwarden-tls-certs.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
 }
 
 var _externalSecretsExternalSecretsNamespaceYaml = []byte(`apiVersion: v1
@@ -1389,6 +1434,7 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
+	"external-secrets/certificate_bitwarden-tls-certs.yml":                                  externalSecretsCertificate_bitwardenTlsCertsYml,
 	"external-secrets/external-secrets-namespace.yaml":                                      externalSecretsExternalSecretsNamespaceYaml,
 	"external-secrets/resources/certificate_external-secrets-webhook.yml":                   externalSecretsResourcesCertificate_externalSecretsWebhookYml,
 	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":           externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
@@ -1459,7 +1505,8 @@ type bintree struct {
 
 var _bintree = &bintree{nil, map[string]*bintree{
 	"external-secrets": {nil, map[string]*bintree{
-		"external-secrets-namespace.yaml": {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
+		"certificate_bitwarden-tls-certs.yml": {externalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
+		"external-secrets-namespace.yaml":     {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
 		"resources": {nil, map[string]*bintree{
 			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
 			"clusterrole_external-secrets-cert-controller.yml":           {externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},

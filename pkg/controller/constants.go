@@ -2,7 +2,11 @@ package controller
 
 import (
 	"os"
+	"strings"
 	"time"
+
+	certmanagerapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 )
 
 const (
@@ -78,6 +82,7 @@ var (
 const (
 	externalsecretsNamespaceAssetName             = "external-secrets/external-secrets-namespace.yaml"
 	webhookCertificateAssetName                   = "external-secrets/resources/certificate_external-secrets-webhook.yml"
+	bitwardenCertificateAssetName                 = "external-secrets/certificate_bitwarden-tls-certs.yml"
 	certControllerClusterRoleAssetName            = "external-secrets/resources/clusterrole_external-secrets-cert-controller.yml"
 	controllerClusterRoleAssetName                = "external-secrets/resources/clusterrole_external-secrets-controller.yml"
 	controllerClusterRoleEditAssetName            = "external-secrets/resources/clusterrole_external-secrets-edit.yml"
@@ -100,4 +105,10 @@ const (
 	webhookServiceAccountAssetName                = "external-secrets/resources/serviceaccount_external-secrets-webhook.yml"
 	validatingWebhookExternalSecretCRDAssetName   = "external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml"
 	validatingWebhookSecretStoreCRDAssetName      = "external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml"
+)
+
+var (
+	clusterIssuerKind = strings.ToLower(certmanagerv1.ClusterIssuerKind)
+	issuerKind        = strings.ToLower(certmanagerv1.IssuerKind)
+	issuerGroup       = strings.ToLower(certmanagerapi.GroupName)
 )

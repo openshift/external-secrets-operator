@@ -24,3 +24,10 @@ type ObjectReference struct {
 	// +optional
 	Group string `json:"group,omitempty"`
 }
+
+// SecretReference is a reference to the secret with the given name, which should exist
+// in the same namespace where it will be utilized.
+type SecretReference struct {
+	// Name of the secret resource being referred to.
+	Name string `json:"name"`
+}
