@@ -190,15 +190,15 @@ func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
 	if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
 		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Certificate{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.Certificate{}).GetObjectKind().GroupVersionKind().String(), err)
 		}
 		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.ClusterIssuer{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.ClusterIssuer{}).GetObjectKind().GroupVersionKind().String(), err)
 		}
 		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Issuer{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.Issuer{}).GetObjectKind().GroupVersionKind().String(), err)
 		}
 	}
 	_, err = customCache.GetInformer(context.Background(), ownObject)

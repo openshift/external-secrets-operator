@@ -2,7 +2,6 @@ package external_secrets
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	webhook "k8s.io/api/admissionregistration/v1"
@@ -17,23 +16,9 @@ import (
 
 	v1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
-	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
-)
-
-const (
-	// testResourcesName is the name for ExternalSecrets test CR.
-	testResourcesName = "externalsecrets-test-resource"
-
-	testImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
-
-	testNamespace = "test-external-secrets"
-)
-
-var (
-	// testError is the error to return for client failure scenarios.
-	testError = fmt.Errorf("test client error")
 )
 
 // testReconciler returns a sample Reconciler instance.
@@ -43,7 +28,7 @@ func testReconciler(t *testing.T) *Reconciler {
 		ctx:                   context.Background(),
 		eventRecorder:         record.NewFakeRecorder(100),
 		log:                   testr.New(t),
-		esm:                   testExternalSecretsManager(),
+		esm:                   commontest.TestExternalSecretsManager(),
 		optionalResourcesList: make(map[string]struct{}),
 	}
 }
@@ -60,24 +45,6 @@ func testServiceAccount(assetName string) *corev1.ServiceAccount {
 	serviceAccount := common.DecodeServiceAccountObjBytes(assets.MustAsset(assetName))
 	serviceAccount.SetLabels(controllerDefaultResourceLabels)
 	return serviceAccount
-}
-
-// testExternalSecrets returns a sample ExternalSecrets object.
-func testExternalSecrets() *operatorv1alpha1.ExternalSecrets {
-	return &operatorv1alpha1.ExternalSecrets{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testResourcesName,
-		},
-	}
-}
-
-// testExternalSecretsManager returns a sample ExternalSecretsManager object.
-func testExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
-	return &operatorv1alpha1.ExternalSecretsManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testResourcesName,
-		},
-	}
 }
 
 // testClusterRole returns ClusterRole object read from provided static asset of same kind.
@@ -108,8 +75,9 @@ func testRoleBinding(assetName string) *rbacv1.RoleBinding {
 	return roleBinding
 }
 
-func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {
-	validateWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
+// testValidatingWebhookConfiguration returns ValidatingWebhookConfiguration object read from provided static asset of same kind.
+func testValidatingWebhookConfiguration(assetName string) *webhook.ValidatingWebhookConfiguration {
+	validateWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 	return validateWebhook
 }
 
@@ -129,7 +97,7 @@ func testDeployment(name string) *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  externalsecretsCommonName,
-							Image: testImageName,
+							Image: commontest.TestExternalSecretsImageName,
 						},
 					},
 				},
@@ -138,14 +106,16 @@ func testDeployment(name string) *appsv1.Deployment {
 	}
 }
 
-func testCertificate() *v1.Certificate {
-	validateCertificate := common.DecodeCertificateObjBytes(assets.MustAsset(webhookCertificateAssetName))
+// testCertificate returns Certificate object read from provided static asset of same kind.
+func testCertificate(assetName string) *v1.Certificate {
+	validateCertificate := common.DecodeCertificateObjBytes(assets.MustAsset(assetName))
 	validateCertificate.SetLabels(controllerDefaultResourceLabels)
 	return validateCertificate
 }
 
-func testSecret() *corev1.Secret {
-	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
+// testSecret returns Secret object read from provided static asset of same kind.
+func testSecret(assetName string) *corev1.Secret {
+	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(assetName))
 	validateSecret.SetLabels(controllerDefaultResourceLabels)
 	return validateSecret
 }

@@ -10,6 +10,7 @@ import (
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 func TestCreateOrApplyRBACResource(t *testing.T) {
@@ -25,7 +26,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRole:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
@@ -43,7 +44,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRoleBinding:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
@@ -56,7 +57,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.Role:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
@@ -69,7 +70,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *rbacv1.RoleBinding:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
@@ -91,7 +92,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *rbacv1.ClusterRoleBinding:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -126,7 +127,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRoleBinding:
 						if obj.GetName() == testClusterRoleBinding(certControllerClusterRoleBindingAssetName).GetName() {
-							return testError
+							return commontest.TestClientError
 						}
 					}
 					return nil
@@ -149,7 +150,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *rbacv1.ClusterRole:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -170,7 +171,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 					switch obj.(type) {
 					case *rbacv1.ClusterRole:
 						if obj.GetName() == testClusterRoleBinding(certControllerClusterRoleBindingAssetName).GetName() {
-							return testError
+							return commontest.TestClientError
 						}
 					}
 					return nil
@@ -193,7 +194,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *rbacv1.Role:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -213,7 +214,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch obj.(type) {
 					case *rbacv1.Role:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -235,7 +236,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *rbacv1.RoleBinding:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -255,7 +256,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch obj.(type) {
 					case *rbacv1.RoleBinding:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -304,7 +305,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			}
 			r.CtrlClient = mock
 
-			es := testExternalSecrets()
+			es := commontest.TestExternalSecrets()
 			if tt.updateExternalSecretsObj != nil {
 				tt.updateExternalSecretsObj(es)
 			}

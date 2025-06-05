@@ -159,3 +159,8 @@ func getOperatingNamespace(externalsecrets *operatorv1alpha1.ExternalSecrets) st
 	}
 	return externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
 }
+
+func (r *Reconciler) IsCertManagerInstalled() bool {
+	_, ok := r.optionalResourcesList[certificateCRDGKV]
+	return ok
+}

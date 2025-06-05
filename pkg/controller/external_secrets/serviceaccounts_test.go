@@ -11,6 +11,7 @@ import (
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 var testErr = fmt.Errorf("test client error")
@@ -128,7 +129,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 
-			es := testExternalSecrets()
+			es := commontest.TestExternalSecrets()
 			if tt.updateExternalSecretsObj != nil {
 				tt.updateExternalSecretsObj(es)
 			}
