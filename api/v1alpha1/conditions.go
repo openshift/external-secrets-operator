@@ -21,6 +21,16 @@ const (
 	//   - Failed
 	//   - Ready: operand successfully deployed and ready
 	Ready string = "Ready"
+
+	// UpdateAnnotation is the condition type used to inform status of
+	// updating the annotations.
+	//   Status:
+	//   - True
+	//   - False
+	//   Reason:
+	//   - Completed
+	//   - Failed
+	UpdateAnnotation string = "UpdateAnnotation"
 )
 
 const (
@@ -29,4 +39,6 @@ const (
 	ReasonReady string = "Ready"
 
 	ReasonInProgress string = "Progressing"
+
+	ReasonCompleted string = "Completed"
 )

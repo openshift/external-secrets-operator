@@ -205,7 +205,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return nil
 				})
 			},
-			wantErr: `failed to update /externalsecrets-test-resource status with image info: failed to update externalsecrets.openshift.operator.io "/externalsecrets-test-resource" status: test client error`,
+			wantErr: `failed to update /cluster status with image info: failed to update externalsecrets.openshift.operator.io "/cluster" status: test client error`,
 		},
 		{
 			name: "deployment reconciliation with invalid toleration configuration",
