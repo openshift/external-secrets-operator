@@ -1,16 +1,18 @@
-package controller
+package external_secrets
 
 import (
 	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 // createOrApplyServiceAccounts ensures required service Account resources exist and are correctly configured.
-func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
 	serviceAccountsToCreate := []struct {
 		assetName string
 		condition bool
@@ -38,9 +40,9 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets
 			continue
 		}
 
-		desired := decodeServiceAccountObjBytes(assets.MustAsset(serviceAccount.assetName))
+		desired := common.DecodeServiceAccountObjBytes(assets.MustAsset(serviceAccount.assetName))
 		updateNamespace(desired, externalsecrets)
-		updateResourceLabels(desired, resourceLabels)
+		common.UpdateResourceLabels(desired, resourceLabels)
 
 		serviceAccountName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 		r.log.V(4).Info("reconciling serviceaccount resource", "name", serviceAccountName)
@@ -53,7 +55,7 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets
 		fetched := &corev1.ServiceAccount{}
 		exist, err := r.Exists(r.ctx, key, fetched)
 		if err != nil {
-			return FromClientError(err, "failed to check if serviceaccount %s exists", serviceAccountName)
+			return common.FromClientError(err, "failed to check if serviceaccount %s exists", serviceAccountName)
 		}
 
 		if exist {
@@ -63,7 +65,7 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceAccounts(externalsecrets
 			r.log.V(4).Info("serviceaccount exists", "name", serviceAccountName)
 		} else {
 			if err := r.Create(r.ctx, desired); err != nil {
-				return FromClientError(err, "failed to create serviceaccount %s", serviceAccountName)
+				return common.FromClientError(err, "failed to create serviceaccount %s", serviceAccountName)
 			}
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Created serviceaccount %s", serviceAccountName)
 		}

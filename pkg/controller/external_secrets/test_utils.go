@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr/testr"
 
 	v1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
@@ -36,28 +36,28 @@ var (
 	testError = fmt.Errorf("test client error")
 )
 
-// testReconciler returns a sample ExternalSecretsReconciler instance.
-func testReconciler(t *testing.T) *ExternalSecretsReconciler {
-	return &ExternalSecretsReconciler{
+// testReconciler returns a sample Reconciler instance.
+func testReconciler(t *testing.T) *Reconciler {
+	return &Reconciler{
 		Scheme:                runtime.NewScheme(),
 		ctx:                   context.Background(),
 		eventRecorder:         record.NewFakeRecorder(100),
 		log:                   testr.New(t),
 		esm:                   testExternalSecretsManager(),
-		optionalResourcesList: make(map[client.Object]struct{}),
+		optionalResourcesList: make(map[string]struct{}),
 	}
 }
 
 // testService returns a Service object decoded from the specified asset file,
 func testService(assetName string) *corev1.Service {
-	service := decodeServiceObjBytes(assets.MustAsset(assetName))
+	service := common.DecodeServiceObjBytes(assets.MustAsset(assetName))
 	service.SetLabels(controllerDefaultResourceLabels)
 	return service
 }
 
 // testServiceAccount returns a ServiceAccount object decoded from the specified asset file,
 func testServiceAccount(assetName string) *corev1.ServiceAccount {
-	serviceAccount := decodeServiceAccountObjBytes(assets.MustAsset(assetName))
+	serviceAccount := common.DecodeServiceAccountObjBytes(assets.MustAsset(assetName))
 	serviceAccount.SetLabels(controllerDefaultResourceLabels)
 	return serviceAccount
 }
@@ -82,34 +82,34 @@ func testExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
 
 // testClusterRole returns ClusterRole object read from provided static asset of same kind.
 func testClusterRole(assetName string) *rbacv1.ClusterRole {
-	role := decodeClusterRoleObjBytes(assets.MustAsset(assetName))
+	role := common.DecodeClusterRoleObjBytes(assets.MustAsset(assetName))
 	role.SetLabels(controllerDefaultResourceLabels)
 	return role
 }
 
 // testClusterRoleBinding returns ClusterRoleBinding object read from provided static asset of same kind.
 func testClusterRoleBinding(assetName string) *rbacv1.ClusterRoleBinding {
-	roleBinding := decodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding := common.DecodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
 	roleBinding.SetLabels(controllerDefaultResourceLabels)
 	return roleBinding
 }
 
 // testRole returns Role object read from provided static asset of same kind.
 func testRole(assetName string) *rbacv1.Role {
-	role := decodeRoleObjBytes(assets.MustAsset(assetName))
+	role := common.DecodeRoleObjBytes(assets.MustAsset(assetName))
 	role.SetLabels(controllerDefaultResourceLabels)
 	return role
 }
 
 // testRoleBinding returns RoleBinding object read from provided static asset of same kind.
 func testRoleBinding(assetName string) *rbacv1.RoleBinding {
-	roleBinding := decodeRoleBindingObjBytes(assets.MustAsset(assetName))
+	roleBinding := common.DecodeRoleBindingObjBytes(assets.MustAsset(assetName))
 	roleBinding.SetLabels(controllerDefaultResourceLabels)
 	return roleBinding
 }
 
 func testValidatingWebhookConfiguration(testValidateWebhookConfigurationFile string) *webhook.ValidatingWebhookConfiguration {
-	validateWebhook := decodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
+	validateWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(testValidateWebhookConfigurationFile))
 	return validateWebhook
 }
 
@@ -139,13 +139,13 @@ func testDeployment(name string) *appsv1.Deployment {
 }
 
 func testCertificate() *v1.Certificate {
-	validateCertificate := decodeCertificateObjBytes(assets.MustAsset(webhookCertificateAssetName))
+	validateCertificate := common.DecodeCertificateObjBytes(assets.MustAsset(webhookCertificateAssetName))
 	validateCertificate.SetLabels(controllerDefaultResourceLabels)
 	return validateCertificate
 }
 
 func testSecret() *corev1.Secret {
-	validateSecret := decodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
+	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
 	validateSecret.SetLabels(controllerDefaultResourceLabels)
 	return validateSecret
 }

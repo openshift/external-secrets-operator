@@ -1,17 +1,18 @@
-package controller
+package external_secrets
 
 import (
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	v1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
@@ -19,7 +20,7 @@ var (
 	serviceExternalSecretWebhookName string = "external-secrets-webhook"
 )
 
-func (r *ExternalSecretsReconciler) createOrApplyCertificates(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyCertificates(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
 	if isCertManagerConfigEnabled(es) {
 		if err := r.createOrApplyCertificate(es, resourceLabels, webhookCertificateAssetName, recon); err != nil {
 			return err
@@ -38,7 +39,7 @@ func (r *ExternalSecretsReconciler) createOrApplyCertificates(es *operatorv1alph
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) createOrApplyCertificate(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, fileName string, recon bool) error {
+func (r *Reconciler) createOrApplyCertificate(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, fileName string, recon bool) error {
 	desired, err := r.getCertificateObject(es, resourceLabels, fileName)
 	if err != nil {
 		return err
@@ -53,16 +54,16 @@ func (r *ExternalSecretsReconciler) createOrApplyCertificate(es *operatorv1alpha
 	}
 	exist, err := r.Exists(r.ctx, key, fetched)
 	if err != nil {
-		return FromClientError(err, "failed to check %s certificate resource already exists", certificateName)
+		return common.FromClientError(err, "failed to check %s certificate resource already exists", certificateName)
 	}
 
 	if exist && recon {
 		r.eventRecorder.Eventf(es, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s certificate resource already exists, maybe from previous installation", certificateName)
 	}
-	if exist && hasObjectChanged(desired, fetched) {
+	if exist && common.HasObjectChanged(desired, fetched) {
 		r.log.V(1).Info("certificate has been modified, updating to desired state", "name", certificateName)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
-			return FromClientError(err, "failed to update %s certificate resource", certificateName)
+			return common.FromClientError(err, "failed to update %s certificate resource", certificateName)
 		}
 		r.eventRecorder.Eventf(es, corev1.EventTypeNormal, "Reconciled", "certificate resource %s reconciled back to desired state", certificateName)
 	} else {
@@ -70,7 +71,7 @@ func (r *ExternalSecretsReconciler) createOrApplyCertificate(es *operatorv1alpha
 	}
 	if !exist {
 		if err := r.Create(r.ctx, desired); err != nil {
-			return FromClientError(err, "failed to create %s certificate resource", certificateName)
+			return common.FromClientError(err, "failed to create %s certificate resource", certificateName)
 		}
 		r.eventRecorder.Eventf(es, corev1.EventTypeNormal, "Reconciled", "certificate resource %s created", certificateName)
 	}
@@ -78,21 +79,24 @@ func (r *ExternalSecretsReconciler) createOrApplyCertificate(es *operatorv1alpha
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) getCertificateObject(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, fileName string) (*certmanagerv1.Certificate, error) {
-	certificate := decodeCertificateObjBytes(assets.MustAsset(fileName))
+func (r *Reconciler) getCertificateObject(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, fileName string) (*certmanagerv1.Certificate, error) {
+	certificate := common.DecodeCertificateObjBytes(assets.MustAsset(fileName))
 
 	updateNamespace(certificate, es)
-	updateResourceLabels(certificate, resourceLabels)
+	common.UpdateResourceLabels(certificate, resourceLabels)
 
 	if err := r.updateCertificateParams(es, certificate); err != nil {
-		return nil, NewIrrecoverableError(err, "failed to update certificate resource for %s/%s deployment", getNamespace(es), es.GetName())
+		return nil, common.NewIrrecoverableError(err, "failed to update certificate resource for %s/%s deployment", getNamespace(es), es.GetName())
 	}
 
 	return certificate, nil
 }
 
-func (r *ExternalSecretsReconciler) updateCertificateParams(es *operatorv1alpha1.ExternalSecrets, certificate *certmanagerv1.Certificate) error {
-	certManageConfig := es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig
+func (r *Reconciler) updateCertificateParams(es *operatorv1alpha1.ExternalSecrets, certificate *certmanagerv1.Certificate) error {
+	certManageConfig := &operatorv1alpha1.CertManagerConfig{}
+	if es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.WebhookConfig != nil {
+		certManageConfig = es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig
+	}
 	externalSecretsNamespace := getNamespace(es)
 
 	if certManageConfig.IssuerRef.Name == "" {
@@ -132,15 +136,15 @@ func (r *ExternalSecretsReconciler) updateCertificateParams(es *operatorv1alpha1
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) assertIssuerRefExists(issueRef v1.ObjectReference, namespace string) error {
+func (r *Reconciler) assertIssuerRefExists(issueRef v1.ObjectReference, namespace string) error {
 	ifExists, err := r.getIssuer(issueRef, namespace)
 	if err != nil || !ifExists {
-		return FromClientError(err, "failed to fetch issuer")
+		return common.FromClientError(err, "failed to fetch issuer")
 	}
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) assertSecretRefExists(es *operatorv1alpha1.ExternalSecrets, bitwardenConfig *operatorv1alpha1.BitwardenSecretManagerProvider) error {
+func (r *Reconciler) assertSecretRefExists(es *operatorv1alpha1.ExternalSecrets, bitwardenConfig *operatorv1alpha1.BitwardenSecretManagerProvider) error {
 	namespacedName := types.NamespacedName{
 		Name:      bitwardenConfig.SecretRef.Name,
 		Namespace: getNamespace(es),
@@ -154,14 +158,14 @@ func (r *ExternalSecretsReconciler) assertSecretRefExists(es *operatorv1alpha1.E
 	return nil
 }
 
-func (r *ExternalSecretsReconciler) getIssuer(issuerRef v1.ObjectReference, namespace string) (bool, error) {
+func (r *Reconciler) getIssuer(issuerRef v1.ObjectReference, namespace string) (bool, error) {
 	namespacedName := types.NamespacedName{
 		Name:      issuerRef.Name,
 		Namespace: namespace,
 	}
 
 	var object client.Object
-	switch strings.ToLower(issuerRef.Kind) {
+	switch issuerRef.Kind {
 	case clusterIssuerKind:
 		object = &certmanagerv1.ClusterIssuer{}
 	case issuerKind:

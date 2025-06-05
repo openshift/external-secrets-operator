@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 func TestCreateOrApplySecret(t *testing.T) {
 	tests := []struct {
 		name    string
-		preReq  func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
 		es      func(*v1alpha1.ExternalSecrets)
 		wantErr string
 	}{
@@ -69,7 +69,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "reconciliation of secret fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
@@ -90,7 +90,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "reconciliation of secret fails while restoring to expected state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
@@ -120,7 +120,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "reconciliation of secret which already exists in expected state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
@@ -141,7 +141,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "reconciliation of secret creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
@@ -169,7 +169,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "successful secret creation",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
@@ -181,7 +181,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 		},
 		{
 			name: "secret creation skipped when cert-manager config is enabled",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 			},
 		},
 	}
@@ -193,7 +193,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 			es := testExternalSecretsForSecrets()
 			if tt.es != nil {
 				tt.es(es)

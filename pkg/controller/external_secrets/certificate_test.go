@@ -1,21 +1,21 @@
-package controller
+package external_secrets
 
 import (
 	"context"
 	"fmt"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"testing"
-
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 func TestCreateOrApplyCertificates(t *testing.T) {
 	tests := []struct {
 		name    string
-		preReq  func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
 		es      func(*v1alpha1.ExternalSecrets)
 		recon   bool
 		wantErr string
@@ -90,7 +90,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "reconciliation of webhook certificate fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, testError
@@ -128,7 +128,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "reconciliation of webhook certificate fails while restoring to expected state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *certmanagerv1.Certificate:
@@ -181,7 +181,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "reconciliation of webhook certificate which already exists in expected state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *certmanagerv1.Certificate:
@@ -235,7 +235,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "reconciliation of webhook certificate creation fails",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, nil
@@ -268,7 +268,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "successful webhook certificate creation",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, nil
@@ -301,7 +301,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "bitwarden enabled: secret ref exists (assertSecretRefExists returns)",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						es := testExternalSecretsForCertificate()
@@ -354,7 +354,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "bitwarden enabled: secret ref does not exist (assertSecretRefExists fails)",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						es := testExternalSecretsForCertificate()
@@ -402,7 +402,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		},
 		{
 			name: "bitwarden disabled (explicitly nil): only webhook certificate reconciled",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, nil
@@ -450,7 +450,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 
 			es := testExternalSecretsForCertificate()
 			if tt.es != nil {

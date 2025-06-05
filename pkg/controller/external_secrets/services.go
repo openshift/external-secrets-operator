@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"fmt"
@@ -7,11 +7,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 // createOrApplyServices handles conditional and default creation of Services.
-func (r *ExternalSecretsReconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
 	servicesToCreate := []struct {
 		assetName string
 		condition bool
@@ -39,10 +40,10 @@ func (r *ExternalSecretsReconciler) createOrApplyServices(externalsecrets *opera
 }
 
 // createOrApplyServiceFromAsset decodes a Service YAML asset and ensures it exists in the cluster.
-func (r *ExternalSecretsReconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
-	service := decodeServiceObjBytes(assets.MustAsset(assetName))
+func (r *Reconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+	service := common.DecodeServiceObjBytes(assets.MustAsset(assetName))
 	updateNamespace(service, externalsecrets)
-	updateResourceLabels(service, resourceLabels)
+	common.UpdateResourceLabels(service, resourceLabels)
 
 	serviceName := fmt.Sprintf("%s/%s", service.GetNamespace(), service.GetName())
 	r.log.V(4).Info("Reconciling service", "name", serviceName)
@@ -54,17 +55,17 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceFromAsset(externalsecret
 	}
 	exists, err := r.Exists(r.ctx, key, fetched)
 	if err != nil {
-		return FromClientError(err, "failed to check existence of service %s", serviceName)
+		return common.FromClientError(err, "failed to check existence of service %s", serviceName)
 	}
 
 	if exists {
 		if externalsecretsCreateRecon {
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
 		}
-		if hasObjectChanged(service, fetched) {
+		if common.HasObjectChanged(service, fetched) {
 			r.log.V(1).Info("Service modified, updating", "name", serviceName)
 			if err := r.UpdateWithRetry(r.ctx, service); err != nil {
-				return FromClientError(err, "failed to update service %s", serviceName)
+				return common.FromClientError(err, "failed to update service %s", serviceName)
 			}
 			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Service %s updated", serviceName)
 		} else {
@@ -72,7 +73,7 @@ func (r *ExternalSecretsReconciler) createOrApplyServiceFromAsset(externalsecret
 		}
 	} else {
 		if err := r.Create(r.ctx, service); err != nil {
-			return FromClientError(err, "failed to create service %s", serviceName)
+			return common.FromClientError(err, "failed to create service %s", serviceName)
 		}
 		r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Service %s created", serviceName)
 	}

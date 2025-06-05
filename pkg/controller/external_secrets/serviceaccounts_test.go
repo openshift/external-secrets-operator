@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 var testErr = fmt.Errorf("test client error")
@@ -27,13 +27,13 @@ func staticServiceAccounts() map[string]string {
 func TestCreateOrApplyServiceAccounts(t *testing.T) {
 	tests := []struct {
 		name                     string
-		preReq                   func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq                   func(*Reconciler, *fakes.FakeCtrlClient)
 		updateExternalSecretsObj func(*operatorv1alpha1.ExternalSecrets)
 		wantErr                  string
 	}{
 		{
 			name: "all static serviceaccounts created successfully",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
@@ -57,7 +57,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 		},
 		{
 			name: "bitwarden serviceaccount created when enabled",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
@@ -81,7 +81,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 		},
 		{
 			name: "cert-controller serviceaccount skipped when cert-manager enabled",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if sa.Name == "external-secrets-cert-controller" {
@@ -104,7 +104,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 		},
 		{
 			name: "creation fails for controller Service account",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
@@ -123,7 +123,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := testReconciler(t)
 			mock := &fakes.FakeCtrlClient{}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}

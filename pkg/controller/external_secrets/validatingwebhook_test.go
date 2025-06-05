@@ -1,4 +1,4 @@
-package controller
+package external_secrets
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
-	"github.com/openshift/external-secrets-operator/pkg/controller/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 )
 
 var (
@@ -20,12 +20,12 @@ var (
 func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 	tests := []struct {
 		name    string
-		preReq  func(*ExternalSecretsReconciler, *fakes.FakeCtrlClient)
+		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
 		wantErr string
 	}{
 		{
 			name: "validatingWebhookConfiguration reconciliation successful",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
@@ -38,7 +38,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while checking if exists",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
@@ -51,7 +51,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while updating to desired state",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, option ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
@@ -74,7 +74,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while creating",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
@@ -87,7 +87,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 		},
 		{
 			name: "validatingWebhookConfiguration creation successful",
-			preReq: func(r *ExternalSecretsReconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
@@ -104,7 +104,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.ctrlClient = mock
+			r.CtrlClient = mock
 			externalSecretsForValidateWebhook := testExternalSecretsForValidateWebhookConfiguration()
 
 			err := r.createOrApplyValidatingWebhookConfiguration(externalSecretsForValidateWebhook, controllerDefaultResourceLabels, false)

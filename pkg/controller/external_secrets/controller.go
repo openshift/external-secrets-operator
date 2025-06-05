@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package external_secrets
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -41,12 +41,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/go-logr/logr"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	operatorclient "github.com/openshift/external-secrets-operator/pkg/controller/client"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
 var (
@@ -73,15 +78,15 @@ var (
 	}
 )
 
-// ExternalSecretsReconciler reconciles a ExternalSecrets object
-type ExternalSecretsReconciler struct {
-	ctrlClient
+// Reconciler reconciles a ExternalSecrets object
+type Reconciler struct {
+	operatorclient.CtrlClient
 	Scheme                *runtime.Scheme
 	ctx                   context.Context
 	eventRecorder         record.EventRecorder
 	log                   logr.Logger
 	esm                   *operatorv1alpha1.ExternalSecretsManager
-	optionalResourcesList map[client.Object]struct{}
+	optionalResourcesList map[string]struct{}
 }
 
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets,verbs=get;list;watch;create;update;patch;delete
@@ -94,7 +99,7 @@ type ExternalSecretsReconciler struct {
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events;secrets;services;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;clusterissuers;issuers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create
 
 // +kubebuilder:rbac:groups="",resources=endpoints,verbs=get;list;watch;create
@@ -108,26 +113,36 @@ type ExternalSecretsReconciler struct {
 // +kubebuilder:rbac:groups=generators.external-secrets.io,resources=githubaccesstokens;grafanas;passwords;quayaccesstokens;stssessiontokens;uuids;vaultdynamicsecrets;webhooks,verbs=get;list;watch;create;delete;update;patch;deletecollection
 
 // New is for building the reconciler instance consumed by the Reconcile method.
-func New(mgr ctrl.Manager) (*ExternalSecretsReconciler, error) {
-	r := &ExternalSecretsReconciler{
+func New(mgr ctrl.Manager) (*Reconciler, error) {
+	r := &Reconciler{
 		ctx:                   context.Background(),
 		eventRecorder:         mgr.GetEventRecorderFor(ControllerName),
 		log:                   ctrl.Log.WithName(ControllerName),
 		Scheme:                mgr.GetScheme(),
 		esm:                   new(operatorv1alpha1.ExternalSecretsManager),
-		optionalResourcesList: make(map[client.Object]struct{}),
+		optionalResourcesList: make(map[string]struct{}),
 	}
 	c, err := NewClient(mgr, r)
 	if err != nil {
 		return nil, err
 	}
-	r.ctrlClient = c
+	r.CtrlClient = c
 	return r, nil
+}
+
+func NewClient(m manager.Manager, r *Reconciler) (operatorclient.CtrlClient, error) {
+	c, err := BuildCustomClient(m, r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build custom client: %w", err)
+	}
+	return &operatorclient.CtrlClientImpl{
+		Client: c,
+	}, nil
 }
 
 // BuildCustomClient creates a custom client with a custom cache of required objects.
 // The corresponding informers receive events for objects matching label criteria.
-func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.Client, error) {
+func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
 	managedResourceLabelReq, _ := labels.NewRequirement(requestEnqueueLabelKey, selection.Equals, []string{requestEnqueueLabelValue})
 	managedResourceLabelReqSelector := labels.NewSelector().Add(*managedResourceLabelReq)
 
@@ -146,12 +161,13 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 	if err != nil {
 		return nil, fmt.Errorf("failed to check %s/%s CRD is installed: %w", certificateCRDGroupVersion, certificateCRDName, err)
 	}
-	certificateObject := &certmanagerv1.Certificate{}
 	if exist {
-		r.optionalResourcesList[certificateObject] = struct{}{}
-		objectList[certificateObject] = cache.ByObject{
+		r.optionalResourcesList[certificateCRDGKV] = struct{}{}
+		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
 			Label: managedResourceLabelReqSelector,
 		}
+		objectList[&certmanagerv1.ClusterIssuer{}] = cache.ByObject{}
+		objectList[&certmanagerv1.Issuer{}] = cache.ByObject{}
 	}
 
 	customCacheOpts := cache.Options{
@@ -171,10 +187,18 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 			return nil, fmt.Errorf("failed to add informer for %s resource: %w", res.GetObjectKind().GroupVersionKind().String(), err)
 		}
 	}
-	if _, ok := r.optionalResourcesList[certificateObject]; ok {
-		_, err = customCache.GetInformer(context.Background(), certificateObject)
+	if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
+		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Certificate{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateObject.GetObjectKind().GroupVersionKind().String(), err)
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
+		}
+		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.ClusterIssuer{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
+		}
+		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Issuer{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to add informer for %s resource: %w", certificateCRDGKV, err)
 		}
 	}
 	_, err = customCache.GetInformer(context.Background(), ownObject)
@@ -207,7 +231,7 @@ func BuildCustomClient(mgr ctrl.Manager, r *ExternalSecretsReconciler) (client.C
 }
 
 // SetupWithManager is for creating a controller instance with predicates and event filters.
-func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mapFunc := func(ctx context.Context, obj client.Object) []reconcile.Request {
 		r.log.V(4).Info("received reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
 
@@ -217,7 +241,7 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{
 					{
 						NamespacedName: types.NamespacedName{
-							Name: externalsecretsObjectName,
+							Name: common.ExternalSecretsObjectName,
 						},
 					},
 				}
@@ -244,7 +268,7 @@ func (r *ExternalSecretsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		case &appsv1.Deployment{}:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
 		case &certmanagerv1.Certificate{}:
-			if _, ok := r.optionalResourcesList[res]; ok {
+			if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
 				mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 			}
 		case &corev1.Secret{}:
@@ -286,7 +310,7 @@ func isCRDInstalled(config *rest.Config, name, groupVersion string) (bool, error
 
 // Reconcile is the reconciliation loop to manage the current state external-secrets
 // deployment to reflect desired state configured in `externalsecrets.openshift.operator.io`.
-func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.log.V(1).Info("reconciling", "request", req)
 
 	// Fetch the externalsecrets.openshift.operator.io CR
@@ -308,7 +332,7 @@ func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if requeue, err := r.cleanUp(externalsecrets); err != nil {
 			return ctrl.Result{}, fmt.Errorf("clean up failed for %q externalsecrets.openshift.operator.io instance deletion: %w", req.NamespacedName, err)
 		} else if requeue {
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 		}
 
 		if err := r.removeFinalizer(ctx, externalsecrets, finalizer); err != nil {
@@ -326,7 +350,7 @@ func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Fetch the externalsecretsmanager.openshift.operator.io CR
 	esmNamespacedName := types.NamespacedName{
-		Name: externalsecretsManagerObjectName,
+		Name: common.ExternalSecretsObjectName,
 	}
 	if err := r.Get(ctx, esmNamespacedName, r.esm); err != nil {
 		if errors.IsNotFound(err) {
@@ -341,7 +365,7 @@ func (r *ExternalSecretsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return r.processReconcileRequest(externalsecrets, req.NamespacedName)
 }
 
-func (r *ExternalSecretsReconciler) processReconcileRequest(externalsecrets *operatorv1alpha1.ExternalSecrets, req types.NamespacedName) (ctrl.Result, error) {
+func (r *Reconciler) processReconcileRequest(externalsecrets *operatorv1alpha1.ExternalSecrets, req types.NamespacedName) (ctrl.Result, error) {
 	createRecon := false
 	if !containsProcessedAnnotation(externalsecrets) && reflect.DeepEqual(externalsecrets.Status, operatorv1alpha1.ExternalSecretsStatus{}) {
 		r.log.V(1).Info("starting reconciliation of newly created externalsecrets.openshift.operator.io", "namespace", externalsecrets.GetNamespace(), "name", externalsecrets.GetName())
@@ -353,7 +377,7 @@ func (r *ExternalSecretsReconciler) processReconcileRequest(externalsecrets *ope
 	err := r.reconcileExternalSecretsDeployment(externalsecrets, createRecon)
 	if err != nil {
 		r.log.Error(err, "failed to reconcile external-secrets deployment", "request", req)
-		isFatal := IsIrrecoverableError(err)
+		isFatal := common.IsIrrecoverableError(err)
 
 		degradedCond := metav1.Condition{
 			Type:               operatorv1alpha1.Degraded,
@@ -383,12 +407,13 @@ func (r *ExternalSecretsReconciler) processReconcileRequest(externalsecrets *ope
 		if apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, degradedCond) ||
 			apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, readyCond) {
 			errUpdate = r.updateCondition(externalsecrets, err)
+			err = utilerrors.NewAggregate([]error{err, errUpdate})
 		}
 
 		if isFatal {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueTime}, fmt.Errorf("failed to reconcile %q external-secrets deployment: %w", req, err)
+		return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, fmt.Errorf("failed to reconcile %q external-secrets deployment: %w", req, err)
 	}
 
 	// Successful reconciliation
@@ -415,7 +440,7 @@ func (r *ExternalSecretsReconciler) processReconcileRequest(externalsecrets *ope
 }
 
 // cleanUp handles deletion of externalsecrets.openshift.operator.io gracefully.
-func (r *ExternalSecretsReconciler) cleanUp(externalsecrets *operatorv1alpha1.ExternalSecrets) (bool, error) {
+func (r *Reconciler) cleanUp(externalsecrets *operatorv1alpha1.ExternalSecrets) (bool, error) {
 	// TODO: For GA, handle cleaning up of resources created for installing external-secrets operand.
 	r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "RemoveDeployment", "%s/%s externalsecrets.openshift.operator.io marked for deletion, remove reference in deployment and remove all resources created for deployment", externalsecrets.GetNamespace(), externalsecrets.GetName())
 	return false, nil

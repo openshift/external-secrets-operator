@@ -1,9 +1,7 @@
-package controller
+package external_secrets
 
 import (
 	"os"
-	"strings"
-	"time"
 
 	certmanagerapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -19,9 +17,6 @@ const (
 	// ControllerName is the name of the controller used in logs and events.
 	ControllerName = externalsecretsCommonName + "-controller"
 
-	// defaultRequeueTime is the default reconcile requeue time.
-	defaultRequeueTime = time.Second * 30
-
 	// finalizer name for external-secrets.openshift.operator.io resource.
 	finalizer = "external-secrets.openshift.operator.io/" + ControllerName
 
@@ -29,29 +24,11 @@ const (
 	// successful reconciliation by the controller.
 	controllerProcessedAnnotation = "operator.openshift.io/external-secrets-processed"
 
-	// externalsecretsObjectName is the name of the externalsecrets.openshift.operator.io resource created by user.
-	// externalsecrets.openshift.operator.io CRD enforces name to be `cluster`.
-	externalsecretsObjectName = "cluster"
-
-	// externalsecretsManagerObjectName is the name of the externalsecretsmanager.openshift.operator.io resource created by user.
-	// externalsecretsmanager.openshift.operator.io CRD enforces name to be `cluster`.
-	externalsecretsManagerObjectName = "cluster"
-
 	// certificateCRDGroupVersion is the group and version of the Certificate CRD provided by cert-manager project.
 	certificateCRDGroupVersion = "cert-manager.io/v1"
 
 	// certificateCRDName is the name of the Certificate CRD provided by cert-manager project.
 	certificateCRDName = "certificates"
-
-	// certManagerInjectCAFromAnnotation is the annotation key added to external-secrets resource once
-	// if certManager field is enabled in webhook config
-	// after successful reconciliation by the controller.
-	certManagerInjectCAFromAnnotation = "cert-manager.io/inject-ca-from"
-
-	// certManagerInjectCAFromAnnotationValue is the annotation value added to external-secrets resource once
-	// if certManager field is enabled in webhook config
-	// after successful reconciliation by the controller.
-	certManagerInjectCAFromAnnotationValue = "external-secrets/external-secrets-webhook"
 
 	// externalsecretsImageEnvVarName is the environment variable key name
 	// containing the image version of the external-secrets operand as value.
@@ -64,6 +41,11 @@ const (
 	// externalsecretsDefaultNamespace is the namespace where the `external-secrets` operand required resources
 	// will be created, when ExternalSecrets.Spec.ControllerConfig.Namespace is not set.
 	externalsecretsDefaultNamespace = "external-secrets"
+)
+
+var (
+	// certificateCRDGKV is the group.version/kind of the Certificate CRD.
+	certificateCRDGKV = (&certmanagerv1.Certificate{}).GroupVersionKind().String()
 )
 
 var (
@@ -81,8 +63,8 @@ var (
 // and made available by the pkg/operator/assets package.
 const (
 	externalsecretsNamespaceAssetName             = "external-secrets/external-secrets-namespace.yaml"
-	webhookCertificateAssetName                   = "external-secrets/resources/certificate_external-secrets-webhook.yml"
 	bitwardenCertificateAssetName                 = "external-secrets/certificate_bitwarden-tls-certs.yml"
+	webhookCertificateAssetName                   = "external-secrets/resources/certificate_external-secrets-webhook.yml"
 	certControllerClusterRoleAssetName            = "external-secrets/resources/clusterrole_external-secrets-cert-controller.yml"
 	controllerClusterRoleAssetName                = "external-secrets/resources/clusterrole_external-secrets-controller.yml"
 	controllerClusterRoleEditAssetName            = "external-secrets/resources/clusterrole_external-secrets-edit.yml"
@@ -108,7 +90,7 @@ const (
 )
 
 var (
-	clusterIssuerKind = strings.ToLower(certmanagerv1.ClusterIssuerKind)
-	issuerKind        = strings.ToLower(certmanagerv1.IssuerKind)
-	issuerGroup       = strings.ToLower(certmanagerapi.GroupName)
+	clusterIssuerKind = certmanagerv1.ClusterIssuerKind
+	issuerKind        = certmanagerv1.IssuerKind
+	issuerGroup       = certmanagerapi.GroupName
 )
