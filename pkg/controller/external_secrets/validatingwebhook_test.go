@@ -11,6 +11,7 @@ import (
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 var (
@@ -42,12 +43,12 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return false, nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to check %s validatingWebhook resource already exists: %s", testValidateWebhookConfigurationResourceName, testError),
+			wantErr: fmt.Sprintf("failed to check %s validatingWebhook resource already exists: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while updating to desired state",
@@ -55,7 +56,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, option ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -70,7 +71,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 					return false, nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to update %s validatingWebhook resource with desired state: %s", testValidateWebhookConfigurationResourceName, testError),
+			wantErr: fmt.Sprintf("failed to update %s validatingWebhook resource with desired state: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while creating",
@@ -78,12 +79,12 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch obj.(type) {
 					case *webhook.ValidatingWebhookConfiguration:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to create validatingWebhook resource %s: %s", testValidateWebhookConfigurationResourceName, testError),
+			wantErr: fmt.Sprintf("failed to create validatingWebhook resource %s: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
 		},
 		{
 			name: "validatingWebhookConfiguration creation successful",
@@ -116,7 +117,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 }
 
 func testExternalSecretsForValidateWebhookConfiguration() *v1alpha1.ExternalSecrets {
-	externalSecrets := testExternalSecrets()
+	externalSecrets := commontest.TestExternalSecrets()
 	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
 		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 			WebhookConfig: &v1alpha1.WebhookConfig{

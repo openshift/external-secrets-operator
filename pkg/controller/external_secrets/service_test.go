@@ -10,6 +10,7 @@ import (
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 func TestCreateOrApplyServices(t *testing.T) {
@@ -49,7 +50,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					switch svc := obj.(type) {
 					case *corev1.Service:
 						if svc.Name == "bitwarden-sdk-server" {
-							return testError // trigger error
+							return commontest.TestClientError // trigger error
 						}
 					}
 					return nil
@@ -69,7 +70,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			name: "service reconciliation fails while checking if exists",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, testError
+					return false, commontest.TestClientError
 				})
 			},
 			wantErr: `failed to check existence of service external-secrets/external-secrets-webhook: test client error`,
@@ -88,7 +89,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return false, nil
 				})
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-					return testError
+					return commontest.TestClientError
 				})
 			},
 			wantErr: `failed to update service external-secrets/external-secrets-webhook: test client error`,
@@ -106,7 +107,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 							t.Errorf("Expected webhook service to be created, got %s", svc.Name)
 						}
 					}
-					return testError
+					return commontest.TestClientError
 				})
 			},
 			wantErr: `failed to create service external-secrets/external-secrets-webhook: test client error`,
@@ -121,7 +122,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
-			es := testExternalSecrets()
+			es := commontest.TestExternalSecrets()
 			if tt.updateExternalSecretsObj != nil {
 				tt.updateExternalSecretsObj(es)
 			}
