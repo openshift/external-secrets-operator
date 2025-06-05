@@ -23,8 +23,15 @@ import (
 )
 
 var (
-	codecs = serializer.NewCodecFactory(runtime.NewScheme())
+	scheme = runtime.NewScheme()
+	codecs = serializer.NewCodecFactory(scheme)
 )
+
+func init() {
+	if err := webhook.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+}
 
 // addFinalizer adds finalizer to externalsecrets.openshift.operator.io resource.
 func (r *ExternalSecretsReconciler) addFinalizer(ctx context.Context, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
@@ -199,7 +206,7 @@ func decodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
 }
 
 func decodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.ValidatingWebhookConfiguration {
-	obj, err := runtime.Decode(codecs.UniversalDecoder(corev1.SchemeGroupVersion), objBytes)
+	obj, err := runtime.Decode(codecs.UniversalDecoder(webhook.SchemeGroupVersion), objBytes)
 	if err != nil {
 		panic(err)
 	}
@@ -229,6 +236,8 @@ func hasObjectChanged(desired, fetched client.Object) bool {
 			rbacRoleBindingSubjectsModified[*rbacv1.RoleBinding](desired.(*rbacv1.RoleBinding), fetched.(*rbacv1.RoleBinding))
 	case *corev1.Service:
 		objectModified = serviceSpecModified(desired.(*corev1.Service), fetched.(*corev1.Service))
+	case *webhook.ValidatingWebhookConfiguration:
+		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", desired))
 	}
@@ -334,4 +343,47 @@ func rbacRoleBindingSubjectsModified[Object *rbacv1.RoleBinding | *rbacv1.Cluste
 	default:
 		panic(fmt.Sprintf("unsupported object type %v", typ))
 	}
+}
+
+func validatingWebHookSpecModified(desired, fetched *webhook.ValidatingWebhookConfiguration) bool {
+	if len(desired.Webhooks) != len(fetched.Webhooks) {
+		return true
+	}
+
+	fetchedWebhooksMap := make(map[string]webhook.ValidatingWebhook)
+	for _, wh := range fetched.Webhooks {
+		fetchedWebhooksMap[wh.Name] = wh
+	}
+
+	for _, desiredWh := range desired.Webhooks {
+		fetchedWh, ok := fetchedWebhooksMap[desiredWh.Name]
+		if !ok {
+			return true
+		}
+
+		if !reflect.DeepEqual(desiredWh.SideEffects, fetchedWh.SideEffects) ||
+			!reflect.DeepEqual(desiredWh.TimeoutSeconds, fetchedWh.TimeoutSeconds) ||
+			!reflect.DeepEqual(desiredWh.FailurePolicy, fetchedWh.FailurePolicy) ||
+			!reflect.DeepEqual(desiredWh.MatchPolicy, fetchedWh.MatchPolicy) ||
+			!reflect.DeepEqual(desiredWh.NamespaceSelector, fetchedWh.NamespaceSelector) ||
+			!reflect.DeepEqual(desiredWh.ObjectSelector, fetchedWh.ObjectSelector) ||
+			!reflect.DeepEqual(desiredWh.MatchConditions, fetchedWh.MatchConditions) ||
+			!reflect.DeepEqual(desiredWh.AdmissionReviewVersions, fetchedWh.AdmissionReviewVersions) ||
+			!reflect.DeepEqual(desiredWh.ClientConfig, fetchedWh.ClientConfig) ||
+			!reflect.DeepEqual(desiredWh.Rules, fetchedWh.Rules) {
+			return true
+		}
+
+	}
+
+	return false
+}
+
+// parseBool is for parsing a string value as a boolean value. This is very specific to the values
+// read from CR which allows only `true` or `false` as values.
+func parseBool(val string) bool {
+	if val == "true" {
+		return true
+	}
+	return false
 }
