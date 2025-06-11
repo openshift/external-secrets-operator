@@ -49,6 +49,7 @@ func init() {
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(crdv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 }
 
 func warnError(err error) {
