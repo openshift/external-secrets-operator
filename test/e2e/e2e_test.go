@@ -1,82 +1,119 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package e2e
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/openshift/external-secrets-operator/test/utils"
+	utils "github.com/openshift/external-secrets-operator/test/utils"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"testing"
+	"time"
 )
 
-const namespace = "external-secrets-operator"
+const (
+	namespace          = "external-secrets-operator"
+	secretStoreFile    = "testdata/aws_secret_store.yaml"
+	externalSecretFile = "testdata/aws_external_secret.yaml"
+)
 
-var _ = Describe("controller", Ordered, func() {
+var _ = Describe("External Secrets Operator", Ordered, func() {
+
+	var (
+		ctx    = context.TODO()
+		loader utils.DynamicResourceLoader
+	)
+
 	BeforeAll(func() {
-		//TODO: add any pre-reqs for the tests.
+		loader = utils.NewDynamicResourceLoader(ctx, &testing.T{})
+
+		// Create ExternalSecret resource
+		loader.CreateFromFile(loadFromFile, "testdata/external_secret.yaml", namespace)
 	})
 
 	AfterAll(func() {
-		//TODO: add any clean up required after the tests.
+		loader.DeleteFromFile(loadFromFile, "testdata/external_secret.yaml", namespace)
 	})
 
 	Context("Operator", func() {
-		It("should run successfully", func() {
-			var controllerPodName string
-
-			By("validating that the controller-manager pod is running as expected")
-			verifyControllerUp := func() error {
-				// Get pod name
-
-				cmd := exec.Command("oc", "get",
-					"pods", "-l", "control-plane=controller-manager",
-					"-o", "go-template={{ range .items }}"+
-						"{{ if not .metadata.deletionTimestamp }}"+
-						"{{ .metadata.name }}"+
-						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
-				)
-
-				podOutput, err := utils.Run(cmd)
+		It("should have controller pod running", func() {
+			verifyControllerPod := func() error {
+				pods, err := loader.KubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+					LabelSelector: "control-plane=controller-manager",
+				})
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				podNames := utils.GetNonEmptyLines(string(podOutput))
-				if len(podNames) != 1 {
-					return fmt.Errorf("expect 1 controller pods running, but got %d", len(podNames))
-				}
-				controllerPodName = podNames[0]
-				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
 
-				// Validate pod status
-				cmd = exec.Command("oc", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
-				)
-				status, err := utils.Run(cmd)
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				if string(status) != "Running" {
-					return fmt.Errorf("controller pod in %s status", status)
+				var runningPods []corev1.Pod
+				for _, pod := range pods.Items {
+					if pod.DeletionTimestamp == nil && pod.Status.Phase == corev1.PodRunning {
+						runningPods = append(runningPods, pod)
+					}
 				}
+
+				if len(runningPods) != 1 {
+					return fmt.Errorf("expected 1 running controller pod, got %d", len(runningPods))
+				}
+
+				ExpectWithOffset(2, runningPods[0].Name).To(ContainSubstring("controller-manager"))
+				fmt.Println(runningPods[0].Name)
 				return nil
 			}
-			EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+
+			EventuallyWithOffset(1, verifyControllerPod, time.Minute, time.Second).Should(Succeed())
+		})
+	})
+
+	Context("AWS SecretStore", func() {
+		BeforeEach(func() {
+			loader.CreateFromFile(loadFromFile, secretStoreFile, namespace)
+			loader.CreateFromFile(loadFromFile, externalSecretFile, namespace)
+
+		})
+
+		AfterEach(func() {
+			// Clean up SecretStore
+			loader.DeleteFromFile(loadFromFile, secretStoreFile, namespace)
+			// Clean up ExternalStore
+			loader.DeleteFromFile(loadFromFile, externalSecretFile, namespace)
+
+		})
+
+		It("should synchronize secrets from AWS Secrets Manager", func() {
+			By("verifying the synchronization of the secret")
+			Eventually(func() error {
+				k8sSecret, err := loader.KubeClient.CoreV1().Secrets(namespace).Get(ctx, "aws-secret", metav1.GetOptions{})
+
+				secretsList, err := loader.KubeClient.CoreV1().Secrets("kube-system").List(ctx, metav1.ListOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				fmt.Println("Secrets in kube-system:")
+				for _, s := range secretsList.Items {
+					fmt.Println("-", s.Name)
+				}
+				if err != nil {
+					return fmt.Errorf("failed to get secret: %v", err)
+				}
+
+				if string(k8sSecret.Data["aws_secret_access_key"]) == "" {
+					return fmt.Errorf("secret data is empty")
+				}
+
+				decodedValue, err := os.ReadFile("testdata/expected_value.yaml")
+				if err != nil {
+					return fmt.Errorf("failed to read expected secret value: %v", err)
+				}
+
+				if string(k8sSecret.Data["aws_secret_access_key"]) != string(decodedValue) {
+					return fmt.Errorf("secret value does not match expected")
+				}
+				return nil
+			}, time.Minute, time.Second).Should(Succeed())
 		})
 	})
 })
+
+func loadFromFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
