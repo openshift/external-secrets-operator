@@ -56,8 +56,8 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 		r.log.Error(err, "failed to create namespace")
 	}
 
-	if err := r.createOrApplyRBACResource(es, resourceLabels, recon); err != nil {
-		r.log.Error(err, "failed to reconcile rbac resources")
+	if err := r.createOrApplyServiceAccounts(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile serviceaccount resource")
 		return err
 	}
 
@@ -71,8 +71,8 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 		return err
 	}
 
-	if err := r.createOrApplyValidatingWebhookConfiguration(es, resourceLabels, recon); err != nil {
-		r.log.Error(err, "failed to reconcile validating webhook resource")
+	if err := r.createOrApplyRBACResource(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile rbac resources")
 		return err
 	}
 
@@ -81,13 +81,13 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 		return err
 	}
 
-	if err := r.createOrApplyServiceAccounts(es, resourceLabels, recon); err != nil {
-		r.log.Error(err, "failed to reconcile serviceaccount resource")
+	if err := r.createOrApplyDeployments(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile deployment resource")
 		return err
 	}
 
-	if err := r.createOrApplyDeployments(es, resourceLabels, recon); err != nil {
-		r.log.Error(err, "failed to reconcile deployment resource")
+	if err := r.createOrApplyValidatingWebhookConfiguration(es, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err
 	}
 

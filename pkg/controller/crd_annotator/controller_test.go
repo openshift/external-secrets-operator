@@ -39,7 +39,6 @@ func testExtendExternalSecrets(es *operatorv1alpha1.ExternalSecrets) {
 			},
 		},
 	}
-	return
 }
 
 // testCRD is for generating a sample CRD object for tests.

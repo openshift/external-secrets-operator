@@ -1,30 +1,40 @@
 package operator
 
 import (
+	"context"
+
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	crdannotator "github.com/openshift/external-secrets-operator/pkg/controller/crd_annotator"
-	externalsecretscontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
+	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
+	esmcontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets_manager"
 )
 
-func StartControllers(mgr ctrl.Manager) error {
+func StartControllers(ctx context.Context, mgr ctrl.Manager) error {
 	logger := ctrl.Log.WithName("setup")
 
-	externalsecrets, err := externalsecretscontroller.New(mgr)
+	if err := esmcontroller.New(ctx, mgr).SetupWithManager(mgr); err != nil {
+		logger.Error(err, "failed to set up controller with manager",
+			"controller", esmcontroller.ControllerName)
+		return err
+	}
+
+	externalsecrets, err := escontroller.New(ctx, mgr)
 	if err != nil {
-		logger.Error(err, "failed to create controller", "controller", externalsecretscontroller.ControllerName)
+		logger.Error(err, "failed to create controller", "controller", escontroller.ControllerName)
 		return err
 	}
 	if err = externalsecrets.SetupWithManager(mgr); err != nil {
 		logger.Error(err, "failed to set up controller with manager",
-			"controller", externalsecretscontroller.ControllerName)
+			"controller", escontroller.ControllerName)
 		return err
 	}
 
 	if externalsecrets.IsCertManagerInstalled() {
 		crdAnnotator, err := crdannotator.New(mgr)
 		if err != nil {
-			logger.Error(err, "failed to create crd annotator controller", "controller", externalsecretscontroller.ControllerName)
+			logger.Error(err, "failed to create crd annotator controller", "controller", crdannotator.ControllerName)
 			return err
 		}
 		if err = crdAnnotator.SetupWithManager(mgr); err != nil {
@@ -32,6 +42,16 @@ func StartControllers(mgr ctrl.Manager) error {
 				"controller", crdannotator.ControllerName)
 			return err
 		}
+	}
+
+	uncachedClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		logger.Error(err, "failed to create uncached client")
+		return err
+	}
+	if err = esmcontroller.CreateDefaultESMResource(ctx, uncachedClient); err != nil {
+		logger.Error(err, "failed to create default externalsecretsmanager.openshift.operator.io resource")
+		return err
 	}
 
 	return nil

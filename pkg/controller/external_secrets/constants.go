@@ -1,16 +1,15 @@
 package external_secrets
 
 import (
+	"fmt"
 	"os"
 
 	certmanagerapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
 const (
-	// externalsecretsOperatorCommonName is the name commonly used for labelling resources.
-	externalsecretsOperatorCommonName = "external-secrets-operator"
-
 	// externalsecretsCommonName is the name commonly used for naming resources.
 	externalsecretsCommonName = "external-secrets"
 
@@ -18,7 +17,7 @@ const (
 	ControllerName = externalsecretsCommonName + "-controller"
 
 	// finalizer name for external-secrets.openshift.operator.io resource.
-	finalizer = "external-secrets.openshift.operator.io/" + ControllerName
+	finalizer = "externalsecrets.openshift.operator.io/" + ControllerName
 
 	// controllerProcessedAnnotation is the annotation added to external-secrets resource once after
 	// successful reconciliation by the controller.
@@ -45,7 +44,7 @@ const (
 
 var (
 	// certificateCRDGKV is the group.version/kind of the Certificate CRD.
-	certificateCRDGKV = (&certmanagerv1.Certificate{}).GroupVersionKind().String()
+	certificateCRDGKV = fmt.Sprintf("certificate.%s/%s", certmanagerv1.SchemeGroupVersion.Group, certmanagerv1.SchemeGroupVersion.Version)
 )
 
 var (
@@ -54,8 +53,8 @@ var (
 	controllerDefaultResourceLabels = map[string]string{
 		"app":                          externalsecretsCommonName,
 		"app.kubernetes.io/version":    os.Getenv(externalsecretsImageVersionEnvVarName),
-		"app.kubernetes.io/managed-by": externalsecretsOperatorCommonName,
-		"app.kubernetes.io/part-of":    externalsecretsOperatorCommonName,
+		"app.kubernetes.io/managed-by": common.ExternalSecretsOperatorCommonName,
+		"app.kubernetes.io/part-of":    common.ExternalSecretsOperatorCommonName,
 	}
 )
 
