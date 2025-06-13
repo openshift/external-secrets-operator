@@ -13,6 +13,7 @@ import (
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 func TestCreateOrApplyDeployments(t *testing.T) {
@@ -36,7 +37,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				i.Status.ExternalSecretsImage = testImageName
+				i.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
 			},
 		},
 		{
@@ -60,7 +61,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *appsv1.Deployment:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
@@ -82,7 +83,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *appsv1.Deployment:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
@@ -199,12 +200,12 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				m.StatusUpdateCalls(func(ctx context.Context, obj client.Object, _ ...client.SubResourceUpdateOption) error {
 					switch obj.(type) {
 					case *v1alpha1.ExternalSecrets:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
 			},
-			wantErr: `failed to update /externalsecrets-test-resource status with image info: failed to update externalsecrets.openshift.operator.io "/externalsecrets-test-resource" status: test client error`,
+			wantErr: `failed to update /cluster status with image info: failed to update externalsecrets.openshift.operator.io "/cluster" status: test client error`,
 		},
 		{
 			name: "deployment reconciliation with invalid toleration configuration",
@@ -361,13 +362,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
-			externalsecrets := testExternalSecrets()
+			externalsecrets := commontest.TestExternalSecrets()
 			//externalsecrets.SetNamespace(testExternalSecretsNamespace)
 			if tt.updateExternalSecrets != nil {
 				tt.updateExternalSecrets(externalsecrets)
 			}
 			if !tt.skipEnvVar {
-				t.Setenv("RELATED_IMAGE_EXTERNAL_SECRETS", testImageName)
+				t.Setenv("RELATED_IMAGE_EXTERNAL_SECRETS", commontest.TestExternalSecretsImageName)
 			}
 			err := r.createOrApplyDeployments(externalsecrets, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
@@ -375,7 +376,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			}
 			if tt.wantErr == "" {
 				if tt.wantErr == "" {
-					if externalsecrets.Status.ExternalSecretsImage != testImageName {
+					if externalsecrets.Status.ExternalSecretsImage != commontest.TestExternalSecretsImageName {
 						t.Errorf("createOrApplyDeployments() got image in status: %v, want: %v", externalsecrets.Status.ExternalSecretsImage, "test-image")
 					}
 				}

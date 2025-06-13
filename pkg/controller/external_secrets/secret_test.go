@@ -11,6 +11,7 @@ import (
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 const (
@@ -73,7 +74,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.DeepCopyInto(o)
 					}
 					return nil
@@ -81,12 +82,12 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *corev1.Secret:
-						return false, testError
+						return false, commontest.TestClientError
 					}
 					return true, nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to check %s/%s secret resource already exists: %s", testNamespace, testValidateSecretResourceName, testError),
+			wantErr: fmt.Sprintf("failed to check %s/%s secret resource already exists: %s", commontest.TestExternalSecretsNamespace, testValidateSecretResourceName, commontest.TestClientError),
 		},
 		{
 			name: "reconciliation of secret fails while restoring to expected state",
@@ -94,7 +95,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.DeepCopyInto(o)
 					}
 					return nil
@@ -102,7 +103,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.SetLabels(map[string]string{"test": "test"})
 						secret.DeepCopyInto(o)
 					}
@@ -111,12 +112,12 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					switch obj.(type) {
 					case *corev1.Secret:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to update %s/%s secret resource: %s", testNamespace, testValidateSecretResourceName, testError),
+			wantErr: fmt.Sprintf("failed to update %s/%s secret resource: %s", commontest.TestExternalSecretsNamespace, testValidateSecretResourceName, commontest.TestClientError),
 		},
 		{
 			name: "reconciliation of secret which already exists in expected state",
@@ -124,7 +125,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.DeepCopyInto(o)
 					}
 					return nil
@@ -132,7 +133,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.DeepCopyInto(o)
 					}
 					return true, nil
@@ -145,7 +146,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *corev1.Secret:
-						secret := testSecret()
+						secret := testSecret(webhookTLSSecretAssetName)
 						secret.DeepCopyInto(o)
 					}
 					return nil
@@ -160,12 +161,12 @@ func TestCreateOrApplySecret(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch obj.(type) {
 					case *corev1.Secret:
-						return testError
+						return commontest.TestClientError
 					}
 					return nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to create %s/%s secret resource: %s", testNamespace, testValidateSecretResourceName, testError),
+			wantErr: fmt.Sprintf("failed to create %s/%s secret resource: %s", commontest.TestExternalSecretsNamespace, testValidateSecretResourceName, commontest.TestClientError),
 		},
 		{
 			name: "successful secret creation",
@@ -208,11 +209,11 @@ func TestCreateOrApplySecret(t *testing.T) {
 }
 
 func testExternalSecretsForSecrets() *v1alpha1.ExternalSecrets {
-	externalSecrets := testExternalSecrets()
+	externalSecrets := commontest.TestExternalSecrets()
 
 	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
 		ControllerConfig: &v1alpha1.ControllerConfig{
-			Namespace: testNamespace,
+			Namespace: commontest.TestExternalSecretsNamespace,
 		},
 		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 			WebhookConfig: &v1alpha1.WebhookConfig{
