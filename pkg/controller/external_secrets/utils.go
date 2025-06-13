@@ -8,53 +8,12 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"go.uber.org/zap/zapcore"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
-
-// addFinalizer adds finalizer to externalsecrets.openshift.operator.io resource.
-func (r *Reconciler) addFinalizer(ctx context.Context, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	namespacedName := types.NamespacedName{Name: externalsecrets.Name, Namespace: externalsecrets.Namespace}
-	if !controllerutil.ContainsFinalizer(externalsecrets, finalizer) {
-		if !controllerutil.AddFinalizer(externalsecrets, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers added", namespacedName)
-		}
-
-		// update externalsecrets.openshift.operator.io on adding finalizer.
-		if err := r.UpdateWithRetry(ctx, externalsecrets); err != nil {
-			return fmt.Errorf("failed to add finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
-		}
-
-		updated := &operatorv1alpha1.ExternalSecrets{}
-		if err := r.Get(ctx, namespacedName, updated); err != nil {
-			return fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q after updating finalizers: %w", namespacedName, err)
-		}
-		updated.DeepCopyInto(externalsecrets)
-		return nil
-	}
-	return nil
-}
-
-// removeFinalizer removes finalizers added to externalsecrets.openshift.operator.io resource.
-func (r *Reconciler) removeFinalizer(ctx context.Context, externalsecrets *operatorv1alpha1.ExternalSecrets, finalizer string) error {
-	namespacedName := types.NamespacedName{Name: externalsecrets.Name, Namespace: externalsecrets.Namespace}
-	if controllerutil.ContainsFinalizer(externalsecrets, finalizer) {
-		if !controllerutil.RemoveFinalizer(externalsecrets, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers removed", namespacedName)
-		}
-
-		if err := r.UpdateWithRetry(ctx, externalsecrets); err != nil {
-			return fmt.Errorf("failed to remove finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
-		}
-		return nil
-	}
-
-	return nil
-}
 
 func getNamespace(es *operatorv1alpha1.ExternalSecrets) string {
 	ns := externalsecretsDefaultNamespace

@@ -113,9 +113,9 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=generators.external-secrets.io,resources=githubaccesstokens;grafanas;passwords;quayaccesstokens;stssessiontokens;uuids;vaultdynamicsecrets;webhooks,verbs=get;list;watch;create;delete;update;patch;deletecollection
 
 // New is for building the reconciler instance consumed by the Reconcile method.
-func New(mgr ctrl.Manager) (*Reconciler, error) {
+func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 	r := &Reconciler{
-		ctx:                   context.Background(),
+		ctx:                   ctx,
 		eventRecorder:         mgr.GetEventRecorderFor(ControllerName),
 		log:                   ctrl.Log.WithName(ControllerName),
 		Scheme:                mgr.GetScheme(),
@@ -335,7 +335,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 		}
 
-		if err := r.removeFinalizer(ctx, externalsecrets, finalizer); err != nil {
+		if err := common.RemoveFinalizer(ctx, externalsecrets, r.CtrlClient, finalizer); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -344,13 +344,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Set finalizers on the externalsecrets.openshift.operator.io resource
-	if err := r.addFinalizer(ctx, externalsecrets); err != nil {
+	if err := common.AddFinalizer(ctx, externalsecrets, r.CtrlClient, finalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecrets.openshift.operator.io with finalizers: %w", req.NamespacedName, err)
 	}
 
 	// Fetch the externalsecretsmanager.openshift.operator.io CR
 	esmNamespacedName := types.NamespacedName{
-		Name: common.ExternalSecretsObjectName,
+		Name: common.ExternalSecretsManagerObjectName,
 	}
 	if err := r.Get(ctx, esmNamespacedName, r.esm); err != nil {
 		if errors.IsNotFound(err) {

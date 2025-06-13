@@ -1,8 +1,11 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"reflect"
+	"sync"
+	"sync/atomic"
 
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,17 +14,27 @@ import (
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	operatorclient "github.com/openshift/external-secrets-operator/pkg/controller/client"
 )
 
 var (
 	scheme = runtime.NewScheme()
 	codecs = serializer.NewCodecFactory(scheme)
 )
+
+// Now is a rip-off of golang's sync.Once functionality but extended to
+// support reset.
+type Now struct {
+	sync.Mutex
+	done atomic.Uint32
+}
 
 func init() {
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -371,4 +384,74 @@ func IsInjectCertManagerAnnotationEnabled(es *operatorv1alpha1.ExternalSecrets) 
 		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
 		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
 		ParseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations)
+}
+
+// AddFinalizer adds finalizer to the passed resource object.
+func AddFinalizer(ctx context.Context, obj client.Object, opClient operatorclient.CtrlClient, finalizer string) error {
+	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	if !controllerutil.ContainsFinalizer(obj, finalizer) {
+		if !controllerutil.AddFinalizer(obj, finalizer) {
+			return fmt.Errorf("failed to create %q object with finalizers added", namespacedName)
+		}
+
+		if err := opClient.UpdateWithRetry(ctx, obj); err != nil {
+			return fmt.Errorf("failed to add finalizers on %q with %w", namespacedName, err)
+		}
+
+		switch o := obj.(type) {
+		case *operatorv1alpha1.ExternalSecretsManager:
+			updated := &operatorv1alpha1.ExternalSecretsManager{}
+			if err := opClient.Get(ctx, namespacedName, updated); err != nil {
+				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
+			}
+			updated.DeepCopyInto(o)
+		case *operatorv1alpha1.ExternalSecrets:
+			updated := &operatorv1alpha1.ExternalSecrets{}
+			if err := opClient.Get(ctx, namespacedName, updated); err != nil {
+				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
+			}
+			updated.DeepCopyInto(o)
+		default:
+			return fmt.Errorf("adding finalizer to %T object not handled", obj)
+		}
+		return nil
+	}
+	return nil
+}
+
+// RemoveFinalizer removes finalizers added from the passed resource object.
+func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorclient.CtrlClient, finalizer string) error {
+	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	if controllerutil.ContainsFinalizer(obj, finalizer) {
+		if !controllerutil.RemoveFinalizer(obj, finalizer) {
+			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers removed", namespacedName)
+		}
+
+		if err := opClient.UpdateWithRetry(ctx, obj); err != nil {
+			return fmt.Errorf("failed to remove finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
+		}
+		return nil
+	}
+	return nil
+}
+
+// Do is same as sync.Once.Do, which calls the passed func f only once
+// until Now is reset.
+func (n *Now) Do(f func()) {
+	n.done.Load()
+	if n.done.Load() == 0 {
+		n.Lock()
+		defer n.Unlock()
+
+		defer n.done.Store(1)
+		f()
+	}
+}
+
+// Reset is for allowing Do to call the func f again.
+func (n *Now) Reset() {
+	n.Lock()
+	defer n.Unlock()
+
+	n.done.Store(0)
 }
