@@ -1,0 +1,24 @@
+processor:
+  ignoreFields:
+    - "TypeMeta$"
+
+render:
+  kubernetesVersion: 1.32
+  knownTypes:
+    - name: ResourceRequirements
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+    - name: Affinity
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+    - name: Toleration
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+    - name: NodeSelector
+      link: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+    - name: Conditions
+      package: k8s.io/apimachinery/pkg/apis/meta/v1
+    - name: ObjectReference
+      package: github.com/openshift/external-secrets-operator/api/v1alpha1
+    - name: SecretReference
+      package: github.com/openshift/external-secrets-operator/api/v1alpha1
