@@ -151,7 +151,7 @@ func (r *Reconciler) assertSecretRefExists(es *operatorv1alpha1.ExternalSecrets,
 	}
 	object := &corev1.Secret{}
 
-	if err := r.Get(r.ctx, namespacedName, object); err != nil {
+	if err := r.UncachedClient.Get(r.ctx, namespacedName, object); err != nil {
 		return fmt.Errorf("failed to fetch %q secret: %w", namespacedName, err)
 	}
 
@@ -172,7 +172,7 @@ func (r *Reconciler) getIssuer(issuerRef v1.ObjectReference, namespace string) (
 		object = &certmanagerv1.Issuer{}
 	}
 
-	if ifExists, err := r.Exists(r.ctx, namespacedName, object); err != nil {
+	if ifExists, err := r.UncachedClient.Exists(r.ctx, namespacedName, object); err != nil {
 		return ifExists, fmt.Errorf("failed to fetch %q issuer: %w", namespacedName, err)
 	} else {
 		return ifExists, nil
