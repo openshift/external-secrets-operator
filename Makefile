@@ -158,7 +158,7 @@ build: manifests generate fmt vet build-operator ## Build manager binary.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/external-secrets-operator/main.go
+	go run ./cmd/external-secrets-operator/main.go --v=5
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -232,6 +232,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 YQ = $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
+REFERENCE_DOC_GENERATOR ?= $(LOCALBIN)/crd-ref-docs
 
 ## Tool Versions
 YQ_VERSION = v4.45.2
@@ -256,6 +257,10 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint)
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
+	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),github.com/elastic/crd-ref-docs)
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -369,9 +374,14 @@ verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-genera
 
 ## update the relevant data based on new changes.
 .PHONY: update
-update: generate manifests update-operand-manifests update-bindata
+update: generate manifests update-operand-manifests update-bindata bundle docs
 
 ## checks for any uncommitted changes.
 .PHONY: check-git-diff
-check-git-diff: manifests generate update-operand-manifests bundle
+check-git-diff: update
 	./hack/check-git-diff-clean.sh
+
+## generate internal docs.
+.PHONY: docs
+docs: crd-ref-docs
+	$(REFERENCE_DOC_GENERATOR) --source-path=api/v1alpha1/ --renderer=markdown --config=hack/docs/config.yaml --output-path=docs/api_reference.md
