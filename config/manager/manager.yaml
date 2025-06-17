@@ -72,6 +72,10 @@ spec:
             value: oci.external-secrets.io/external-secrets/external-secrets:v0.14.0
           - name: OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION
             value: 0.14.0
+          - name: RELATED_IMAGE_BITWARDEN_SDK_SERVER
+            value: ghcr.io/external-secrets/bitwarden-sdk-server:v0.4.2
+          - name: BITWARDEN_SDK_SERVER_IMAGE_VERSION
+            value: 0.4.2
         image: controller:latest
         name: manager
         securityContext:
