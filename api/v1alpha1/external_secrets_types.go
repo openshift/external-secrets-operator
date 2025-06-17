@@ -81,18 +81,23 @@ type ExternalSecretsConfig struct {
 	// +kubebuilder:validation:Optional
 	LogLevel int32 `json:"logLevel,omitempty"`
 
-	// bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and
-	// for setting up the additional service required for connecting with the bitwarden server.
-	// +kubebuilder:validation:Optional
-	BitwardenSecretManagerProvider *BitwardenSecretManagerProvider `json:"bitwardenSecretManagerProvider,omitempty"`
-
 	// operatingNamespace is for restricting the external-secrets operations to provided namespace.
 	// And when enabled `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled.
 	// +kubebuilder:validation:Optional
 	OperatingNamespace string `json:"operatingNamespace,omitempty"`
 
+	// bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and
+	// for setting up the additional service required for connecting with the bitwarden server.
+	// +kubebuilder:validation:Optional
+	BitwardenSecretManagerProvider *BitwardenSecretManagerProvider `json:"bitwardenSecretManagerProvider,omitempty"`
+
 	// webhookConfig is for configuring external-secrets webhook specifics.
 	WebhookConfig *WebhookConfig `json:"webhookConfig,omitempty"`
+
+	// CertManagerConfig is for configuring cert-manager specifics, which will be used for generating
+	// certificates for webhook and bitwarden-sdk-server components.
+	// +kubebuilder:validation:Optional
+	CertManagerConfig *CertManagerConfig `json:"certManagerConfig,omitempty"`
 
 	// resources is for defining the resource requirements.
 	// Cannot be updated.
@@ -159,19 +164,16 @@ type WebhookConfig struct {
 	// +kubebuilder:default:="5m"
 	// +kubebuilder:validation:Optional
 	CertificateCheckInterval metav1.Duration `json:"certificateCheckInterval,omitempty"`
-
-	// CertManagerConfig is for configuring cert-manager specifics.
-	// +kubebuilder:validation:Optional
-	CertManagerConfig *CertManagerConfig `json:"certManagerConfig,omitempty"`
 }
 
 // CertManagerConfig is for configuring cert-manager specifics.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.issuerRef) && !has(self.issuerRef) || has(oldSelf.issuerRef) && has(self.issuerRef)",message="issuerRef may only be configured during creation"
+// +kubebuilder:validation:XValidation:rule="has(self.addInjectorAnnotations) && self.addInjectorAnnotations != 'false' ? self.enabled != 'false' : true",message="certManagerConfig must have enabled set, to set addInjectorAnnotations"
 type CertManagerConfig struct {
 	// enabled is for enabling the use of cert-manager for obtaining and renewing the
 	// certificates used for webhook server, instead of built-in certificates.
 	// Use `true` or `false` to indicate the preference.
 	// +kubebuilder:default:="false"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="enabled is immutable once set"
 	// +kubebuilder:validation:Enum:="true";"false"
 	// +kubebuilder:validation:Required
 	Enabled string `json:"enabled,omitempty"`
@@ -198,6 +200,7 @@ type CertManagerConfig struct {
 
 	// certificateRenewBefore is the ahead time to renew the webhook certificate
 	// before expiry.
+	// +kubebuilder:default:="30m"
 	// +kubebuilder:validation:Optional
 	CertificateRenewBefore *metav1.Duration `json:"certificateRenewBefore,omitempty"`
 }

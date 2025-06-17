@@ -94,9 +94,8 @@ func (r *Reconciler) validateExternalSecretsConfig(es *operatorv1alpha1.External
 // isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
 func isCertManagerConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
 	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil &&
-		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
-		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
-		common.ParseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.Enabled)
+		es.Spec.ExternalSecretsConfig.CertManagerConfig != nil &&
+		common.ParseBool(es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled)
 }
 
 // isBitwardenConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.

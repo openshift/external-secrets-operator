@@ -94,8 +94,8 @@ func (r *Reconciler) getCertificateObject(es *operatorv1alpha1.ExternalSecrets, 
 
 func (r *Reconciler) updateCertificateParams(es *operatorv1alpha1.ExternalSecrets, certificate *certmanagerv1.Certificate) error {
 	certManageConfig := &operatorv1alpha1.CertManagerConfig{}
-	if es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.WebhookConfig != nil {
-		certManageConfig = es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig
+	if es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.CertManagerConfig != nil {
+		certManageConfig = es.Spec.ExternalSecretsConfig.CertManagerConfig
 	}
 	externalSecretsNamespace := getNamespace(es)
 

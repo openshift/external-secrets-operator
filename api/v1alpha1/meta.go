@@ -16,12 +16,13 @@ type ConditionalStatus struct {
 // ObjectReference is a reference to an object with a given name, kind and group.
 type ObjectReference struct {
 	// Name of the resource being referred to.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// Kind of the resource being referred to.
-	// +optional
+	// +kubebuilder:validation:Optional
 	Kind string `json:"kind,omitempty"`
 	// Group of the resource being referred to.
-	// +optional
+	// +kubebuilder:validation:Optional
 	Group string `json:"group,omitempty"`
 }
 
@@ -29,5 +30,6 @@ type ObjectReference struct {
 // in the same namespace where it will be utilized.
 type SecretReference struct {
 	// Name of the secret resource being referred to.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 }
