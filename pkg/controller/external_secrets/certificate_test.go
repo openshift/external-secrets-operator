@@ -450,6 +450,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
+			r.UncachedClient = mock
 
 			es := testExternalSecretsForCertificate()
 			if tt.es != nil {
