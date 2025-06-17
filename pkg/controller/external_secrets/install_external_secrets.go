@@ -33,7 +33,7 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
 		for k, v := range r.esm.Spec.GlobalConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
-				r.log.Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
+				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
 				continue
 			}
 			resourceLabels[k] = v
@@ -42,7 +42,7 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 	if es.Spec.ControllerConfig != nil && len(es.Spec.ControllerConfig.Labels) != 0 {
 		for k, v := range es.Spec.ControllerConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
-				r.log.Info("skip adding unallowed label configured in externalsecrets.operator.openshift.io", "label", k, "value", v)
+				r.log.V(1).Info("skip adding unallowed label configured in externalsecrets.operator.openshift.io", "label", k, "value", v)
 				continue
 			}
 			resourceLabels[k] = v
