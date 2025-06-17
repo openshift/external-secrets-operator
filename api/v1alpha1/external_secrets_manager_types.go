@@ -116,6 +116,45 @@ type Feature struct {
 
 // ExternalSecretsManagerStatus is the most recently observed status of the ExternalSecretsManager.
 type ExternalSecretsManagerStatus struct {
+	// controllerStatuses holds the observed conditions of the controllers part of the operator.
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
+	ControllerStatuses []ControllerStatus `json:"controllerStatuses,omitempty"`
+
+	// lastTransitionTime is the last time the condition transitioned from one status to another.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Format=date-time
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+}
+
+// ControllerStatus holds the observed conditions of the controllers part of the operator.
+type ControllerStatus struct {
+	// name of the controller for which the observed condition is recorded.
+	// +kubebuilder:validation:Required
+	Name string `json:"name,omitempty"`
+
 	// conditions holds information of the current state of the external-secrets-operator controllers.
-	ConditionalStatus `json:",inline,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []Condition `json:"conditions,omitempty"`
+
+	// observedGeneration represents the .metadata.generation on the observed resource.
+	// +kubebuilder:validation:Minimum=0
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+type Condition struct {
+	// type of the condition
+	// +kubebuilder:validation:Required
+	Type string `json:"type"`
+
+	// status of the condition
+	Status metav1.ConditionStatus `json:"status" `
+
+	// message provides details about the state.
+	Message string `json:"message"`
 }
