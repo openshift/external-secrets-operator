@@ -61,6 +61,7 @@ type ExternalSecretsManagerSpec struct {
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
 
 	// features is for enabling the optional operator features.
+	// +kubebuilder:validation:Optional
 	Features []Feature `json:"features,omitempty"`
 }
 
@@ -153,7 +154,7 @@ type Condition struct {
 	Type string `json:"type"`
 
 	// status of the condition
-	Status metav1.ConditionStatus `json:"status" `
+	Status metav1.ConditionStatus `json:"status"`
 
 	// message provides details about the state.
 	Message string `json:"message"`

@@ -75,9 +75,8 @@ func (r *Reconciler) getValidatingWebhookObjects(externalsecrets *operatorv1alph
 func updateValidatingWebhookAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets, webhook *webhook.ValidatingWebhookConfiguration) error {
 	if externalsecrets != nil &&
 		externalsecrets.Spec.ExternalSecretsConfig != nil &&
-		externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
-		externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil {
-		if common.ParseBool(externalsecrets.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations) {
+		externalsecrets.Spec.ExternalSecretsConfig.CertManagerConfig != nil {
+		if common.ParseBool(externalsecrets.Spec.ExternalSecretsConfig.CertManagerConfig.AddInjectorAnnotations) {
 			if webhook.Annotations == nil {
 				webhook.Annotations = map[string]string{}
 			}

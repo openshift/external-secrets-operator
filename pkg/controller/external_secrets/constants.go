@@ -29,7 +29,7 @@ const (
 	// certificateCRDName is the name of the Certificate CRD provided by cert-manager project.
 	certificateCRDName = "certificates"
 
-	// externalsecretsImageEnvVarName is the environment variable key name
+	// externalsecretsImageVersionEnvVarName is the environment variable key name
 	// containing the image version of the external-secrets operand as value.
 	externalsecretsImageVersionEnvVarName = "OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION"
 
