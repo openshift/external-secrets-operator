@@ -112,6 +112,10 @@ func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *oper
 	if image == "" {
 		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
 	}
+	bitwardenImage := os.Getenv(bitwardenImageEnvVarName)
+	if bitwardenImage == "" {
+		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with bitwarden-sdk-server image not set", bitwardenImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
+	}
 	logLevel := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
 
 	switch assetName {
@@ -121,6 +125,9 @@ func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *oper
 		updateWebhookContainerSpec(deployment, image, logLevel)
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
+	case bitwardenDeploymentAssetName:
+		deployment.ObjectMeta.Labels["app.kubernetes.io/version"] = bitwardenImageVersionEnvVarName
+		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
 	}
 
 	if err := r.updateResourceRequirement(deployment, externalsecrets); err != nil {
@@ -362,6 +369,18 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "cert-controller" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
+			deployment.Spec.Template.Spec.Containers[i].Image = image
+			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
+			break
+		}
+	}
+}
+
+// updateBitwardenServerContainerSpec is for updating the primary container spec in bitwarden-sdk-server
+// deployment object.
+func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image string) {
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == "bitwarden-sdk-server" {
 			deployment.Spec.Template.Spec.Containers[i].Image = image
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
