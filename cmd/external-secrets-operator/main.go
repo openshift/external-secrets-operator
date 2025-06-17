@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -43,6 +44,7 @@ import (
 )
 
 var (
+	ctx      = context.Background()
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -139,7 +141,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := operator.StartControllers(mgr); err != nil {
+	if err := operator.StartControllers(ctx, mgr); err != nil {
 		setupLog.Error(err, "failed to start controllers")
 		os.Exit(1)
 	}
