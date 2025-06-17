@@ -26,6 +26,9 @@ echo "---- Patching manifest ----"
   '(.. | select(has("app.kubernetes.io/managed-by"))."app.kubernetes.io/managed-by") |= "external-secrets-operator"' \
    -i ${MANIFESTS_PATH}/manifests.yaml
 
+# add custom label to all CRDs
+./bin/yq e 'select(.kind == "CustomResourceDefinition").metadata.labels."app" = "external-secrets"' -i ${MANIFESTS_PATH}/manifests.yaml
+
 # regenerate all bindata
 rm -rf bindata/external-secrets/resources
 rm -f config/crd/bases/customresourcedefinition_*
