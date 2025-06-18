@@ -2,4 +2,10 @@
 resources:
 - operator_v1alpha1_externalsecrets.yaml
 - operator_v1alpha1_externalsecretsmanager.yaml
+- password.yaml
+- cluster_secretstore.yaml
+- external_secret.yaml
+- external_secretstore.yaml
+- push_secret.yaml
+- secret_store.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
