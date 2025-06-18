@@ -12,8 +12,9 @@ import (
 )
 
 func (r *Reconciler) createOrApplySecret(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
-	// secrets are only created if isCertManagerConfigEnabled disabled
+	// secrets are only created if isCertManagerConfig is not enabled
 	if isCertManagerConfigEnabled(es) {
+		r.log.V(4).Info("cert-manager config is enabled, skipping webhook component secret resource creation")
 		return nil
 	}
 

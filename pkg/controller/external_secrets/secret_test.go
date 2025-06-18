@@ -62,9 +62,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: nil,
 			es: func(es *v1alpha1.ExternalSecrets) {
 				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-					WebhookConfig: &v1alpha1.WebhookConfig{
-						CertManagerConfig: nil,
-					},
+					CertManagerConfig: nil,
 				}
 			},
 		},
@@ -216,10 +214,8 @@ func testExternalSecretsForSecrets() *v1alpha1.ExternalSecrets {
 			Namespace: commontest.TestExternalSecretsNamespace,
 		},
 		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
-			WebhookConfig: &v1alpha1.WebhookConfig{
-				CertManagerConfig: &v1alpha1.CertManagerConfig{
-					Enabled: "false",
-				},
+			CertManagerConfig: &v1alpha1.CertManagerConfig{
+				Enabled: "false",
 			},
 		},
 	}

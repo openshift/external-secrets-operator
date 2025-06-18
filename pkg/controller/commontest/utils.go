@@ -15,6 +15,9 @@ const (
 	// TestExternalSecretsImageName is the sample image name for external-secrets operand.
 	TestExternalSecretsImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
 
+	// TestBitwardenImageName is the sample image name for bitwarden-sdk-server.
+	TestBitwardenImageName = "registry.stage.redhat.io/external-secrets-operator/bitwarden-sdk-server-rhel9"
+
 	// TestExternalSecretsNamespace is the sample namespace name for external-secrets deployment.
 	TestExternalSecretsNamespace = "test-external-secrets"
 

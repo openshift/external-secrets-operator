@@ -29,13 +29,21 @@ const (
 	// certificateCRDName is the name of the Certificate CRD provided by cert-manager project.
 	certificateCRDName = "certificates"
 
-	// externalsecretsImageEnvVarName is the environment variable key name
+	// externalsecretsImageVersionEnvVarName is the environment variable key name
 	// containing the image version of the external-secrets operand as value.
 	externalsecretsImageVersionEnvVarName = "OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION"
 
 	// externalsecretsImageEnvVarName is the environment variable key name
-	// containing the image version of the external-secrets as value.
+	// containing the image name of the external-secrets as value.
 	externalsecretsImageEnvVarName = "RELATED_IMAGE_EXTERNAL_SECRETS"
+
+	// bitwardenImageEnvVarName is the environment variable key name
+	// containing the image name of the bitwarden-sdk-server as value.
+	bitwardenImageEnvVarName = "RELATED_IMAGE_BITWARDEN_SDK_SERVER"
+
+	// bitwardenImageVersionEnvVarName is the environment variable key name
+	// containing the image version of the bitwarden-sdk-server as value.
+	bitwardenImageVersionEnvVarName = "BITWARDEN_SDK_SERVER_IMAGE_VERSION"
 
 	// externalsecretsDefaultNamespace is the namespace where the `external-secrets` operand required resources
 	// will be created, when ExternalSecrets.Spec.ControllerConfig.Namespace is not set.

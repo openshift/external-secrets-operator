@@ -95,10 +95,8 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			wantErr: "", // <- no error expected
 			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
 				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
-					WebhookConfig: &operatorv1alpha1.WebhookConfig{
-						CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
-							Enabled: "true",
-						},
+					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
+						Enabled: "true",
 					},
 				}
 			},

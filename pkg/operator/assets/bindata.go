@@ -1,7 +1,7 @@
 // Code generated for package assets by go-bindata DO NOT EDIT. (@generated)
 // sources:
+// bindata/external-secrets/certificate_bitwarden-tls-certs.yml
 // bindata/external-secrets/external-secrets-namespace.yaml
-// bindata/external-secrets/resources/certificate_bitwarden-tls-certs.yml
 // bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-controller.yml
@@ -78,28 +78,7 @@ func (fi bindataFileInfo) Sys() interface{} {
 	return nil
 }
 
-var _externalSecretsExternalSecretsNamespaceYaml = []byte(`apiVersion: v1
-kind: Namespace
-metadata:
-  name: external-secrets
-`)
-
-func externalSecretsExternalSecretsNamespaceYamlBytes() ([]byte, error) {
-	return _externalSecretsExternalSecretsNamespaceYaml, nil
-}
-
-func externalSecretsExternalSecretsNamespaceYaml() (*asset, error) {
-	bytes, err := externalSecretsExternalSecretsNamespaceYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/external-secrets-namespace.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsResourcesCertificate_bitwardenTlsCertsYml = []byte(`apiVersion: cert-manager.io/v1
+var _externalSecretsCertificate_bitwardenTlsCertsYml = []byte(`apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: bitwarden-tls-certs
@@ -128,17 +107,38 @@ spec:
     name: my-issuer
   duration: "8760h"`)
 
-func externalSecretsResourcesCertificate_bitwardenTlsCertsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesCertificate_bitwardenTlsCertsYml, nil
+func externalSecretsCertificate_bitwardenTlsCertsYmlBytes() ([]byte, error) {
+	return _externalSecretsCertificate_bitwardenTlsCertsYml, nil
 }
 
-func externalSecretsResourcesCertificate_bitwardenTlsCertsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesCertificate_bitwardenTlsCertsYmlBytes()
+func externalSecretsCertificate_bitwardenTlsCertsYml() (*asset, error) {
+	bytes, err := externalSecretsCertificate_bitwardenTlsCertsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/certificate_bitwarden-tls-certs.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "external-secrets/certificate_bitwarden-tls-certs.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsExternalSecretsNamespaceYaml = []byte(`apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+`)
+
+func externalSecretsExternalSecretsNamespaceYamlBytes() ([]byte, error) {
+	return _externalSecretsExternalSecretsNamespaceYaml, nil
+}
+
+func externalSecretsExternalSecretsNamespaceYaml() (*asset, error) {
+	bytes, err := externalSecretsExternalSecretsNamespaceYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/external-secrets-namespace.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -1434,8 +1434,8 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
+	"external-secrets/certificate_bitwarden-tls-certs.yml":                                  externalSecretsCertificate_bitwardenTlsCertsYml,
 	"external-secrets/external-secrets-namespace.yaml":                                      externalSecretsExternalSecretsNamespaceYaml,
-	"external-secrets/resources/certificate_bitwarden-tls-certs.yml":                        externalSecretsResourcesCertificate_bitwardenTlsCertsYml,
 	"external-secrets/resources/certificate_external-secrets-webhook.yml":                   externalSecretsResourcesCertificate_externalSecretsWebhookYml,
 	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":           externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
 	"external-secrets/resources/clusterrole_external-secrets-controller.yml":                externalSecretsResourcesClusterrole_externalSecretsControllerYml,
@@ -1505,9 +1505,9 @@ type bintree struct {
 
 var _bintree = &bintree{nil, map[string]*bintree{
 	"external-secrets": {nil, map[string]*bintree{
-		"external-secrets-namespace.yaml": {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
+		"certificate_bitwarden-tls-certs.yml": {externalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
+		"external-secrets-namespace.yaml":     {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
 		"resources": {nil, map[string]*bintree{
-			"certificate_bitwarden-tls-certs.yml":                        {externalSecretsResourcesCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
 			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
 			"clusterrole_external-secrets-cert-controller.yml":           {externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},
 			"clusterrole_external-secrets-controller.yml":                {externalSecretsResourcesClusterrole_externalSecretsControllerYml, map[string]*bintree{}},

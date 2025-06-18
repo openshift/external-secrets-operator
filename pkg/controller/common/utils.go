@@ -381,9 +381,8 @@ func IsESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
 // IsInjectCertManagerAnnotationEnabled is for check if add cert-manager annotation is enabled.
 func IsInjectCertManagerAnnotationEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
 	return es.Spec.ExternalSecretsConfig != nil &&
-		es.Spec.ExternalSecretsConfig.WebhookConfig != nil &&
-		es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig != nil &&
-		ParseBool(es.Spec.ExternalSecretsConfig.WebhookConfig.CertManagerConfig.AddInjectorAnnotations)
+		es.Spec.ExternalSecretsConfig.CertManagerConfig != nil &&
+		ParseBool(es.Spec.ExternalSecretsConfig.CertManagerConfig.AddInjectorAnnotations)
 }
 
 // AddFinalizer adds finalizer to the passed resource object.
