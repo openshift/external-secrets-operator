@@ -120,10 +120,8 @@ func testExternalSecretsForValidateWebhookConfiguration() *v1alpha1.ExternalSecr
 	externalSecrets := commontest.TestExternalSecrets()
 	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
 		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
-			WebhookConfig: &v1alpha1.WebhookConfig{
-				CertManagerConfig: &v1alpha1.CertManagerConfig{
-					AddInjectorAnnotations: "true",
-				},
+			CertManagerConfig: &v1alpha1.CertManagerConfig{
+				AddInjectorAnnotations: "true",
 			},
 		},
 	}

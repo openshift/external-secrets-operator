@@ -363,13 +363,15 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			}
 			r.CtrlClient = mock
 			externalsecrets := commontest.TestExternalSecrets()
-			//externalsecrets.SetNamespace(testExternalSecretsNamespace)
+
 			if tt.updateExternalSecrets != nil {
 				tt.updateExternalSecrets(externalsecrets)
 			}
 			if !tt.skipEnvVar {
 				t.Setenv("RELATED_IMAGE_EXTERNAL_SECRETS", commontest.TestExternalSecretsImageName)
 			}
+			t.Setenv("RELATED_IMAGE_BITWARDEN_SDK_SERVER", commontest.TestBitwardenImageName)
+
 			err := r.createOrApplyDeployments(externalsecrets, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyDeployments() err: %v, wantErr: %v", err, tt.wantErr)

@@ -32,10 +32,8 @@ func testReconciler(t *testing.T) *Reconciler {
 func testExtendExternalSecrets(es *operatorv1alpha1.ExternalSecrets) {
 	es.Spec = operatorv1alpha1.ExternalSecretsSpec{
 		ExternalSecretsConfig: &operatorv1alpha1.ExternalSecretsConfig{
-			WebhookConfig: &operatorv1alpha1.WebhookConfig{
-				CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
-					AddInjectorAnnotations: "true",
-				},
+			CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
+				AddInjectorAnnotations: "true",
 			},
 		},
 	}

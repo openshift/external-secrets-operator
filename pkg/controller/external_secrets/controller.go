@@ -81,6 +81,7 @@ var (
 // Reconciler reconciles a ExternalSecrets object
 type Reconciler struct {
 	operatorclient.CtrlClient
+	UncachedClient        operatorclient.CtrlClient
 	Scheme                *runtime.Scheme
 	ctx                   context.Context
 	eventRecorder         record.EventRecorder
@@ -122,18 +123,43 @@ func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 		esm:                   new(operatorv1alpha1.ExternalSecretsManager),
 		optionalResourcesList: make(map[string]struct{}),
 	}
+
+	// create a cached client for all the managed objects.
 	c, err := NewClient(mgr, r)
 	if err != nil {
 		return nil, err
 	}
 	r.CtrlClient = c
+
+	// create an uncached client for the objects not managed by
+	// the controller.
+	uc, err := NewUncachedClient(mgr)
+	if err != nil {
+		return nil, err
+	}
+	r.UncachedClient = uc
+
 	return r, nil
 }
 
+// NewClient is for creating a cached client, where the required objects are cached and informer are set to
+// update the cache.
 func NewClient(m manager.Manager, r *Reconciler) (operatorclient.CtrlClient, error) {
 	c, err := BuildCustomClient(m, r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build custom client: %w", err)
+	}
+	return &operatorclient.CtrlClientImpl{
+		Client: c,
+	}, nil
+}
+
+// NewUncachedClient is for creating an uncached client, and all the objects are read and written directly
+// through API server.
+func NewUncachedClient(m manager.Manager) (operatorclient.CtrlClient, error) {
+	c, err := client.New(m.GetConfig(), client.Options{Scheme: m.GetScheme()})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uncached client: %w", err)
 	}
 	return &operatorclient.CtrlClientImpl{
 		Client: c,
@@ -166,8 +192,6 @@ func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
 		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
 			Label: managedResourceLabelReqSelector,
 		}
-		objectList[&certmanagerv1.ClusterIssuer{}] = cache.ByObject{}
-		objectList[&certmanagerv1.Issuer{}] = cache.ByObject{}
 	}
 
 	customCacheOpts := cache.Options{
@@ -191,14 +215,6 @@ func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
 		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Certificate{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.Certificate{}).GetObjectKind().GroupVersionKind().String(), err)
-		}
-		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.ClusterIssuer{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.ClusterIssuer{}).GetObjectKind().GroupVersionKind().String(), err)
-		}
-		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Issuer{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.Issuer{}).GetObjectKind().GroupVersionKind().String(), err)
 		}
 	}
 	_, err = customCache.GetInformer(context.Background(), ownObject)

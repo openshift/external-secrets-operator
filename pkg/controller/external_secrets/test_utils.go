@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-logr/logr/testr"
 
-	v1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
@@ -107,7 +107,7 @@ func testDeployment(name string) *appsv1.Deployment {
 }
 
 // testCertificate returns Certificate object read from provided static asset of same kind.
-func testCertificate(assetName string) *v1.Certificate {
+func testCertificate(assetName string) *certmanagerv1.Certificate {
 	validateCertificate := common.DecodeCertificateObjBytes(assets.MustAsset(assetName))
 	validateCertificate.SetLabels(controllerDefaultResourceLabels)
 	return validateCertificate
