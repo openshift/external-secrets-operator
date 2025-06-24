@@ -18,11 +18,36 @@ package e2e
 
 import (
 	"fmt"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
+
+var (
+	cfg           *rest.Config
+	k8sClientSet  *kubernetes.Clientset
+	dynamicClient dynamic.Interface
+)
+
+var _ = BeforeSuite(func() {
+	var err error
+
+	By("Initializing Kubernetes config")
+
+	cfg, err = config.GetConfig() // This works both in-cluster and out-of-cluster
+	Expect(err).NotTo(HaveOccurred(), "failed to get kubeconfig")
+
+	k8sClientSet, err = kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred(), "failed to create kube client")
+
+	dynamicClient, err = dynamic.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred(), "failed to create dynamic client")
+})
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {

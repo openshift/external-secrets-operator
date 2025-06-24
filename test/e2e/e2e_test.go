@@ -2,118 +2,128 @@ package e2e
 
 import (
 	"context"
-	"fmt"
+	"embed"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	utils "github.com/openshift/external-secrets-operator/test/utils"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"os"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"testing"
 	"time"
 )
 
+//go:embed testdata/*
+var testassets embed.FS
+
 const (
-	namespace          = "external-secrets-operator"
+	operatorNamespace  = "external-secrets-operator"
+	operandNamespace   = "external-secrets"
 	secretStoreFile    = "testdata/aws_secret_store.yaml"
 	externalSecretFile = "testdata/aws_external_secret.yaml"
+	pushSecretFile     = "testdata/push_secret.yaml"
+	externalSecrets    = "testdata/external_secret.yaml"
 )
 
-var _ = Describe("External Secrets Operator", Ordered, func() {
-
+var _ = Describe("External Secrets Operator End-to-End", Ordered, func() {
+	ctx := context.TODO()
 	var (
-		ctx    = context.TODO()
-		loader utils.DynamicResourceLoader
+		clientset     *kubernetes.Clientset
+		dynamicClient *dynamic.DynamicClient
+		loader        utils.DynamicResourceLoader
 	)
 
 	BeforeAll(func() {
+		var err error
 		loader = utils.NewDynamicResourceLoader(ctx, &testing.T{})
 
-		// Create ExternalSecret resource
-		loader.CreateFromFile(loadFromFile, "testdata/external_secret.yaml", namespace)
+		clientset, err = kubernetes.NewForConfig(cfg)
+		Expect(err).Should(BeNil())
+
+		dynamicClient, err = dynamic.NewForConfig(cfg)
+		Expect(err).Should(BeNil())
+
+		By("Waiting for external-secrets-operator controller-manager pod to be ready")
+		Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operatorNamespace, []string{
+			"external-secrets-operator-controller-manager-",
+		})).To(Succeed())
+
+		By("Creating the ExternalSecrets Operator CR")
+		loader.CreateFromFile(testassets.ReadFile, externalSecrets, operatorNamespace)
 	})
 
 	AfterAll(func() {
-		loader.DeleteFromFile(loadFromFile, "testdata/external_secret.yaml", namespace)
+		By("Deleting the ExternalSecrets Operator CR")
+		loader.DeleteFromFile(testassets.ReadFile, externalSecrets, operatorNamespace)
+
+		err := utils.DeleteAWSSecret("test/e2e", "eu-north-1")
+		Expect(err).NotTo(HaveOccurred(), "failed to delete AWS secret test/e2e")
 	})
 
-	Context("Operator", func() {
-		It("should have controller pod running", func() {
-			verifyControllerPod := func() error {
-				pods, err := loader.KubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-					LabelSelector: "control-plane=controller-manager",
-				})
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-
-				var runningPods []corev1.Pod
-				for _, pod := range pods.Items {
-					if pod.DeletionTimestamp == nil && pod.Status.Phase == corev1.PodRunning {
-						runningPods = append(runningPods, pod)
-					}
-				}
-
-				if len(runningPods) != 1 {
-					return fmt.Errorf("expected 1 running controller pod, got %d", len(runningPods))
-				}
-
-				ExpectWithOffset(2, runningPods[0].Name).To(ContainSubstring("controller-manager"))
-				fmt.Println(runningPods[0].Name)
-				return nil
-			}
-
-			EventuallyWithOffset(1, verifyControllerPod, time.Minute, time.Second).Should(Succeed())
-		})
+	BeforeEach(func() {
+		By("Verifying ESO pods are running and ready")
+		Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{
+			"external-secrets-",
+			"external-secrets-cert-controller-",
+			"external-secrets-webhook-",
+		})).To(Succeed())
 	})
 
-	Context("AWS SecretStore", func() {
-		BeforeEach(func() {
-			loader.CreateFromFile(loadFromFile, secretStoreFile, namespace)
-			loader.CreateFromFile(loadFromFile, externalSecretFile, namespace)
+	It("should create secrets from SecretStore and ExternalSecret", func() {
+		By("Creating SecretStore")
+		loader.CreateFromFile(testassets.ReadFile, secretStoreFile, operandNamespace)
+		defer loader.DeleteFromFile(testassets.ReadFile, secretStoreFile, operandNamespace)
 
-		})
+		By("Waiting for SecretStore to become Ready")
+		Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+			schema.GroupVersionResource{
+				Group:    "external-secrets.io",
+				Version:  "v1beta1",
+				Resource: "clustersecretstores",
+			},
+			"", "aws-secret-store", time.Minute,
+		)).To(Succeed())
 
-		AfterEach(func() {
-			// Clean up SecretStore
-			loader.DeleteFromFile(loadFromFile, secretStoreFile, namespace)
-			// Clean up ExternalStore
-			loader.DeleteFromFile(loadFromFile, externalSecretFile, namespace)
+		By("Creating PushSecret")
+		loader.CreateFromFile(testassets.ReadFile, pushSecretFile, operandNamespace)
+		defer loader.DeleteFromFile(testassets.ReadFile, pushSecretFile, operandNamespace)
 
-		})
+		By("Waiting for PushSecret to become Ready")
+		Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+			schema.GroupVersionResource{
+				Group:    "external-secrets.io",
+				Version:  "v1alpha1",
+				Resource: "pushsecrets",
+			},
+			operandNamespace, "aws-push-secret", time.Minute,
+		)).To(Succeed())
 
-		It("should synchronize secrets from AWS Secrets Manager", func() {
-			By("verifying the synchronization of the secret")
-			Eventually(func() error {
-				k8sSecret, err := loader.KubeClient.CoreV1().Secrets(namespace).Get(ctx, "aws-secret", metav1.GetOptions{})
+		By("Creating ExternalSecret")
+		loader.CreateFromFile(testassets.ReadFile, externalSecretFile, operandNamespace)
+		defer loader.DeleteFromFile(testassets.ReadFile, externalSecretFile, operandNamespace)
 
-				secretsList, err := loader.KubeClient.CoreV1().Secrets("kube-system").List(ctx, metav1.ListOptions{})
-				Expect(err).NotTo(HaveOccurred())
+		By("Waiting for ExternalSecret to become Ready")
+		Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+			schema.GroupVersionResource{
+				Group:    "external-secrets.io",
+				Version:  "v1beta1",
+				Resource: "externalsecrets",
+			},
+			operandNamespace, "aws-external-secret", time.Minute,
+		)).To(Succeed())
 
-				fmt.Println("Secrets in kube-system:")
-				for _, s := range secretsList.Items {
-					fmt.Println("-", s.Name)
-				}
-				if err != nil {
-					return fmt.Errorf("failed to get secret: %v", err)
-				}
+		By("Waiting for target secret to be created with expected data")
+		Eventually(func(g Gomega) {
+			secret, err := loader.KubeClient.CoreV1().Secrets(operandNamespace).Get(ctx, "aws-secret", metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred(), "should get aws-secret from namespace %s", operandNamespace)
 
-				if string(k8sSecret.Data["aws_secret_access_key"]) == "" {
-					return fmt.Errorf("secret data is empty")
-				}
+			val, ok := secret.Data["aws_secret_access_key"]
+			g.Expect(ok).To(BeTrue(), "aws_secret_access_key should be present in secret %s", secret.Name)
 
-				decodedValue, err := os.ReadFile("testdata/expected_value.yaml")
-				if err != nil {
-					return fmt.Errorf("failed to read expected secret value: %v", err)
-				}
+			expectedValue := []byte("hqTTSYkFYgkw3OfQ9lFvQgtsReb1g1a+Po5Y/HNU")
+			g.Expect(val).To(Equal(expectedValue), "aws_secret_access_key does not match expected value")
+		}, time.Minute, 5*time.Second).Should(Succeed())
 
-				if string(k8sSecret.Data["aws_secret_access_key"]) != string(decodedValue) {
-					return fmt.Errorf("secret value does not match expected")
-				}
-				return nil
-			}, time.Minute, time.Second).Should(Succeed())
-		})
 	})
 })
-
-func loadFromFile(name string) ([]byte, error) {
-	return os.ReadFile(name)
-}
