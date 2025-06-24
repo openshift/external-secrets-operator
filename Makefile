@@ -6,7 +6,7 @@
 VERSION ?= 0.1.0
 
 # EXTERNAL_SECRETS_VERSION defines the external-secrets release version to fetch helm charts.
-EXTERNAL_SECRETS_VERSION ?= v0.14.0
+EXTERNAL_SECRETS_VERSION ?= v0.14.3
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
