@@ -126,7 +126,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *oper
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
 	case bitwardenDeploymentAssetName:
-		deployment.ObjectMeta.Labels["app.kubernetes.io/version"] = bitwardenImageVersionEnvVarName
+		deployment.Labels["app.kubernetes.io/version"] = bitwardenImageVersionEnvVarName
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
 	}
 
