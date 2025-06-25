@@ -343,6 +343,12 @@ func validatingWebHookSpecModified(desired, fetched *webhook.ValidatingWebhookCo
 		return true
 	}
 
+	if desiredVal, exists := desired.GetAnnotations()[CertManagerInjectCAFromAnnotation]; exists {
+		if desiredVal != fetched.GetAnnotations()[CertManagerInjectCAFromAnnotation] {
+			return true
+		}
+	}
+
 	fetchedWebhooksMap := make(map[string]webhook.ValidatingWebhook)
 	for _, wh := range fetched.Webhooks {
 		fetchedWebhooksMap[wh.Name] = wh
