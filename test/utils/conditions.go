@@ -3,20 +3,25 @@ package utils
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"math/rand"
+	"os"
 	"strings"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 )
+
+type AssetFunc func(string) ([]byte, error)
 
 // VerifyPodsReadyByPrefix checks if all pods matching the given prefixes are Ready and ContainersReady.
 func VerifyPodsReadyByPrefix(ctx context.Context, clientset kubernetes.Interface, namespace string, prefixes []string) error {
@@ -122,4 +127,33 @@ func DeleteAWSSecret(secretName, region string) error {
 		return fmt.Errorf("failed to delete AWS secret: %w", err)
 	}
 	return nil
+}
+
+func ReadExpectedSecretValue(assetName string) ([]byte, error) {
+	expectedSecretValue, err := os.ReadFile(assetName)
+	return expectedSecretValue, err
+}
+
+// GetRandomString to create random string
+func GetRandomString(strLen int) string {
+	chars := "abcdefghijklmnopqrstuvwxyz0123456789"
+	seed := rand.New(rand.NewSource(time.Now().UnixNano()))
+	buffer := make([]byte, strLen)
+	for index := range buffer {
+		buffer[index] = chars[seed.Intn(len(chars))]
+	}
+	return string(buffer)
+}
+
+func ReplacePatternInAsset(replacePatternString ...string) AssetFunc {
+	return func(assetName string) ([]byte, error) {
+		fileContent, err := os.ReadFile(assetName)
+		if err != nil {
+			return nil, err
+		}
+
+		replacer := strings.NewReplacer(replacePatternString...)
+		replacedFileContent := replacer.Replace(string(fileContent))
+		return []byte(replacedFileContent), nil
+	}
 }
