@@ -46,6 +46,7 @@ const (
 	externalSecrets         = "testdata/external_secret.yaml"
 	expectedSecretValueFile = "testdata/expected_value.yaml"
 	awsSecretToPushFile     = "testdata/aws_k8s_push_secret.yaml"
+	awsSecretRegionName     = "ap-south-1"
 )
 
 var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered, func() {
@@ -82,7 +83,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		By("Deleting the externalsecrets.openshift.operator.io/cluster CR")
 		loader.DeleteFromFile(testassets.ReadFile, externalSecrets, operatorNamespace)
 
-		err := utils.DeleteAWSSecret(awsSecretName, "ap-south-1")
+		err := utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete AWS secret test/e2e")
 	})
 
