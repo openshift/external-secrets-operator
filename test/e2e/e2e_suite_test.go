@@ -36,7 +36,7 @@ var _ = BeforeSuite(func() {
 
 	By("Initializing Kubernetes config")
 
-	cfg, err = config.GetConfig() // This works both in-cluster and out-of-cluster
+	cfg, err = config.GetConfig()
 	Expect(err).NotTo(HaveOccurred(), "failed to get kubeconfig")
 })
 

@@ -17,8 +17,16 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/aws/aws-sdk-go/aws"
+	awscred "github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+)
+
+const (
+	awsCredSecretName             = "aws-creds"
+	awsCredNamespace              = "kube-system"
+	awsCredAccessKeySecretKeyName = "aws_secret_access_key"
+	awsCredKeyIdSecretKeyName     = "aws_access_key_id"
 )
 
 type AssetFunc func(string) ([]byte, error)
@@ -110,8 +118,27 @@ func WaitForESOResourceReady(
 	})
 }
 
-func DeleteAWSSecret(secretName, region string) error {
+func fetchAWSCreds(ctx context.Context, k8sClient *kubernetes.Clientset) (string, string, error) {
+	cred, err := k8sClient.CoreV1().Secrets(awsCredNamespace).Get(ctx, awsCredSecretName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", err
+	}
+	id := string(cred.Data[awsCredKeyIdSecretKeyName])
+	key := string(cred.Data[awsCredAccessKeySecretKeyName])
+	return id, key, nil
+}
+
+func DeleteAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, region string) error {
+	id, key, err := fetchAWSCreds(ctx, k8sClient)
+	if err != nil {
+		return err
+	}
+
 	sess, err := session.NewSession(&aws.Config{
+		Credentials: awscred.NewCredentials(&awscred.StaticProvider{Value: awscred.Value{
+			AccessKeyID:     id,
+			SecretAccessKey: key,
+		}}),
 		Region: aws.String(region),
 	})
 	if err != nil {
