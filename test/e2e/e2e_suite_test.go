@@ -20,9 +20,25 @@ import (
 	"fmt"
 	"testing"
 
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+var (
+	cfg *rest.Config
+)
+
+var _ = BeforeSuite(func() {
+	var err error
+
+	By("Initializing Kubernetes config")
+
+	cfg, err = config.GetConfig()
+	Expect(err).NotTo(HaveOccurred(), "failed to get kubeconfig")
+})
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
