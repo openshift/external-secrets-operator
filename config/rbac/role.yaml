@@ -8,6 +8,10 @@ rules:
   - ""
   resources:
   - configmaps
+  - events
+  - secrets
+  - serviceaccounts
+  - services
   verbs:
   - create
   - delete
@@ -29,19 +33,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  - secrets
-  - serviceaccounts
-  - services
-  verbs:
-  - create
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - serviceaccounts/token
   verbs:
   - create
@@ -53,6 +44,7 @@ rules:
   - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -97,6 +89,7 @@ rules:
   - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
