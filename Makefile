@@ -118,6 +118,10 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+.PHONY: validate-rbac
+validate-rbac: ## Validate that RBAC resourceNames in kubebuilder annotations match actual resource names.
+	./hack/validate-rbac-resourcenames.sh
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -370,7 +374,7 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated
+verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated validate-rbac
 
 ## update the relevant data based on new changes.
 .PHONY: update
