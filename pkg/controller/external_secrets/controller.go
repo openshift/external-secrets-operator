@@ -96,17 +96,19 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch
 
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;update;patch;delete,resourceNames=external-secrets-controller;external-secrets-cert-controller;external-secrets-edit;external-secrets-view;external-secrets-servicebindings
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete,resourceNames=external-secrets-controller;external-secrets-cert-controller
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch,resourceNames=externalsecret-validate;secretstore-validate
 // +kubebuilder:rbac:groups="",resources=events;secrets;services;serviceaccounts,verbs=get;list;watch;create;update;delete;patch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;clusterissuers;issuers,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update,resourceNames=external-secrets;external-secrets-cert-controller;external-secrets-webhook;bitwarden-sdk-server
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;clusterissuers;issuers,verbs=get;list;watch;create;update,resourceNames=external-secrets-webhook;bitwarden-tls-certs
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create
 
 // +kubebuilder:rbac:groups="",resources=endpoints,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete,resourceNames=externalsecrets.external-secrets.io;secretstores.external-secrets.io;clustersecretstores.external-secrets.io;clusterexternalsecrets.external-secrets.io;pushsecrets.external-secrets.io;acraccesstokens.generators.external-secrets.io;clustergenerators.generators.external-secrets.io;ecrauthorizationtokens.generators.external-secrets.io;gcraccesstokens.generators.external-secrets.io;generatorstates.generators.external-secrets.io;githubaccesstokens.generators.external-secrets.io;grafanas.generators.external-secrets.io;passwords.generators.external-secrets.io;quayaccesstokens.generators.external-secrets.io;stssessiontokens.generators.external-secrets.io;uuids.generators.external-secrets.io;vaultdynamicsecrets.generators.external-secrets.io;webhooks.generators.external-secrets.io;externalsecrets.operator.openshift.io;externalsecretsmanagers.operator.openshift.io
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets;clustersecretstores;externalsecrets;pushsecrets;secretstores,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/finalizers;clustersecretstores/finalizers;externalsecrets/finalizers;pushsecrets/finalizers;secretstores/finalizers,verbs=get;update;patch
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/status;clustersecretstores/status;externalsecrets/status;pushsecrets/status;secretstores/status,verbs=get;update;patch
