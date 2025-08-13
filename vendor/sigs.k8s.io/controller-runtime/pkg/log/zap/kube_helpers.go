@@ -78,7 +78,6 @@ func (w kubeObjectWrapper) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 func (k *KubeAwareEncoder) Clone() zapcore.Encoder {
 	return &KubeAwareEncoder{
 		Encoder: k.Encoder.Clone(),
-		Verbose: k.Verbose,
 	}
 }
 
