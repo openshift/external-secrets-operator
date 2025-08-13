@@ -2,8 +2,6 @@ module github.com/openshift/external-secrets-operator
 
 go 1.24.4
 
-toolchain go1.24.6
-
 require (
 	github.com/aws/aws-sdk-go v1.55.7
 	github.com/cert-manager/cert-manager v1.16.4
