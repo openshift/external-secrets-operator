@@ -3,10 +3,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: bitwarden-sdk-server
+  namespace: external-secrets
   labels:
     app.kubernetes.io/name: bitwarden-sdk-server
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v0.3.1"
+    app.kubernetes.io/version: "v0.5.0"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   replicas: 1
@@ -25,7 +26,7 @@ spec:
       containers:
         - name: bitwarden-sdk-server
           securityContext: {}
-          image: "ghcr.io/external-secrets/bitwarden-sdk-server:v0.3.1"
+          image: "ghcr.io/external-secrets/bitwarden-sdk-server:v0.5.0"
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /certs
