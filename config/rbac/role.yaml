@@ -96,6 +96,7 @@ rules:
   - external-secrets.io
   resources:
   - clusterexternalsecrets
+  - clusterpushsecrets
   - clustersecretstores
   - externalsecrets
   - pushsecrets
@@ -114,6 +115,8 @@ rules:
   resources:
   - clusterexternalsecrets/finalizers
   - clusterexternalsecrets/status
+  - clusterpushsecrets/finalizers
+  - clusterpushsecrets/status
   - clustersecretstores/finalizers
   - clustersecretstores/status
   - externalsecrets/finalizers
@@ -137,8 +140,10 @@ rules:
   - generatorstates
   - githubaccesstokens
   - grafanas
+  - mfas
   - passwords
   - quayaccesstokens
+  - sshkeys
   - stssessiontokens
   - uuids
   - vaultdynamicsecrets
