@@ -27,31 +27,23 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 	tests := []struct {
 		name    string
 		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
-		es      func(*v1alpha1.ExternalSecrets)
+		esc     func(*v1alpha1.ExternalSecretsConfig)
 		recon   bool
 		wantErr string
 	}{
 		{
 			name:   "external secret spec disabled",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec = v1alpha1.ExternalSecretsSpec{}
-			},
-			recon: false,
-		},
-		{
-			name:   "externalSecretConfig is nil",
-			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = nil
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{}
 			},
 			recon: false,
 		},
 		{
 			name:   "webhook config is nil",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
 					WebhookConfig: nil,
 				}
 			},
@@ -60,8 +52,8 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		{
 			name:   "webhook config is empty",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
 					WebhookConfig: &v1alpha1.WebhookConfig{},
 				}
 			},
@@ -70,8 +62,8 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		{
 			name:   "cert manager config is nil",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
 					CertManagerConfig: nil,
 				}
 			},
@@ -80,12 +72,12 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 		{
 			name:   "cert manager config enabled but issuerRef.Name is empty",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = ""
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = ""
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: issuerRef.Name not present", commontest.TestExternalSecretsNamespace, testExternalSecretsForCertificate().GetName()),
+			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: issuerRef.Name not present", commontest.TestExternalSecretsNamespace, testExternalSecretsConfigForCertificate().GetName()),
 		},
 		{
 			name: "reconciliation of webhook certificate fails while checking if exists",
@@ -118,9 +110,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return fmt.Errorf("object not found: %s/%s", ns.Namespace, ns.Name)
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
 			},
 			recon:   false,
 			wantErr: fmt.Sprintf("failed to check %s/%s certificate resource already exists: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
@@ -171,9 +163,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
 			},
 			recon:   false,
 			wantErr: fmt.Sprintf("failed to update %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
@@ -185,9 +177,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					switch o := obj.(type) {
 					case *certmanagerv1.Certificate:
 						if ns.Name == serviceExternalSecretWebhookName {
-							es := testExternalSecretsForCertificate()
-							es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-							desiredCert, _ := r.getCertificateObject(es, controllerDefaultResourceLabels, webhookCertificateAssetName)
+							esc := testExternalSecretsConfigForCertificate()
+							esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+							desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 							desiredCert.DeepCopyInto(o)
 							return nil
 						}
@@ -226,9 +218,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
 			},
 			recon: false,
 		},
@@ -258,9 +250,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return fmt.Errorf("object not found")
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
 			},
 			recon:   false,
 			wantErr: fmt.Sprintf("failed to create %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
@@ -292,9 +284,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return fmt.Errorf("object not found")
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
 			},
 			recon: false,
 		},
@@ -303,9 +295,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
-						es := testExternalSecretsForCertificate()
-						es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-						desiredCert, _ := r.getCertificateObject(es, controllerDefaultResourceLabels, webhookCertificateAssetName)
+						esc := testExternalSecretsConfigForCertificate()
+						esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+						desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 						desiredCert.DeepCopyInto(obj.(*certmanagerv1.Certificate))
 						return true, nil
 					}
@@ -338,11 +330,11 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-				es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
-					SecretRef: v1alpha1.SecretReference{
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+				esc.Spec.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
+					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
 					},
 					Enabled: "true",
@@ -356,9 +348,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
-						es := testExternalSecretsForCertificate()
-						es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-						desiredCert, _ := r.getCertificateObject(es, controllerDefaultResourceLabels, webhookCertificateAssetName)
+						esc := testExternalSecretsConfigForCertificate()
+						esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+						desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 						desiredCert.DeepCopyInto(obj.(*certmanagerv1.Certificate))
 						return true, nil
 					}
@@ -386,11 +378,11 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-				es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
-					SecretRef: v1alpha1.SecretReference{
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+				esc.Spec.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
+					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
 					},
 					Enabled: "true",
@@ -433,10 +425,10 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return fmt.Errorf("object not found")
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
-				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
-				es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider = nil
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.CertManagerConfig.Enabled = "true"
+				esc.Spec.CertManagerConfig.IssuerRef.Name = "test-issuer"
+				esc.Spec.BitwardenSecretManagerProvider = nil
 			},
 			recon: false,
 		},
@@ -452,12 +444,12 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			r.CtrlClient = mock
 			r.UncachedClient = mock
 
-			es := testExternalSecretsForCertificate()
-			if tt.es != nil {
-				tt.es(es)
+			esc := testExternalSecretsConfigForCertificate()
+			if tt.esc != nil {
+				tt.esc(esc)
 			}
 
-			err := r.createOrApplyCertificates(es, controllerDefaultResourceLabels, tt.recon)
+			err := r.createOrApplyCertificates(esc, controllerDefaultResourceLabels, tt.recon)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyCertificates() err: %v, wantErr: %v", err, tt.wantErr)
 			}
@@ -465,21 +457,17 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 	}
 }
 
-func testExternalSecretsForCertificate() *v1alpha1.ExternalSecrets {
-	externalSecrets := commontest.TestExternalSecrets()
-
-	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
-		ControllerConfig: &v1alpha1.ControllerConfig{
-			Namespace: commontest.TestExternalSecretsNamespace,
+func testExternalSecretsConfigForCertificate() *v1alpha1.ExternalSecretsConfig {
+	esc := commontest.TestExternalSecretsConfig()
+	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+		Namespace: commontest.TestExternalSecretsNamespace,
+		CertManagerConfig: &v1alpha1.CertManagerConfig{
+			Enabled:   "true",
+			IssuerRef: &v1alpha1.ObjectReference{},
 		},
-		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
-			CertManagerConfig: &v1alpha1.CertManagerConfig{
-				Enabled: "true",
-			},
-			BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{},
-		},
+		BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{},
 	}
-	return externalSecrets
+	return esc
 }
 
 // testIssuer creates a dummy cert-manager Issuer for testing

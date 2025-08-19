@@ -50,18 +50,18 @@ const (
 )
 
 var (
-	externalSecretsControllerId = fmt.Sprintf("externalsecrets.%s/%s", operatorv1alpha1.GroupVersion.Group, operatorv1alpha1.GroupVersion.Version)
+	externalSecretsControllerId = fmt.Sprintf("externalsecretsconfig.%s/%s", operatorv1alpha1.GroupVersion.Group, operatorv1alpha1.GroupVersion.Version)
 )
 
 // Reconciler reconciles externalsecretsmanager.openshift.operator.io CR.
 type Reconciler struct {
 	operatorclient.CtrlClient
-	Scheme          *runtime.Scheme
-	ctx             context.Context
-	eventRecorder   record.EventRecorder
-	log             logr.Logger
-	now             *common.Now
-	externalSecrets *operatorv1alpha1.ExternalSecrets
+	Scheme        *runtime.Scheme
+	ctx           context.Context
+	eventRecorder record.EventRecorder
+	log           logr.Logger
+	now           *common.Now
+	esc           *operatorv1alpha1.ExternalSecretsConfig
 }
 
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsmanagers,verbs=get;list;watch;create;update;patch;delete
@@ -90,8 +90,8 @@ func NewClient(m manager.Manager) operatorclient.CtrlClient {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	statusUpdatePredicate := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj := e.ObjectOld.(*operatorv1alpha1.ExternalSecrets)
-			newObj := e.ObjectNew.(*operatorv1alpha1.ExternalSecrets)
+			oldObj := e.ObjectOld.(*operatorv1alpha1.ExternalSecretsConfig)
+			newObj := e.ObjectNew.(*operatorv1alpha1.ExternalSecretsConfig)
 			return !reflect.DeepEqual(oldObj.Status, newObj.Status)
 		},
 	}
@@ -99,7 +99,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ExternalSecretsManager{}).
 		Named(ControllerName).
-		Watches(&operatorv1alpha1.ExternalSecrets{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(statusUpdatePredicate)).
+		Watches(&operatorv1alpha1.ExternalSecretsConfig{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(statusUpdatePredicate)).
 		Complete(r)
 }
 
@@ -136,19 +136,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecretsmanager.openshift.operator.io with finalizers: %w", key, err)
 	}
 
-	// Fetch the externalsecrets.openshift.operator.io CR
-	r.externalSecrets = new(operatorv1alpha1.ExternalSecrets)
+	// Fetch the externalsecretsconfig.openshift.operator.io CR
+	r.esc = new(operatorv1alpha1.ExternalSecretsConfig)
 	key = types.NamespacedName{
-		Name: common.ExternalSecretsObjectName,
+		Name: common.ExternalSecretsConfigObjectName,
 	}
-	if err := r.Get(ctx, key, r.externalSecrets); err != nil {
+	if err := r.Get(ctx, key, r.esc); err != nil {
 		if errors.IsNotFound(err) {
 			// NotFound errors, would mean the object hasn't been created yet and
 			// not required to reconcile yet.
-			r.log.V(1).Info("externalsecrets.openshift.operator.io object not found, skipping reconciliation", "key", key)
+			r.log.V(1).Info("externalsecretsconfig.openshift.operator.io object not found, skipping reconciliation", "key", key)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q during reconciliation: %w", key, err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsconfig.openshift.operator.io %q during reconciliation: %w", key, err)
 	}
 
 	return r.processReconcileRequest(esm)
@@ -160,8 +160,8 @@ func (r *Reconciler) processReconcileRequest(esm *operatorv1alpha1.ExternalSecre
 	if esm.Status.ControllerStatuses == nil {
 		esm.Status.ControllerStatuses = make([]operatorv1alpha1.ControllerStatus, 0)
 	}
-	if r.externalSecrets != nil && len(r.externalSecrets.Status.Conditions) > 0 {
-		for _, esCond := range r.externalSecrets.Status.Conditions {
+	if r.esc != nil && len(r.esc.Status.Conditions) > 0 {
+		for _, esCond := range r.esc.Status.Conditions {
 			if r.updateStatusCondition(esm, externalSecretsControllerId, esCond) {
 				statusUpdated = true
 			}

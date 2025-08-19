@@ -15,10 +15,10 @@ import (
 
 func TestCreateOrApplyRBACResource(t *testing.T) {
 	tests := []struct {
-		name                     string
-		preReq                   func(*Reconciler, *fakes.FakeCtrlClient)
-		updateExternalSecretsObj func(*operatorv1alpha1.ExternalSecrets)
-		wantErr                  string
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(*operatorv1alpha1.ExternalSecretsConfig)
+		wantErr                     string
 	}{
 		{
 			name: "clusterrole reconciliation fails while checking if exists",
@@ -31,8 +31,8 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
 					Namespace: "test-external-secrets",
 				}
 			},
@@ -265,8 +265,8 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterroles creation successful",
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
 					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
 						Enabled: "true",
 					},
@@ -275,8 +275,8 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		},
 		{
 			name: "clusterrolebindings creation successful",
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
 					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
 						Enabled: "true",
 					},
@@ -301,12 +301,12 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			}
 			r.CtrlClient = mock
 
-			es := commontest.TestExternalSecrets()
-			if tt.updateExternalSecretsObj != nil {
-				tt.updateExternalSecretsObj(es)
+			esc := commontest.TestExternalSecretsConfig()
+			if tt.updateExternalSecretsConfig != nil {
+				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyRBACResource(es, controllerDefaultResourceLabels, true)
+			err := r.createOrApplyRBACResource(esc, controllerDefaultResourceLabels, true)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyRBACResource() err: %v, wantErr: %v", err, tt.wantErr)
 			}

@@ -75,12 +75,12 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			"external-secrets-operator-controller-manager-",
 		})).To(Succeed())
 
-		By("Creating the externalsecrets.openshift.operator.io/cluster CR")
+		By("Creating the externalsecretsconfig.operator.openshift.io/cluster CR")
 		loader.CreateFromFile(testassets.ReadFile, externalSecrets, operatorNamespace)
 	})
 
 	AfterAll(func() {
-		By("Deleting the externalsecrets.openshift.operator.io/cluster CR")
+		By("Deleting the externalsecretsconfig.operator.openshift.io/cluster CR")
 		loader.DeleteFromFile(testassets.ReadFile, externalSecrets, operatorNamespace)
 
 		err := utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)

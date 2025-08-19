@@ -1,89 +1,74 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func init() {
-	SchemeBuilder.Register(&ExternalSecrets{}, &ExternalSecretsList{})
+	SchemeBuilder.Register(&ExternalSecretsConfig{}, &ExternalSecretsConfigList{})
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 //+kubebuilder:object:root=true
 
-// ExternalSecretsList is a list of ExternalSecrets objects.
-type ExternalSecretsList struct {
+// ExternalSecretsConfigList is a list of ExternalSecretsConfig objects.
+type ExternalSecretsConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is the standard list's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ListMeta `json:"metadata"`
-	Items           []ExternalSecrets `json:"items"`
+	Items           []ExternalSecretsConfig `json:"items"`
 }
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:path=externalsecretsconfigs,scope=Cluster,categories={external-secrets-operator, external-secrets},shortName=esc;externalsecretsconfig;esconfig
+// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].message"
+// +kubebuilder:metadata:labels={"app.kubernetes.io/name=externalsecretsconfig", "app.kubernetes.io/part-of=external-secrets-operator"}
 
-// ExternalSecrets describes configuration and information about the managed external-secrets
-// deployment. The name must be `cluster` as ExternalSecrets is a singleton,
+// ExternalSecretsConfig describes configuration and information about the managed external-secrets
+// deployment. The name must be `cluster` as ExternalSecretsConfig is a singleton,
 // allowing only one instance per cluster.
 //
-// When an ExternalSecrets is created, a new deployment is created which manages the
+// When an ExternalSecretsConfig is created, a new deployment is created which manages the
 // external-secrets and keeps it in the desired state.
 //
-// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'cluster'",message="ExternalSecrets is a singleton, .metadata.name must be 'cluster'"
-// +operator-sdk:csv:customresourcedefinitions:displayName="ExternalSecrets"
-type ExternalSecrets struct {
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'cluster'",message="ExternalSecretsConfig is a singleton, .metadata.name must be 'cluster'"
+// +operator-sdk:csv:customresourcedefinitions:displayName="ExternalSecretsConfig"
+type ExternalSecretsConfig struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is the standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// spec is the specification of the desired behavior of the ExternalSecrets.
-	Spec ExternalSecretsSpec `json:"spec,omitempty"`
+	// spec is the specification of the desired behavior of the ExternalSecretsConfig.
+	Spec ExternalSecretsConfigSpec `json:"spec,omitempty"`
 
-	// status is the most recently observed status of the ExternalSecrets.
-	Status ExternalSecretsStatus `json:"status,omitempty"`
+	// status is the most recently observed status of the ExternalSecretsConfig.
+	Status ExternalSecretsConfigStatus `json:"status,omitempty"`
 }
 
-// ExternalSecretsSpec is the specification of the desired behavior of the ExternalSecrets.
-type ExternalSecretsSpec struct {
-	// externalSecretsConfig is for configuring the external-secrets behavior.
+// ExternalSecretsConfigSpec is for configuring the external-secrets operand behavior.
+type ExternalSecretsConfigSpec struct {
+	// namespace is for configuring the namespace to install the external-secret operand.
 	// +kubebuilder:validation:Optional
-	ExternalSecretsConfig *ExternalSecretsConfig `json:"externalSecretsConfig,omitempty"`
-
-	// controllerConfig is for configuring the controller for setting up
-	// defaults to enable external-secrets.
-	// +kubebuilder:validation:Optional
-	ControllerConfig *ControllerConfig `json:"controllerConfig,omitempty"`
-}
-
-// ExternalSecretsStatus is the most recently observed status of the ExternalSecrets.
-type ExternalSecretsStatus struct {
-	// conditions holds information of the current state of the external-secrets deployment.
-	ConditionalStatus `json:",inline,omitempty"`
-
-	// externalSecretsImage is the name of the image and the tag used for deploying external-secrets.
-	ExternalSecretsImage string `json:"externalSecretsImage,omitempty"`
-}
-
-// ExternalSecretsConfig is for configuring the external-secrets behavior.
-type ExternalSecretsConfig struct {
-	// logLevel supports value range as per [kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use).
-	// +kubebuilder:default:=1
-	// +kubebuilder:validation:Minimum:=1
-	// +kubebuilder:validation:Maximum:=5
-	// +kubebuilder:validation:Optional
-	LogLevel int32 `json:"logLevel,omitempty"`
+	// +kubebuilder:default:="external-secrets"
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=63
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="namespace is immutable once set"
+	Namespace string `json:"namespace,omitempty"`
 
 	// operatingNamespace is for restricting the external-secrets operations to provided namespace.
 	// And when enabled `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled.
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=63
 	OperatingNamespace string `json:"operatingNamespace,omitempty"`
 
 	// bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and
@@ -92,6 +77,7 @@ type ExternalSecretsConfig struct {
 	BitwardenSecretManagerProvider *BitwardenSecretManagerProvider `json:"bitwardenSecretManagerProvider,omitempty"`
 
 	// webhookConfig is for configuring external-secrets webhook specifics.
+	// +kubebuilder:validation:Optional
 	WebhookConfig *WebhookConfig `json:"webhookConfig,omitempty"`
 
 	// CertManagerConfig is for configuring cert-manager specifics, which will be used for generating
@@ -99,44 +85,8 @@ type ExternalSecretsConfig struct {
 	// +kubebuilder:validation:Optional
 	CertManagerConfig *CertManagerConfig `json:"certManagerConfig,omitempty"`
 
-	// resources is for defining the resource requirements.
-	// Cannot be updated.
-	// ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	// +kubebuilder:validation:Optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// affinity is for setting scheduling affinity rules.
-	// ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
-	// +kubebuilder:validation:Optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// tolerations is for setting the pod tolerations.
-	// ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
-	// +kubebuilder:validation:Optional
-	// +listType=atomic
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-
-	// nodeSelector is for defining the scheduling criteria using node labels.
-	// ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
-	// +kubebuilder:validation:Optional
-	// +mapType=atomic
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-}
-
-// ControllerConfig is for configuring the operator for setting up
-// defaults to install external-secrets.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.namespace) && !has(self.namespace) || has(oldSelf.namespace) && has(self.namespace)",message="namespace may only be configured during creation"
-type ControllerConfig struct {
-	// namespace is for configuring the namespace to install the external-secret operand.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default:="external-secrets"
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="namespace is immutable once set"
-	Namespace string `json:"namespace,omitempty"`
-
-	// labels to apply to all resources created for external-secrets deployment.
-	// +mapType=granular
-	// +kubebuilder:validation:Optional
-	Labels map[string]string `json:"labels,omitempty"`
+	CommonConfigs `json:",inline,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and
@@ -144,8 +94,8 @@ type ControllerConfig struct {
 type BitwardenSecretManagerProvider struct {
 	// enabled is for enabling the bitwarden secrets manager provider, which can be indicated
 	// by setting `true` or `false`.
-	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Enum:="true";"false"
+	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Optional
 	Enabled string `json:"enabled,omitempty"`
 
@@ -154,7 +104,7 @@ type BitwardenSecretManagerProvider struct {
 	// reference is not provided and CertManagerConfig is configured. The key names in secret for certificate
 	// must be `tls.crt`, for private key must be `tls.key` and for CA certificate key name must be `ca.crt`.
 	// +kubebuilder:validation:Optional
-	SecretRef SecretReference `json:"secretRef,omitempty"`
+	SecretRef *SecretReference `json:"secretRef,omitempty"`
 }
 
 // WebhookConfig is for configuring external-secrets webhook specifics.
@@ -163,7 +113,7 @@ type WebhookConfig struct {
 	// validity.
 	// +kubebuilder:default:="5m"
 	// +kubebuilder:validation:Optional
-	CertificateCheckInterval metav1.Duration `json:"certificateCheckInterval,omitempty"`
+	CertificateCheckInterval *metav1.Duration `json:"certificateCheckInterval,omitempty"`
 }
 
 // CertManagerConfig is for configuring cert-manager specifics.
@@ -172,17 +122,17 @@ type CertManagerConfig struct {
 	// enabled is for enabling the use of cert-manager for obtaining and renewing the
 	// certificates used for webhook server, instead of built-in certificates.
 	// Use `true` or `false` to indicate the preference.
-	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="enabled is immutable once set"
 	// +kubebuilder:validation:Enum:="true";"false"
+	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Required
 	Enabled string `json:"enabled,omitempty"`
 
 	// addInjectorAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the
 	// webhooks and CRDs to automatically setup webhook to the cert-manager CA. This requires
 	// CA Injector to be enabled in cert-manager. Use `true` or `false` to indicate the preference.
-	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Enum:="true";"false"
+	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:Optional
 	AddInjectorAnnotations string `json:"addInjectorAnnotations,omitempty"`
 
@@ -191,7 +141,7 @@ type CertManagerConfig struct {
 	// namespace if not using a cluster-scoped cert-manager issuer.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="issuerRef is immutable once set"
 	// +kubebuilder:validation:Required
-	IssuerRef ObjectReference `json:"issuerRef,omitempty"`
+	IssuerRef *ObjectReference `json:"issuerRef,omitempty"`
 
 	// certificateDuration is the validity period of the webhook certificate.
 	// +kubebuilder:default:="8760h"
@@ -203,4 +153,16 @@ type CertManagerConfig struct {
 	// +kubebuilder:default:="30m"
 	// +kubebuilder:validation:Optional
 	CertificateRenewBefore *metav1.Duration `json:"certificateRenewBefore,omitempty"`
+}
+
+// ExternalSecretsConfigStatus is the most recently observed status of the ExternalSecretsConfig.
+type ExternalSecretsConfigStatus struct {
+	// conditions holds information of the current state of the external-secrets deployment.
+	ConditionalStatus `json:",inline,omitempty"`
+
+	// externalSecretsImage is the name of the image and the tag used for deploying external-secrets.
+	ExternalSecretsImage string `json:"externalSecretsImage,omitempty"`
+
+	// BitwardenSDKServerImage is the name of the image and the tag used for deploying bitwarden-sdk-server.
+	BitwardenSDKServerImage string `json:"bitwardenSDKServerImage,omitempty"`
 }
