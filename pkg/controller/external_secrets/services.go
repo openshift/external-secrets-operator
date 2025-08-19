@@ -12,7 +12,7 @@ import (
 )
 
 // createOrApplyServices handles conditional and default creation of Services.
-func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServices(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
 	servicesToCreate := []struct {
 		assetName string
 		condition bool
@@ -23,7 +23,7 @@ func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.Ext
 		},
 		{
 			assetName: bitwardenServiceAssetName,
-			condition: isBitwardenConfigEnabled(externalsecrets),
+			condition: isBitwardenConfigEnabled(esc),
 		},
 	}
 
@@ -31,7 +31,7 @@ func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.Ext
 		if !service.condition {
 			continue
 		}
-		if err := r.createOrApplyServiceFromAsset(externalsecrets, service.assetName, resourceLabels, externalsecretsCreateRecon); err != nil {
+		if err := r.createOrApplyServiceFromAsset(esc, service.assetName, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -40,9 +40,9 @@ func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.Ext
 }
 
 // createOrApplyServiceFromAsset decodes a Service YAML asset and ensures it exists in the cluster.
-func (r *Reconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
 	service := common.DecodeServiceObjBytes(assets.MustAsset(assetName))
-	updateNamespace(service, externalsecrets)
+	updateNamespace(service, esc)
 	common.UpdateResourceLabels(service, resourceLabels)
 
 	serviceName := fmt.Sprintf("%s/%s", service.GetNamespace(), service.GetName())
@@ -60,14 +60,14 @@ func (r *Reconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1al
 
 	if exists {
 		if externalsecretsCreateRecon {
-			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
+			r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
 		}
 		if common.HasObjectChanged(service, fetched) {
 			r.log.V(1).Info("Service modified, updating", "name", serviceName)
 			if err := r.UpdateWithRetry(r.ctx, service); err != nil {
 				return common.FromClientError(err, "failed to update service %s", serviceName)
 			}
-			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Service %s updated", serviceName)
+			r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Service %s updated", serviceName)
 		} else {
 			r.log.V(4).Info("Service already up-to-date", "name", serviceName)
 		}
@@ -75,7 +75,7 @@ func (r *Reconciler) createOrApplyServiceFromAsset(externalsecrets *operatorv1al
 		if err := r.Create(r.ctx, service); err != nil {
 			return common.FromClientError(err, "failed to create service %s", serviceName)
 		}
-		r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Service %s created", serviceName)
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Service %s created", serviceName)
 	}
 
 	return nil

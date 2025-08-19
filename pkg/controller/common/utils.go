@@ -385,10 +385,8 @@ func IsESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
 }
 
 // IsInjectCertManagerAnnotationEnabled is for check if add cert-manager annotation is enabled.
-func IsInjectCertManagerAnnotationEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec.ExternalSecretsConfig != nil &&
-		es.Spec.ExternalSecretsConfig.CertManagerConfig != nil &&
-		ParseBool(es.Spec.ExternalSecretsConfig.CertManagerConfig.AddInjectorAnnotations)
+func IsInjectCertManagerAnnotationEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	return esc.Spec.CertManagerConfig != nil && ParseBool(esc.Spec.CertManagerConfig.AddInjectorAnnotations)
 }
 
 // AddFinalizer adds finalizer to the passed resource object.
@@ -410,8 +408,8 @@ func AddFinalizer(ctx context.Context, obj client.Object, opClient operatorclien
 				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
 			}
 			updated.DeepCopyInto(o)
-		case *operatorv1alpha1.ExternalSecrets:
-			updated := &operatorv1alpha1.ExternalSecrets{}
+		case *operatorv1alpha1.ExternalSecretsConfig:
+			updated := &operatorv1alpha1.ExternalSecretsConfig{}
 			if err := opClient.Get(ctx, namespacedName, updated); err != nil {
 				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
 			}
@@ -429,11 +427,11 @@ func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorcl
 	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		if !controllerutil.RemoveFinalizer(obj, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers removed", namespacedName)
+			return fmt.Errorf("failed to create %q externalsecretsconfig.openshift.operator.io object with finalizers removed", namespacedName)
 		}
 
 		if err := opClient.UpdateWithRetry(ctx, obj); err != nil {
-			return fmt.Errorf("failed to remove finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
+			return fmt.Errorf("failed to remove finalizers on %q externalsecretsconfig.openshift.operator.io with %w", namespacedName, err)
 		}
 		return nil
 	}
@@ -453,7 +451,7 @@ func (n *Now) Do(f func()) {
 	}
 }
 
-// Reset is for allowing Do to call the func f again.
+// Reset is for allowing Do method to call the func f again.
 func (n *Now) Reset() {
 	n.Lock()
 	defer n.Unlock()
