@@ -55,21 +55,19 @@ func (ff *FileFilter) MatchFileName(name string) bool {
 	return ff.rx.MatchString(name)
 }
 
-var (
-	fileFilterInvalidGlobRegexp = regexp.MustCompile(`[^/]\*\*[^/]`)
-	escapeRegexSymbols          = ".+{}()[]^$"
-)
+var fileFilterInvalidGlobRegexp = regexp.MustCompile(`[^/]\*\*[^/]`)
+var escapeRegexSymbols = ".+{}()[]^$"
 
 func (ff *FileFilter) prepareRegexp() error {
 	var err error
-	src := ff.raw
+	var src = ff.raw
 	if src == "TEST" {
 		src = "~_test\\.go"
 	}
 	if strings.HasPrefix(src, "~") {
 		ff.rx, err = regexp.Compile(src[1:])
 		if err != nil {
-			return fmt.Errorf("invalid file filter [%s], regexp compile error: [%w]", ff.raw, err)
+			return fmt.Errorf("invalid file filter [%s], regexp compile error: [%v]", ff.raw, err)
 		}
 		return nil
 	}
@@ -112,7 +110,7 @@ func (ff *FileFilter) prepareRegexp() error {
 		rxBuild.WriteByte('$')
 		ff.rx, err = regexp.Compile(rxBuild.String())
 		if err != nil {
-			return fmt.Errorf("invalid file filter [%s], regexp compile error after glob expand: [%w]", ff.raw, err)
+			return fmt.Errorf("invalid file filter [%s], regexp compile error after glob expand: [%v]", ff.raw, err)
 		}
 		return nil
 	}
@@ -124,7 +122,7 @@ func (ff *FileFilter) prepareRegexp() error {
 	fillRx = "^" + fillRx + "$"
 	ff.rx, err = regexp.Compile(fillRx)
 	if err != nil {
-		return fmt.Errorf("invalid file filter [%s], regexp compile full path: [%w]", ff.raw, err)
+		return fmt.Errorf("invalid file filter [%s], regexp compile full path: [%v]", ff.raw, err)
 	}
 	return nil
 }

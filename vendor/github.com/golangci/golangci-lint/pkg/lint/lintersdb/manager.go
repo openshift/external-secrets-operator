@@ -2,11 +2,11 @@ package lintersdb
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"slices"
 	"sort"
-	"strings"
+
+	"golang.org/x/exp/maps"
 
 	"github.com/golangci/golangci-lint/pkg/config"
 	"github.com/golangci/golangci-lint/pkg/goanalysis"
@@ -109,25 +109,24 @@ func (m *Manager) GetOptimizedLinters() ([]*linter.Config, error) {
 
 	m.combineGoAnalysisLinters(resultLintersSet)
 
+	resultLinters := maps.Values(resultLintersSet)
+
 	// Make order of execution of linters (go/analysis metalinter and unused) stable.
-	resultLinters := slices.SortedFunc(maps.Values(resultLintersSet), func(a *linter.Config, b *linter.Config) int {
+	sort.Slice(resultLinters, func(i, j int) bool {
+		a, b := resultLinters[i], resultLinters[j]
+
 		if b.Name() == linter.LastLinter {
-			return -1
+			return true
 		}
 
 		if a.Name() == linter.LastLinter {
-			return 1
+			return false
 		}
 
 		if a.DoesChangeTypes != b.DoesChangeTypes {
-			// move type-changing linters to the end to optimize speed
-			if b.DoesChangeTypes {
-				return -1
-			}
-			return 1
+			return b.DoesChangeTypes // move type-changing linters to the end to optimize speed
 		}
-
-		return strings.Compare(a.Name(), b.Name())
+		return a.Name() < b.Name()
 	})
 
 	return resultLinters, nil
@@ -163,6 +162,7 @@ func (m *Manager) build(enabledByDefaultLinters []*linter.Config) map[string]*li
 	// --presets can only add linters to default set
 	for _, p := range m.cfg.Linters.Presets {
 		for _, lc := range m.GetAllLinterConfigsForPreset(p) {
+			lc := lc
 			resultLintersSet[lc.Name()] = lc
 		}
 	}

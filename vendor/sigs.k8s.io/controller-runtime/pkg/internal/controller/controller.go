@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/util/workqueue"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/internal/controller/metrics"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -61,7 +60,7 @@ type Controller[request comparable] struct {
 
 	// Queue is an listeningQueue that listens for events from Informers and adds object keys to
 	// the Queue for processing
-	Queue priorityqueue.PriorityQueue[request]
+	Queue workqueue.TypedRateLimitingInterface[request]
 
 	// mu is used to synchronize Controller setup
 	mu sync.Mutex
@@ -158,12 +157,7 @@ func (c *Controller[request]) Start(ctx context.Context) error {
 	// Set the internal context.
 	c.ctx = ctx
 
-	queue := c.NewQueue(c.Name, c.RateLimiter)
-	if priorityQueue, isPriorityQueue := queue.(priorityqueue.PriorityQueue[request]); isPriorityQueue {
-		c.Queue = priorityQueue
-	} else {
-		c.Queue = &priorityQueueWrapper[request]{TypedRateLimitingInterface: queue}
-	}
+	c.Queue = c.NewQueue(c.Name, c.RateLimiter)
 	go func() {
 		<-ctx.Done()
 		c.Queue.ShutDown()
@@ -274,7 +268,7 @@ func (c *Controller[request]) Start(ctx context.Context) error {
 // processNextWorkItem will read a single work item off the workqueue and
 // attempt to process it, by calling the reconcileHandler.
 func (c *Controller[request]) processNextWorkItem(ctx context.Context) bool {
-	obj, priority, shutdown := c.Queue.GetWithPriority()
+	obj, shutdown := c.Queue.Get()
 	if shutdown {
 		// Stop working
 		return false
@@ -291,7 +285,7 @@ func (c *Controller[request]) processNextWorkItem(ctx context.Context) bool {
 	ctrlmetrics.ActiveWorkers.WithLabelValues(c.Name).Add(1)
 	defer ctrlmetrics.ActiveWorkers.WithLabelValues(c.Name).Add(-1)
 
-	c.reconcileHandler(ctx, obj, priority)
+	c.reconcileHandler(ctx, obj)
 	return true
 }
 
@@ -314,7 +308,7 @@ func (c *Controller[request]) initMetrics() {
 	ctrlmetrics.ActiveWorkers.WithLabelValues(c.Name).Set(0)
 }
 
-func (c *Controller[request]) reconcileHandler(ctx context.Context, req request, priority int) {
+func (c *Controller[request]) reconcileHandler(ctx context.Context, req request) {
 	// Update metrics after processing each item
 	reconcileStartTS := time.Now()
 	defer func() {
@@ -337,7 +331,7 @@ func (c *Controller[request]) reconcileHandler(ctx context.Context, req request,
 		if errors.Is(err, reconcile.TerminalError(nil)) {
 			ctrlmetrics.TerminalReconcileErrors.WithLabelValues(c.Name).Inc()
 		} else {
-			c.Queue.AddWithOpts(priorityqueue.AddOpts{RateLimited: true, Priority: priority}, req)
+			c.Queue.AddRateLimited(req)
 		}
 		ctrlmetrics.ReconcileErrors.WithLabelValues(c.Name).Inc()
 		ctrlmetrics.ReconcileTotal.WithLabelValues(c.Name, labelError).Inc()
@@ -352,11 +346,11 @@ func (c *Controller[request]) reconcileHandler(ctx context.Context, req request,
 		// We need to drive to stable reconcile loops before queuing due
 		// to result.RequestAfter
 		c.Queue.Forget(req)
-		c.Queue.AddWithOpts(priorityqueue.AddOpts{After: result.RequeueAfter, Priority: priority}, req)
+		c.Queue.AddAfter(req, result.RequeueAfter)
 		ctrlmetrics.ReconcileTotal.WithLabelValues(c.Name, labelRequeueAfter).Inc()
 	case result.Requeue:
 		log.V(5).Info("Reconcile done, requeueing")
-		c.Queue.AddWithOpts(priorityqueue.AddOpts{RateLimited: true, Priority: priority}, req)
+		c.Queue.AddRateLimited(req)
 		ctrlmetrics.ReconcileTotal.WithLabelValues(c.Name, labelRequeue).Inc()
 	default:
 		log.V(5).Info("Reconcile successful")
@@ -393,26 +387,4 @@ type reconcileIDKey struct{}
 
 func addReconcileID(ctx context.Context, reconcileID types.UID) context.Context {
 	return context.WithValue(ctx, reconcileIDKey{}, reconcileID)
-}
-
-type priorityQueueWrapper[request comparable] struct {
-	workqueue.TypedRateLimitingInterface[request]
-}
-
-func (p *priorityQueueWrapper[request]) AddWithOpts(opts priorityqueue.AddOpts, items ...request) {
-	for _, item := range items {
-		switch {
-		case opts.RateLimited:
-			p.TypedRateLimitingInterface.AddRateLimited(item)
-		case opts.After > 0:
-			p.TypedRateLimitingInterface.AddAfter(item, opts.After)
-		default:
-			p.TypedRateLimitingInterface.Add(item)
-		}
-	}
-}
-
-func (p *priorityQueueWrapper[request]) GetWithPriority() (request, int, bool) {
-	item, shutdown := p.TypedRateLimitingInterface.Get()
-	return item, 0, shutdown
 }

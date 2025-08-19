@@ -1,11 +1,10 @@
 package thelper
 
 import (
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/kulti/thelper/pkg/analyzer"
+	"golang.org/x/exp/maps"
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/golangci/golangci-lint/pkg/config"
@@ -13,7 +12,7 @@ import (
 	"github.com/golangci/golangci-lint/pkg/golinters/internal"
 )
 
-func New(settings *config.ThelperSettings) *goanalysis.Linter {
+func New(cfg *config.ThelperSettings) *goanalysis.Linter {
 	a := analyzer.NewAnalyzer()
 
 	opts := map[string]struct{}{
@@ -34,20 +33,20 @@ func New(settings *config.ThelperSettings) *goanalysis.Linter {
 		"tb_first": {},
 	}
 
-	if settings != nil {
-		applyTHelperOptions(settings.Test, "t_", opts)
-		applyTHelperOptions(settings.Fuzz, "f_", opts)
-		applyTHelperOptions(settings.Benchmark, "b_", opts)
-		applyTHelperOptions(settings.TB, "tb_", opts)
+	if cfg != nil {
+		applyTHelperOptions(cfg.Test, "t_", opts)
+		applyTHelperOptions(cfg.Fuzz, "f_", opts)
+		applyTHelperOptions(cfg.Benchmark, "b_", opts)
+		applyTHelperOptions(cfg.TB, "tb_", opts)
 	}
 
 	if len(opts) == 0 {
 		internal.LinterLogger.Fatalf("thelper: at least one option must be enabled")
 	}
 
-	args := slices.Collect(maps.Keys(opts))
+	args := maps.Keys(opts)
 
-	cfg := map[string]map[string]any{
+	cfgMap := map[string]map[string]any{
 		a.Name: {
 			"checks": strings.Join(args, ","),
 		},
@@ -57,7 +56,7 @@ func New(settings *config.ThelperSettings) *goanalysis.Linter {
 		a.Name,
 		a.Doc,
 		[]*analysis.Analyzer{a},
-		cfg,
+		cfgMap,
 	).WithLoadMode(goanalysis.LoadModeTypesInfo)
 }
 

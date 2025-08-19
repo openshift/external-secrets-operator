@@ -122,8 +122,6 @@ type htmlIssue struct {
 	Code   string
 }
 
-// HTML prints issues in an HTML page.
-// It uses the Cloudflare CDN (cdnjs) and React.
 type HTML struct {
 	w io.Writer
 }

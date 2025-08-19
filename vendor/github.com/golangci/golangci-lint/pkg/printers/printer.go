@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/golangci/golangci-lint/pkg/config"
 	"github.com/golangci/golangci-lint/pkg/logutils"
@@ -25,7 +23,6 @@ type issuePrinter interface {
 type Printer struct {
 	cfg        *config.Output
 	reportData *report.Data
-	basePath   string
 
 	log logutils.Log
 
@@ -34,7 +31,7 @@ type Printer struct {
 }
 
 // NewPrinter creates a new Printer.
-func NewPrinter(log logutils.Log, cfg *config.Output, reportData *report.Data, basePath string) (*Printer, error) {
+func NewPrinter(log logutils.Log, cfg *config.Output, reportData *report.Data) (*Printer, error) {
 	if log == nil {
 		return nil, errors.New("missing log argument in constructor")
 	}
@@ -48,7 +45,6 @@ func NewPrinter(log logutils.Log, cfg *config.Output, reportData *report.Data, b
 	return &Printer{
 		cfg:        cfg,
 		reportData: reportData,
-		basePath:   basePath,
 		log:        log,
 		stdOut:     logutils.StdOut,
 		stdErr:     logutils.StdErr,
@@ -100,10 +96,6 @@ func (c *Printer) createWriter(path string) (io.Writer, bool, error) {
 		return c.stdErr, false, nil
 	}
 
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(c.basePath, path)
-	}
-
 	err := os.MkdirAll(filepath.Dir(path), os.ModePerm)
 	if err != nil {
 		return nil, false, err
@@ -122,63 +114,32 @@ func (c *Printer) createPrinter(format string, w io.Writer) (issuePrinter, error
 
 	switch format {
 	case config.OutFormatJSON:
-		p = NewJSON(w, c.reportData)
-	case config.OutFormatLineNumber, config.OutFormatColoredLineNumber:
-		p = NewText(c.log, w, c.cfg.PrintLinterName, c.cfg.PrintIssuedLine, format == config.OutFormatColoredLineNumber)
+		p = NewJSON(c.reportData, w)
+	case config.OutFormatColoredLineNumber, config.OutFormatLineNumber:
+		p = NewText(c.cfg.PrintIssuedLine,
+			format == config.OutFormatColoredLineNumber, c.cfg.PrintLinterName,
+			c.log.Child(logutils.DebugKeyTextPrinter), w)
 	case config.OutFormatTab, config.OutFormatColoredTab:
-		p = NewTab(c.log, w, c.cfg.PrintLinterName, format == config.OutFormatColoredTab)
+		p = NewTab(c.cfg.PrintLinterName,
+			format == config.OutFormatColoredTab,
+			c.log.Child(logutils.DebugKeyTabPrinter), w)
 	case config.OutFormatCheckstyle:
-		p = NewCheckstyle(c.log, w)
+		p = NewCheckstyle(w)
 	case config.OutFormatCodeClimate:
-		p = NewCodeClimate(c.log, w)
+		p = NewCodeClimate(w)
 	case config.OutFormatHTML:
 		p = NewHTML(w)
-	case config.OutFormatJUnitXML, config.OutFormatJUnitXMLExtended:
-		p = NewJUnitXML(w, format == config.OutFormatJUnitXMLExtended)
+	case config.OutFormatJunitXML:
+		p = NewJunitXML(w)
 	case config.OutFormatGithubActions:
 		p = NewGitHubAction(w)
 	case config.OutFormatTeamCity:
-		p = NewTeamCity(c.log, w)
+		p = NewTeamCity(w)
 	case config.OutFormatSarif:
-		p = NewSarif(c.log, w)
+		p = NewSarif(w)
 	default:
 		return nil, fmt.Errorf("unknown output format %q", format)
 	}
 
 	return p, nil
-}
-
-type severitySanitizer struct {
-	allowedSeverities []string
-	defaultSeverity   string
-
-	unsupportedSeverities map[string]struct{}
-}
-
-func (s *severitySanitizer) Sanitize(severity string) string {
-	if slices.Contains(s.allowedSeverities, severity) {
-		return severity
-	}
-
-	if s.unsupportedSeverities == nil {
-		s.unsupportedSeverities = make(map[string]struct{})
-	}
-
-	s.unsupportedSeverities[severity] = struct{}{}
-
-	return s.defaultSeverity
-}
-
-func (s *severitySanitizer) Err() error {
-	if len(s.unsupportedSeverities) == 0 {
-		return nil
-	}
-
-	var names []string
-	for k := range s.unsupportedSeverities {
-		names = append(names, "'"+k+"'")
-	}
-
-	return fmt.Errorf("severities (%v) are not inside supported values (%v), fallback to '%s'",
-		strings.Join(names, ", "), strings.Join(s.allowedSeverities, ", "), s.defaultSeverity)
 }

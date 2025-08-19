@@ -3,6 +3,7 @@ package processors
 import (
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,13 +23,9 @@ type adjustMap struct {
 	m map[string]posMapper
 }
 
-// FilenameUnadjuster fixes filename based on adjusted and unadjusted position (related to line directives and cgo).
-//
-// A lot of linters use `fset.Position(f.Pos())` to get filename,
-// and they return adjusted filename (e.g.` *.qtpl`) for an issue.
-// We need restore real `.go` filename to properly output it, parse it, etc.
-//
-// Require absolute file path.
+// FilenameUnadjuster is needed because a lot of linters use fset.Position(f.Pos())
+// to get filename. And they return adjusted filename (e.g. *.qtpl) for an issue. We need
+// restore real .go filename to properly output it, parse it, etc.
 type FilenameUnadjuster struct {
 	m                   map[string]posMapper // map from adjusted filename to position mapper: adjusted -> unadjusted position
 	log                 logutils.Log
@@ -39,10 +36,8 @@ func NewFilenameUnadjuster(pkgs []*packages.Package, log logutils.Log) *Filename
 	m := adjustMap{m: map[string]posMapper{}}
 
 	startedAt := time.Now()
-
 	var wg sync.WaitGroup
 	wg.Add(len(pkgs))
-
 	for _, pkg := range pkgs {
 		go func(pkg *packages.Package) {
 			// It's important to call func here to run GC
@@ -50,9 +45,7 @@ func NewFilenameUnadjuster(pkgs []*packages.Package, log logutils.Log) *Filename
 			wg.Done()
 		}(pkg)
 	}
-
 	wg.Wait()
-
 	log.Infof("Pre-built %d adjustments in %s", len(m.m), time.Since(startedAt))
 
 	return &FilenameUnadjuster{
@@ -68,7 +61,17 @@ func (*FilenameUnadjuster) Name() string {
 
 func (p *FilenameUnadjuster) Process(issues []result.Issue) ([]result.Issue, error) {
 	return transformIssues(issues, func(issue *result.Issue) *result.Issue {
-		mapper := p.m[issue.FilePath()]
+		issueFilePath := issue.FilePath()
+		if !filepath.IsAbs(issue.FilePath()) {
+			absPath, err := filepath.Abs(issue.FilePath())
+			if err != nil {
+				p.log.Warnf("failed to build abs path for %q: %s", issue.FilePath(), err)
+				return issue
+			}
+			issueFilePath = absPath
+		}
+
+		mapper := p.m[issueFilePath]
 		if mapper == nil {
 			return issue
 		}

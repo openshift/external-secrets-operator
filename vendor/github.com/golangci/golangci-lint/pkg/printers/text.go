@@ -11,22 +11,21 @@ import (
 	"github.com/golangci/golangci-lint/pkg/result"
 )
 
-// Text prints issues with a human friendly representation.
 type Text struct {
-	printLinterName bool
 	printIssuedLine bool
+	printLinterName bool
 	useColors       bool
 
 	log logutils.Log
 	w   io.Writer
 }
 
-func NewText(log logutils.Log, w io.Writer, printLinterName, printIssuedLine, useColors bool) *Text {
+func NewText(printIssuedLine, useColors, printLinterName bool, log logutils.Log, w io.Writer) *Text {
 	return &Text{
-		printLinterName: printLinterName,
 		printIssuedLine: printIssuedLine,
+		printLinterName: printLinterName,
 		useColors:       useColors,
-		log:             log.Child(logutils.DebugKeyTextPrinter),
+		log:             log,
 		w:               w,
 	}
 }

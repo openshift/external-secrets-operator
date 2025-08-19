@@ -11,7 +11,6 @@ import (
 	"github.com/golangci/golangci-lint/pkg/result"
 )
 
-// Tab prints issues using tabulation as a field separator.
 type Tab struct {
 	printLinterName bool
 	useColors       bool
@@ -20,11 +19,11 @@ type Tab struct {
 	w   io.Writer
 }
 
-func NewTab(log logutils.Log, w io.Writer, printLinterName, useColors bool) *Tab {
+func NewTab(printLinterName, useColors bool, log logutils.Log, w io.Writer) *Tab {
 	return &Tab{
 		printLinterName: printLinterName,
 		useColors:       useColors,
-		log:             log.Child(logutils.DebugKeyTabPrinter),
+		log:             log,
 		w:               w,
 	}
 }

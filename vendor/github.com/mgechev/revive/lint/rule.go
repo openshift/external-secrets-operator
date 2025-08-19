@@ -17,9 +17,9 @@ type Rule interface {
 	Apply(*File, Arguments) []Failure
 }
 
-// ConfigurableRule defines an abstract configurable rule interface.
-type ConfigurableRule interface {
-	Configure(Arguments) error
+// AbstractRule defines an abstract rule.
+type AbstractRule struct {
+	Failures []Failure
 }
 
 // ToFailurePosition returns the failure position.

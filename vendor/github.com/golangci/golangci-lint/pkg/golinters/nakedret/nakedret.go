@@ -9,12 +9,12 @@ import (
 )
 
 func New(settings *config.NakedretSettings) *goanalysis.Linter {
-	var maxLines uint
+	var maxLines int
 	if settings != nil {
 		maxLines = settings.MaxFuncLines
 	}
 
-	a := nakedret.NakedReturnAnalyzer(maxLines, false)
+	a := nakedret.NakedReturnAnalyzer(uint(maxLines))
 
 	return goanalysis.NewLinter(
 		a.Name,

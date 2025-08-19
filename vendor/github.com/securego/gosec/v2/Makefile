@@ -17,7 +17,7 @@ GOSEC ?= $(GOBIN)/gosec
 GINKGO ?= $(GOBIN)/ginkgo
 GO_MINOR_VERSION = $(shell $(GO) version | cut -c 14- | cut -d' ' -f1 | cut -d'.' -f2)
 GOVULN_MIN_VERSION = 17
-GO_VERSION = 1.23
+GO_VERSION = 1.22
 
 default:
 	$(MAKE) build
@@ -68,7 +68,7 @@ build-race:
 	go build -race -o $(BIN) ./cmd/gosec/
 
 clean:
-	rm -rf build vendor dist coverage.out
+	rm -rf build vendor dist coverage.txt
 	rm -f release image $(BIN)
 
 release:
@@ -92,7 +92,4 @@ image-push: image
 tlsconfig:
 	go generate ./...
 
-perf-diff:
-	./perf-diff.sh
-
-.PHONY: test build clean release image image-push tlsconfig perf-diff
+.PHONY: test build clean release image image-push tlsconfig

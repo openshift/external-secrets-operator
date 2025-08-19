@@ -12,16 +12,16 @@ func New(settings *config.SpancheckSettings) *goanalysis.Linter {
 	cfg := spancheck.NewDefaultConfig()
 
 	if settings != nil {
-		if len(settings.Checks) > 0 {
+		if settings.Checks != nil {
 			cfg.EnabledChecks = settings.Checks
 		}
 
-		if len(settings.IgnoreCheckSignatures) > 0 {
+		if settings.IgnoreCheckSignatures != nil {
 			cfg.IgnoreChecksSignaturesSlice = settings.IgnoreCheckSignatures
 		}
 
-		if len(settings.ExtraStartSpanSignatures) > 0 {
-			cfg.StartSpanMatchersSlice = append(cfg.StartSpanMatchersSlice, settings.ExtraStartSpanSignatures...)
+		if settings.ExtraStartSpanSignatures != nil {
+			cfg.StartSpanMatchersSlice = settings.ExtraStartSpanSignatures
 		}
 	}
 

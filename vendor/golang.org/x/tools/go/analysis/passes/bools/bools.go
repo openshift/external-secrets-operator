@@ -15,7 +15,6 @@ import (
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/analysis/passes/internal/analysisutil"
 	"golang.org/x/tools/go/ast/inspector"
-	"golang.org/x/tools/internal/analysisinternal"
 )
 
 const Doc = "check for common mistakes involving boolean operators"
@@ -28,7 +27,7 @@ var Analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
 	nodeFilter := []ast.Node{
@@ -104,7 +103,7 @@ func (op boolOp) commutativeSets(info *types.Info, e *ast.BinaryExpr, seen map[*
 func (op boolOp) checkRedundant(pass *analysis.Pass, exprs []ast.Expr) {
 	seen := make(map[string]bool)
 	for _, e := range exprs {
-		efmt := analysisinternal.Format(pass.Fset, e)
+		efmt := analysisutil.Format(pass.Fset, e)
 		if seen[efmt] {
 			pass.ReportRangef(e, "redundant %s: %s %s %s", op.name, efmt, op.tok, efmt)
 		} else {
@@ -150,8 +149,8 @@ func (op boolOp) checkSuspect(pass *analysis.Pass, exprs []ast.Expr) {
 		}
 
 		// e is of the form 'x != c' or 'x == c'.
-		xfmt := analysisinternal.Format(pass.Fset, x)
-		efmt := analysisinternal.Format(pass.Fset, e)
+		xfmt := analysisutil.Format(pass.Fset, x)
+		efmt := analysisutil.Format(pass.Fset, e)
 		if prev, found := seen[xfmt]; found {
 			// checkRedundant handles the case in which efmt == prev.
 			if efmt != prev {

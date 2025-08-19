@@ -37,14 +37,12 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/proto"
-	estats "google.golang.org/grpc/experimental/stats"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/binarylog"
 	"google.golang.org/grpc/internal/channelz"
 	"google.golang.org/grpc/internal/grpcsync"
 	"google.golang.org/grpc/internal/grpcutil"
-	istats "google.golang.org/grpc/internal/stats"
 	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
@@ -84,9 +82,6 @@ func init() {
 	internal.BinaryLogger = binaryLogger
 	internal.JoinServerOptions = newJoinServerOption
 	internal.BufferPool = bufferPool
-	internal.MetricsRecorderForServer = func(srv *Server) estats.MetricsRecorder {
-		return istats.NewMetricsRecorderList(srv.opts.statsHandlers)
-	}
 }
 
 var statusOK = status.New(codes.OK, "")
@@ -648,7 +643,7 @@ func (s *Server) serverWorker() {
 // connections to reduce the time spent overall on runtime.morestack.
 func (s *Server) initServerWorkers() {
 	s.serverWorkerChannel = make(chan func())
-	s.serverWorkerChannelClose = sync.OnceFunc(func() {
+	s.serverWorkerChannelClose = grpcsync.OnceFunc(func() {
 		close(s.serverWorkerChannel)
 	})
 	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
@@ -1365,16 +1360,8 @@ func (s *Server) processUnaryRPC(ctx context.Context, stream *transport.ServerSt
 		}
 		return err
 	}
-	freed := false
-	dataFree := func() {
-		if !freed {
-			d.Free()
-			freed = true
-		}
-	}
-	defer dataFree()
+	defer d.Free()
 	df := func(v any) error {
-		defer dataFree()
 		if err := s.getCodec(stream.ContentSubtype()).Unmarshal(d, v); err != nil {
 			return status.Errorf(codes.Internal, "grpc: error unmarshalling request: %v", err)
 		}
@@ -1650,10 +1637,10 @@ func (s *Server) processStreamingRPC(ctx context.Context, stream *transport.Serv
 	// If dc is set and matches the stream's compression, use it.  Otherwise, try
 	// to find a matching registered compressor for decomp.
 	if rc := stream.RecvCompress(); s.opts.dc != nil && s.opts.dc.Type() == rc {
-		ss.decompressorV0 = s.opts.dc
+		ss.dc = s.opts.dc
 	} else if rc != "" && rc != encoding.Identity {
-		ss.decompressorV1 = encoding.GetCompressor(rc)
-		if ss.decompressorV1 == nil {
+		ss.decomp = encoding.GetCompressor(rc)
+		if ss.decomp == nil {
 			st := status.Newf(codes.Unimplemented, "grpc: Decompressor is not installed for grpc-encoding %q", rc)
 			ss.s.WriteStatus(st)
 			return st.Err()
@@ -1665,12 +1652,12 @@ func (s *Server) processStreamingRPC(ctx context.Context, stream *transport.Serv
 	//
 	// NOTE: this needs to be ahead of all handling, https://github.com/grpc/grpc-go/issues/686.
 	if s.opts.cp != nil {
-		ss.compressorV0 = s.opts.cp
+		ss.cp = s.opts.cp
 		ss.sendCompressorName = s.opts.cp.Type()
 	} else if rc := stream.RecvCompress(); rc != "" && rc != encoding.Identity {
 		// Legacy compressor not specified; attempt to respond with same encoding.
-		ss.compressorV1 = encoding.GetCompressor(rc)
-		if ss.compressorV1 != nil {
+		ss.comp = encoding.GetCompressor(rc)
+		if ss.comp != nil {
 			ss.sendCompressorName = rc
 		}
 	}
@@ -1681,7 +1668,7 @@ func (s *Server) processStreamingRPC(ctx context.Context, stream *transport.Serv
 		}
 	}
 
-	ss.ctx = newContextWithRPCInfo(ss.ctx, false, ss.codec, ss.compressorV0, ss.compressorV1)
+	ss.ctx = newContextWithRPCInfo(ss.ctx, false, ss.codec, ss.cp, ss.comp)
 
 	if trInfo != nil {
 		trInfo.tr.LazyLog(&trInfo.firstLine, false)
@@ -1935,7 +1922,7 @@ func (s *Server) stop(graceful bool) {
 	s.conns = nil
 
 	if s.opts.numServerWorkers > 0 {
-		// Closing the channel (only once, via sync.OnceFunc) after all the
+		// Closing the channel (only once, via grpcsync.OnceFunc) after all the
 		// connections have been closed above ensures that there are no
 		// goroutines executing the callback passed to st.HandleStreams (where
 		// the channel is written to).

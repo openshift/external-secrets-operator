@@ -7,7 +7,6 @@ import (
 
 var _ Processor = (*MaxPerFileFromLinter)(nil)
 
-// MaxPerFileFromLinter limits the number of reports by file and by linter.
 type MaxPerFileFromLinter struct {
 	fileLinterCounter          fileLinterCounter
 	maxPerFileFromLinterConfig map[string]int
@@ -21,7 +20,6 @@ func NewMaxPerFileFromLinter(cfg *config.Config) *MaxPerFileFromLinter {
 		// otherwise we need to fix all issues in the file at once
 		maxPerFileFromLinterConfig["gofmt"] = 1
 		maxPerFileFromLinterConfig["goimports"] = 1
-		maxPerFileFromLinterConfig["gci"] = 1
 	}
 
 	return &MaxPerFileFromLinter{
@@ -35,7 +33,7 @@ func (*MaxPerFileFromLinter) Name() string {
 }
 
 func (p *MaxPerFileFromLinter) Process(issues []result.Issue) ([]result.Issue, error) {
-	return filterIssuesUnsafe(issues, func(issue *result.Issue) bool {
+	return filterIssues(issues, func(issue *result.Issue) bool {
 		limit := p.maxPerFileFromLinterConfig[issue.FromLinter]
 		if limit == 0 {
 			return true

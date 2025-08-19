@@ -2,7 +2,7 @@ package govet
 
 import (
 	"slices"
-	"strings"
+	"sort"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/appends"
@@ -40,7 +40,6 @@ import (
 	"golang.org/x/tools/go/analysis/passes/slog"
 	"golang.org/x/tools/go/analysis/passes/sortslice"
 	"golang.org/x/tools/go/analysis/passes/stdmethods"
-	"golang.org/x/tools/go/analysis/passes/stdversion"
 	"golang.org/x/tools/go/analysis/passes/stringintconv"
 	"golang.org/x/tools/go/analysis/passes/structtag"
 	"golang.org/x/tools/go/analysis/passes/testinggoroutine"
@@ -51,7 +50,6 @@ import (
 	"golang.org/x/tools/go/analysis/passes/unsafeptr"
 	"golang.org/x/tools/go/analysis/passes/unusedresult"
 	"golang.org/x/tools/go/analysis/passes/unusedwrite"
-	"golang.org/x/tools/go/analysis/passes/waitgroup"
 
 	"github.com/golangci/golangci-lint/pkg/config"
 	"github.com/golangci/golangci-lint/pkg/goanalysis"
@@ -91,7 +89,6 @@ var (
 		slog.Analyzer,
 		sortslice.Analyzer,
 		stdmethods.Analyzer,
-		stdversion.Analyzer,
 		stringintconv.Analyzer,
 		structtag.Analyzer,
 		testinggoroutine.Analyzer,
@@ -102,10 +99,9 @@ var (
 		unsafeptr.Analyzer,
 		unusedresult.Analyzer,
 		unusedwrite.Analyzer,
-		waitgroup.Analyzer,
 	}
 
-	// https://github.com/golang/go/blob/go1.23.0/src/cmd/vet/main.go#L55-L87
+	// https://github.com/golang/go/blob/b56645a87b28840a180d64077877cb46570b4176/src/cmd/vet/main.go#L49-L81
 	defaultAnalyzers = []*analysis.Analyzer{
 		appends.Analyzer,
 		asmdecl.Analyzer,
@@ -130,7 +126,6 @@ var (
 		sigchanyzer.Analyzer,
 		slog.Analyzer,
 		stdmethods.Analyzer,
-		stdversion.Analyzer,
 		stringintconv.Analyzer,
 		structtag.Analyzer,
 		testinggoroutine.Analyzer,
@@ -164,8 +159,8 @@ func New(settings *config.GovetSettings) *goanalysis.Linter {
 }
 
 func analyzersFromConfig(settings *config.GovetSettings) []*analysis.Analyzer {
-	logAnalyzers("All available analyzers", allAnalyzers)
-	logAnalyzers("Default analyzers", defaultAnalyzers)
+	debugAnalyzersListf(allAnalyzers, "All available analyzers")
+	debugAnalyzersListf(defaultAnalyzers, "Default analyzers")
 
 	if settings == nil {
 		return defaultAnalyzers
@@ -178,19 +173,19 @@ func analyzersFromConfig(settings *config.GovetSettings) []*analysis.Analyzer {
 		}
 	}
 
-	logAnalyzers("Enabled by config analyzers", enabledAnalyzers)
+	debugAnalyzersListf(enabledAnalyzers, "Enabled by config analyzers")
 
 	return enabledAnalyzers
 }
 
 func isAnalyzerEnabled(name string, cfg *config.GovetSettings, defaultAnalyzers []*analysis.Analyzer) bool {
-	// TODO(ldez) remove loopclosure when go1.24
+	// TODO(ldez) remove loopclosure when go1.23
 	if name == loopclosure.Analyzer.Name && config.IsGoGreaterThanOrEqual(cfg.Go, "1.22") {
 		return false
 	}
 
 	// Keeping for backward compatibility.
-	if cfg.CheckShadowing != nil && *cfg.CheckShadowing && name == shadow.Analyzer.Name {
+	if cfg.CheckShadowing && name == shadow.Analyzer.Name {
 		return true
 	}
 
@@ -212,7 +207,7 @@ func isAnalyzerEnabled(name string, cfg *config.GovetSettings, defaultAnalyzers 
 	}
 }
 
-func logAnalyzers(message string, analyzers []*analysis.Analyzer) {
+func debugAnalyzersListf(analyzers []*analysis.Analyzer, message string) {
 	if !isDebug {
 		return
 	}
@@ -222,7 +217,7 @@ func logAnalyzers(message string, analyzers []*analysis.Analyzer) {
 		analyzerNames = append(analyzerNames, a.Name)
 	}
 
-	slices.Sort(analyzerNames)
+	sort.Strings(analyzerNames)
 
-	debugf("%s (%d): %s", message, len(analyzerNames), strings.Join(analyzerNames, ", "))
+	debugf("%s (%d): %s", message, len(analyzerNames), analyzerNames)
 }

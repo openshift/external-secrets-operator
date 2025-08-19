@@ -5,6 +5,8 @@
 // Indexed package import.
 // See iexport.go for the export data format.
 
+// This file is a copy of $GOROOT/src/go/internal/gcimporter/iimport.go.
+
 package gcimporter
 
 import (
@@ -16,7 +18,6 @@ import (
 	"go/types"
 	"io"
 	"math/big"
-	"slices"
 	"sort"
 	"strings"
 
@@ -315,7 +316,7 @@ func iimportCommon(fset *token.FileSet, getPackages GetPackagesFunc, data []byte
 		pkgs = pkgList[:1]
 
 		// record all referenced packages as imports
-		list := slices.Clone(pkgList[1:])
+		list := append(([]*types.Package)(nil), pkgList[1:]...)
 		sort.Sort(byPath(list))
 		pkgs[0].SetImports(list)
 	}
@@ -401,7 +402,7 @@ type iimporter struct {
 	indent int // for tracing support
 }
 
-func (p *iimporter) trace(format string, args ...any) {
+func (p *iimporter) trace(format string, args ...interface{}) {
 	if !trace {
 		// Call sites should also be guarded, but having this check here allows
 		// easily enabling/disabling debug trace statements.
@@ -672,9 +673,7 @@ func (r *importReader) obj(name string) {
 	case varTag:
 		typ := r.typ()
 
-		v := types.NewVar(pos, r.currPkg, name, typ)
-		typesinternal.SetVarKind(v, typesinternal.PackageVar)
-		r.declare(v)
+		r.declare(types.NewVar(pos, r.currPkg, name, typ))
 
 	default:
 		errorf("unexpected tag: %v", tag)
@@ -1112,9 +1111,3 @@ func (r *importReader) byte() byte {
 	}
 	return x
 }
-
-type byPath []*types.Package
-
-func (a byPath) Len() int           { return len(a) }
-func (a byPath) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byPath) Less(i, j int) bool { return a[i].Path() < a[j].Path() }

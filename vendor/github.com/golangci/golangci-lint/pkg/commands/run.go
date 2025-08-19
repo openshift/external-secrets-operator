@@ -8,13 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,9 +24,11 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.uber.org/automaxprocs/maxprocs"
+	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
 	"github.com/golangci/golangci-lint/internal/cache"
+	"github.com/golangci/golangci-lint/internal/pkgcache"
 	"github.com/golangci/golangci-lint/pkg/config"
 	"github.com/golangci/golangci-lint/pkg/exitcodes"
 	"github.com/golangci/golangci-lint/pkg/fsutils"
@@ -151,7 +152,7 @@ func (c *runCommand) persistentPreRunE(cmd *cobra.Command, args []string) error 
 		return err
 	}
 
-	c.log.Infof("%s", c.buildInfo.String())
+	c.log.Infof(c.buildInfo.String())
 
 	loader := config.NewLoader(c.log.Child(logutils.DebugKeyConfigReader), c.viper, cmd.Flags(), c.opts.LoaderOptions, c.cfg, args)
 
@@ -186,10 +187,6 @@ func (c *runCommand) persistentPostRunE(_ *cobra.Command, _ []string) error {
 }
 
 func (c *runCommand) preRunE(_ *cobra.Command, args []string) error {
-	if c.cfg.GetConfigDir() != "" && c.cfg.Version != "" {
-		return errors.New("you are using a configuration file for golangci-lint v2 with golangci-lint v1: please use golangci-lint v2")
-	}
-
 	dbManager, err := lintersdb.NewManager(c.log.Child(logutils.DebugKeyLintersDB), c.cfg,
 		lintersdb.NewLinterBuilder(), lintersdb.NewPluginModuleBuilder(c.log), lintersdb.NewPluginGoBuilder(c.log))
 	if err != nil {
@@ -198,7 +195,7 @@ func (c *runCommand) preRunE(_ *cobra.Command, args []string) error {
 
 	c.dbManager = dbManager
 
-	printer, err := printers.NewPrinter(c.log, &c.cfg.Output, c.reportData, c.cfg.GetBasePath())
+	printer, err := printers.NewPrinter(c.log, &c.cfg.Output, c.reportData)
 	if err != nil {
 		return err
 	}
@@ -212,7 +209,7 @@ func (c *runCommand) preRunE(_ *cobra.Command, args []string) error {
 
 	sw := timeutils.NewStopwatch("pkgcache", c.log.Child(logutils.DebugKeyStopwatch))
 
-	pkgCache, err := cache.NewCache(sw, c.log.Child(logutils.DebugKeyPkgCache))
+	pkgCache, err := pkgcache.NewCache(sw, c.log.Child(logutils.DebugKeyPkgCache))
 	if err != nil {
 		return fmt.Errorf("failed to build packages cache: %w", err)
 	}
@@ -221,7 +218,7 @@ func (c *runCommand) preRunE(_ *cobra.Command, args []string) error {
 
 	pkgLoader := lint.NewPackageLoader(c.log.Child(logutils.DebugKeyLoader), c.cfg, args, c.goenv, guard)
 
-	c.contextBuilder = lint.NewContextBuilder(c.cfg, pkgLoader, pkgCache, guard)
+	c.contextBuilder = lint.NewContextBuilder(c.cfg, pkgLoader, c.fileCache, pkgCache, guard)
 
 	if err = initHashSalt(c.buildInfo.Version, c.cfg); err != nil {
 		return fmt.Errorf("failed to init hash salt: %w", err)
@@ -242,21 +239,14 @@ func (c *runCommand) execute(_ *cobra.Command, args []string) {
 	needTrackResources := logutils.IsVerbose() || c.opts.PrintResourcesUsage
 
 	trackResourcesEndCh := make(chan struct{})
-
-	// Note: this defer must be before ctx.cancel defer
-	defer func() {
-		// wait until resource tracking finished to print properly
-		if needTrackResources {
+	defer func() { // XXX: this defer must be before ctx.cancel defer
+		if needTrackResources { // wait until resource tracking finished to print properly
 			<-trackResourcesEndCh
 		}
 	}()
 
-	ctx := context.Background()
-	if c.cfg.Run.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.cfg.Run.Timeout)
-		defer cancel()
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Run.Timeout)
+	defer cancel()
 
 	if needTrackResources {
 		go watchResources(ctx, trackResourcesEndCh, c.log, c.debugf)
@@ -456,7 +446,8 @@ func (c *runCommand) printStats(issues []result.Issue) {
 
 	c.cmd.Printf("%d issues:\n", len(issues))
 
-	keys := slices.Sorted(maps.Keys(stats))
+	keys := maps.Keys(stats)
+	sort.Strings(keys)
 
 	for _, key := range keys {
 		c.cmd.Printf("* %s: %d\n", key, stats[key])
@@ -649,7 +640,7 @@ func initHashSalt(version string, cfg *config.Config) error {
 
 	b := bytes.NewBuffer(binSalt)
 	b.Write(configSalt)
-	cache.SetSalt(b)
+	cache.SetSalt(b.Bytes())
 	return nil
 }
 

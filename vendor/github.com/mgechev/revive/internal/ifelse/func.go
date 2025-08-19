@@ -42,8 +42,10 @@ func ExprCall(expr *ast.ExprStmt) (Call, bool) {
 
 // String returns the function name with package qualifier (if any)
 func (f Call) String() string {
-	if f.Pkg != "" {
+	switch {
+	case f.Pkg != "":
 		return fmt.Sprintf("%s.%s", f.Pkg, f.Name)
+	default:
+		return f.Name
 	}
-	return f.Name
 }

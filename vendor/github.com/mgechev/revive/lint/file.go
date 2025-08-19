@@ -2,7 +2,6 @@ package lint
 
 import (
 	"bytes"
-	"errors"
 	"go/ast"
 	"go/parser"
 	"go/printer"
@@ -49,7 +48,7 @@ func (f *File) ToPosition(pos token.Pos) token.Position {
 }
 
 // Render renders a node.
-func (f *File) Render(x any) string {
+func (f *File) Render(x interface{}) string {
 	var buf bytes.Buffer
 	if err := printer.Fprint(&buf, f.Pkg.fset, x); err != nil {
 		panic(err)
@@ -97,7 +96,7 @@ func (f *File) isMain() bool {
 
 const directiveSpecifyDisableReason = "specify-disable-reason"
 
-func (f *File) lint(rules []Rule, config Config, failures chan Failure) error {
+func (f *File) lint(rules []Rule, config Config, failures chan Failure) {
 	rulesConfig := config.Rules
 	_, mustSpecifyDisableReason := config.Directives[directiveSpecifyDisableReason]
 	disabledIntervals := f.disabledIntervals(rules, mustSpecifyDisableReason, failures)
@@ -108,10 +107,6 @@ func (f *File) lint(rules []Rule, config Config, failures chan Failure) error {
 		}
 		currentFailures := currentRule.Apply(f, ruleConfig.Arguments)
 		for idx, failure := range currentFailures {
-			if failure.IsInternal() {
-				return errors.New(failure.Failure)
-			}
-
 			if failure.RuleName == "" {
 				failure.RuleName = currentRule.Name()
 			}
@@ -127,7 +122,6 @@ func (f *File) lint(rules []Rule, config Config, failures chan Failure) error {
 			}
 		}
 	}
-	return nil
 }
 
 type enableDisableConfig struct {
@@ -146,10 +140,10 @@ const (
 var re = regexp.MustCompile(directiveRE)
 
 func (f *File) disabledIntervals(rules []Rule, mustSpecifyDisableReason bool, failures chan Failure) disabledIntervalsMap {
-	enabledDisabledRulesMap := map[string][]enableDisableConfig{}
+	enabledDisabledRulesMap := make(map[string][]enableDisableConfig)
 
 	getEnabledDisabledIntervals := func() disabledIntervalsMap {
-		result := disabledIntervalsMap{}
+		result := make(disabledIntervalsMap)
 
 		for ruleName, disabledArr := range enabledDisabledRulesMap {
 			ruleResult := []DisabledInterval{}
@@ -194,17 +188,16 @@ func (f *File) disabledIntervals(rules []Rule, mustSpecifyDisableReason bool, fa
 		enabledDisabledRulesMap[name] = existing
 	}
 
-	handleRules := func(_, modifier string, isEnabled bool, line int, ruleNames []string) []DisabledInterval {
+	handleRules := func(filename, modifier string, isEnabled bool, line int, ruleNames []string) []DisabledInterval {
 		var result []DisabledInterval
 		for _, name := range ruleNames {
-			switch modifier {
-			case "line":
+			if modifier == "line" {
 				handleConfig(isEnabled, line, name)
 				handleConfig(!isEnabled, line, name)
-			case "next-line":
+			} else if modifier == "next-line" {
 				handleConfig(isEnabled, line+1, name)
 				handleConfig(!isEnabled, line+1, name)
-			default:
+			} else {
 				handleConfig(isEnabled, line, name)
 			}
 		}
@@ -267,21 +260,20 @@ func (File) filterFailures(failures []Failure, disabledIntervals disabledInterva
 		intervals, ok := disabledIntervals[failure.RuleName]
 		if !ok {
 			result = append(result, failure)
-			continue
-		}
-
-		include := true
-		for _, interval := range intervals {
-			intStart := interval.From.Line
-			intEnd := interval.To.Line
-			if (fStart >= intStart && fStart <= intEnd) ||
-				(fEnd >= intStart && fEnd <= intEnd) {
-				include = false
-				break
+		} else {
+			include := true
+			for _, interval := range intervals {
+				intStart := interval.From.Line
+				intEnd := interval.To.Line
+				if (fStart >= intStart && fStart <= intEnd) ||
+					(fEnd >= intStart && fEnd <= intEnd) {
+					include = false
+					break
+				}
 			}
-		}
-		if include {
-			result = append(result, failure)
+			if include {
+				result = append(result, failure)
+			}
 		}
 	}
 	return result

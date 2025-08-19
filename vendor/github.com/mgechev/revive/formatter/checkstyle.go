@@ -45,7 +45,7 @@ func (*Checkstyle) Format(failures <-chan lint.Failure, config lint.Config) (str
 		}
 		fn := failure.GetFilename()
 		if issues[fn] == nil {
-			issues[fn] = []issue{}
+			issues[fn] = make([]issue, 0)
 		}
 		issues[fn] = append(issues[fn], iss)
 	}

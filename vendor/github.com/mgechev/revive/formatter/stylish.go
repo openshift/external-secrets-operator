@@ -22,12 +22,11 @@ func (*Stylish) Name() string {
 
 func formatFailure(failure lint.Failure, severity lint.Severity) []string {
 	fString := color.CyanString(failure.Failure)
-	fURL := ruleDescriptionURL(failure.RuleName)
-	fName := color.RedString(fURL)
+	fName := color.RedString("https://revive.run/r#" + failure.RuleName)
 	lineColumn := failure.Position
 	pos := fmt.Sprintf("(%d, %d)", lineColumn.Start.Line, lineColumn.Start.Column)
 	if severity == lint.SeverityWarning {
-		fName = color.YellowString(fURL)
+		fName = color.YellowString("https://revive.run/r#" + failure.RuleName)
 	}
 	return []string{failure.GetFilename(), pos, fName, fString}
 }
@@ -51,7 +50,7 @@ func (*Stylish) Format(failures <-chan lint.Failure, config lint.Config) (string
 		ps = "problem"
 	}
 
-	fileReport := map[string][][]string{}
+	fileReport := make(map[string][][]string)
 
 	for _, row := range result {
 		if _, ok := fileReport[row[0]]; !ok {
@@ -78,12 +77,11 @@ func (*Stylish) Format(failures <-chan lint.Failure, config lint.Config) (string
 
 	suffix := fmt.Sprintf(" %d %s (%d errors) (%d warnings)", total, ps, totalErrors, total-totalErrors)
 
-	switch {
-	case total > 0 && totalErrors > 0:
+	if total > 0 && totalErrors > 0 {
 		suffix = color.RedString("\n ✖" + suffix)
-	case total > 0 && totalErrors == 0:
+	} else if total > 0 && totalErrors == 0 {
 		suffix = color.YellowString("\n ✖" + suffix)
-	default:
+	} else {
 		suffix, output = "", ""
 	}
 

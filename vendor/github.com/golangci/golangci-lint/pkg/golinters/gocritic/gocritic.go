@@ -5,23 +5,25 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"maps"
+	"path/filepath"
 	"reflect"
 	"runtime"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/go-critic/go-critic/checkers"
 	gocriticlinter "github.com/go-critic/go-critic/linter"
 	_ "github.com/quasilyte/go-ruleguard/dsl"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/golangci/golangci-lint/pkg/config"
 	"github.com/golangci/golangci-lint/pkg/goanalysis"
-	"github.com/golangci/golangci-lint/pkg/golinters/internal"
 	"github.com/golangci/golangci-lint/pkg/lint/linter"
 	"github.com/golangci/golangci-lint/pkg/logutils"
+	"github.com/golangci/golangci-lint/pkg/result"
 )
 
 const linterName = "gocritic"
@@ -32,6 +34,9 @@ var (
 )
 
 func New(settings *config.GoCriticSettings) *goanalysis.Linter {
+	var mu sync.Mutex
+	var resIssues []goanalysis.Issue
+
 	wrapper := &goCriticWrapper{
 		sizes: types.SizesFor("gc", runtime.GOARCH),
 	}
@@ -40,10 +45,18 @@ func New(settings *config.GoCriticSettings) *goanalysis.Linter {
 		Name: linterName,
 		Doc:  goanalysis.TheOnlyanalyzerDoc,
 		Run: func(pass *analysis.Pass) (any, error) {
-			err := wrapper.run(pass)
+			issues, err := wrapper.run(pass)
 			if err != nil {
 				return nil, err
 			}
+
+			if len(issues) == 0 {
+				return nil, nil
+			}
+
+			mu.Lock()
+			resIssues = append(resIssues, issues...)
+			mu.Unlock()
 
 			return nil, nil
 		},
@@ -58,19 +71,19 @@ Dynamic rules are written declaratively with AST patterns, filters, report messa
 		nil,
 	).
 		WithContextSetter(func(context *linter.Context) {
-			wrapper.replacer = strings.NewReplacer(
-				internal.PlaceholderBasePath, context.Cfg.GetBasePath(),
-				internal.PlaceholderConfigDir, context.Cfg.GetConfigDir(), //nolint:staticcheck // It must be removed in v2.
-			)
+			wrapper.configDir = context.Cfg.GetConfigDir()
 
 			wrapper.init(context.Log, settings)
+		}).
+		WithIssuesReporter(func(*linter.Context) []goanalysis.Issue {
+			return resIssues
 		}).
 		WithLoadMode(goanalysis.LoadModeTypesInfo)
 }
 
 type goCriticWrapper struct {
 	settingsWrapper *settingsWrapper
-	replacer        *strings.Replacer
+	configDir       string
 	sizes           types.Sizes
 	once            sync.Once
 }
@@ -98,9 +111,9 @@ func (w *goCriticWrapper) init(logger logutils.Log, settings *config.GoCriticSet
 	w.settingsWrapper = settingsWrapper
 }
 
-func (w *goCriticWrapper) run(pass *analysis.Pass) error {
+func (w *goCriticWrapper) run(pass *analysis.Pass) ([]goanalysis.Issue, error) {
 	if w.settingsWrapper == nil {
-		return errors.New("the settings wrapper is nil")
+		return nil, errors.New("the settings wrapper is nil")
 	}
 
 	linterCtx := gocriticlinter.NewContext(pass.Fset, w.sizes)
@@ -109,14 +122,19 @@ func (w *goCriticWrapper) run(pass *analysis.Pass) error {
 
 	enabledCheckers, err := w.buildEnabledCheckers(linterCtx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	linterCtx.SetPackageInfo(pass.TypesInfo, pass.Pkg)
 
-	runOnPackage(pass, enabledCheckers, pass.Files)
+	pkgIssues := runOnPackage(linterCtx, enabledCheckers, pass.Files)
 
-	return nil
+	issues := make([]goanalysis.Issue, 0, len(pkgIssues))
+	for i := range pkgIssues {
+		issues = append(issues, goanalysis.NewIssue(&pkgIssues[i], pass))
+	}
+
+	return issues, nil
 }
 
 func (w *goCriticWrapper) buildEnabledCheckers(linterCtx *gocriticlinter.Context) ([]*gocriticlinter.Checker, error) {
@@ -136,7 +154,6 @@ func (w *goCriticWrapper) buildEnabledCheckers(linterCtx *gocriticlinter.Context
 		if err != nil {
 			return nil, err
 		}
-
 		enabledCheckers = append(enabledCheckers, c)
 	}
 
@@ -167,7 +184,8 @@ func (w *goCriticWrapper) configureCheckerInfo(
 				info.Name, k)
 		}
 
-		supportedKeys := slices.Sorted(maps.Keys(info.Params))
+		supportedKeys := maps.Keys(info.Params)
+		sort.Strings(supportedKeys)
 
 		return fmt.Errorf("checker %s config param %s doesn't exist, all existing: %s",
 			info.Name, k, supportedKeys)
@@ -190,42 +208,53 @@ func (w *goCriticWrapper) normalizeCheckerParamsValue(p any) any {
 		return rv.Bool()
 	case reflect.String:
 		// Perform variable substitution.
-		return w.replacer.Replace(rv.String())
+		return strings.ReplaceAll(rv.String(), "${configDir}", w.configDir)
 	default:
 		return p
 	}
 }
 
-func runOnPackage(pass *analysis.Pass, checks []*gocriticlinter.Checker, files []*ast.File) {
+func runOnPackage(linterCtx *gocriticlinter.Context, checks []*gocriticlinter.Checker, files []*ast.File) []result.Issue {
+	var res []result.Issue
 	for _, f := range files {
-		runOnFile(pass, f, checks)
+		filename := filepath.Base(linterCtx.FileSet.Position(f.Pos()).Filename)
+		linterCtx.SetFileInfo(filename, f)
+
+		issues := runOnFile(linterCtx, f, checks)
+		res = append(res, issues...)
 	}
+	return res
 }
 
-func runOnFile(pass *analysis.Pass, f *ast.File, checks []*gocriticlinter.Checker) {
+func runOnFile(linterCtx *gocriticlinter.Context, f *ast.File, checks []*gocriticlinter.Checker) []result.Issue {
+	var res []result.Issue
+
 	for _, c := range checks {
 		// All checkers are expected to use *lint.Context
 		// as read-only structure, so no copying is required.
 		for _, warn := range c.Check(f) {
-			diag := analysis.Diagnostic{
-				Pos:      warn.Pos,
-				Category: c.Info.Name,
-				Message:  fmt.Sprintf("%s: %s", c.Info.Name, warn.Text),
+			pos := linterCtx.FileSet.Position(warn.Pos)
+			issue := result.Issue{
+				Pos:        pos,
+				Text:       fmt.Sprintf("%s: %s", c.Info.Name, warn.Text),
+				FromLinter: linterName,
 			}
 
 			if warn.HasQuickFix() {
-				diag.SuggestedFixes = []analysis.SuggestedFix{{
-					TextEdits: []analysis.TextEdit{{
-						Pos:     warn.Suggestion.From,
-						End:     warn.Suggestion.To,
-						NewText: warn.Suggestion.Replacement,
-					}},
-				}}
+				issue.Replacement = &result.Replacement{
+					Inline: &result.InlineFix{
+						StartCol:  pos.Column - 1,
+						Length:    int(warn.Suggestion.To - warn.Suggestion.From),
+						NewString: string(warn.Suggestion.Replacement),
+					},
+				}
 			}
 
-			pass.Report(diag)
+			res = append(res, issue)
 		}
 	}
+
+	return res
 }
 
 type goCriticChecks[T any] map[string]T
@@ -268,7 +297,8 @@ func newSettingsWrapper(settings *config.GoCriticSettings, logger logutils.Log) 
 		}
 	}
 
-	allTagsSorted := slices.Sorted(maps.Keys(allChecksByTag))
+	allTagsSorted := maps.Keys(allChecksByTag)
+	sort.Strings(allTagsSorted)
 
 	return &settingsWrapper{
 		GoCriticSettings:                settings,
@@ -296,7 +326,6 @@ func (s *settingsWrapper) InferEnabledChecks() {
 	s.debugChecksInitialState()
 
 	enabledByDefaultChecks, disabledByDefaultChecks := s.buildEnabledAndDisabledByDefaultChecks()
-
 	debugChecksListf(enabledByDefaultChecks, "Enabled by default")
 	debugChecksListf(disabledByDefaultChecks, "Disabled by default")
 
@@ -317,8 +346,7 @@ func (s *settingsWrapper) InferEnabledChecks() {
 
 	if len(s.EnabledTags) != 0 {
 		enabledFromTags := s.expandTagsToChecks(s.EnabledTags)
-
-		debugChecksListf(enabledFromTags, "Enabled by config tags %s", s.EnabledTags)
+		debugChecksListf(enabledFromTags, "Enabled by config tags %s", sprintSortedStrings(s.EnabledTags))
 
 		for _, check := range enabledFromTags {
 			enabledChecks[check] = struct{}{}
@@ -339,8 +367,7 @@ func (s *settingsWrapper) InferEnabledChecks() {
 
 	if len(s.DisabledTags) != 0 {
 		disabledFromTags := s.expandTagsToChecks(s.DisabledTags)
-
-		debugChecksListf(disabledFromTags, "Disabled by config tags %s", s.DisabledTags)
+		debugChecksListf(disabledFromTags, "Disabled by config tags %s", sprintSortedStrings(s.DisabledTags))
 
 		for _, check := range disabledFromTags {
 			delete(enabledChecks, check)
@@ -361,7 +388,6 @@ func (s *settingsWrapper) InferEnabledChecks() {
 
 	s.inferredEnabledChecks = enabledChecks
 	s.inferredEnabledChecksLowerCased = normalizeMap(s.inferredEnabledChecks)
-
 	s.debugChecksFinalState()
 }
 
@@ -555,7 +581,10 @@ func debugChecksListf(checks []string, format string, args ...any) {
 		return
 	}
 
-	v := slices.Sorted(slices.Values(checks))
+	debugf("%s checks (%d): %s", fmt.Sprintf(format, args...), len(checks), sprintSortedStrings(checks))
+}
 
-	debugf("%s checks (%d): %s", fmt.Sprintf(format, args...), len(checks), strings.Join(v, ", "))
+func sprintSortedStrings(v []string) string {
+	sort.Strings(slices.Clone(v))
+	return fmt.Sprint(v)
 }

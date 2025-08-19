@@ -4,13 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/parser"
 	"go/scanner"
 	"go/types"
 	"os"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -18,7 +16,6 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/golangci/golangci-lint/pkg/goanalysis/load"
-	"github.com/golangci/golangci-lint/pkg/goutil"
 	"github.com/golangci/golangci-lint/pkg/logutils"
 )
 
@@ -67,7 +64,7 @@ func (lp *loadingPackage) analyze(loadMode LoadMode, loadSem chan struct{}) {
 		// Unblock depending on actions and propagate error.
 		for _, act := range lp.actions {
 			close(act.analysisDoneCh)
-			act.Err = werr
+			act.err = werr
 		}
 		return
 	}
@@ -125,14 +122,13 @@ func (lp *loadingPackage) loadFromSource(loadMode LoadMode) error {
 	pkg.IllTyped = true
 
 	pkg.TypesInfo = &types.Info{
-		Types:        make(map[ast.Expr]types.TypeAndValue),
-		Instances:    make(map[*ast.Ident]types.Instance),
-		Defs:         make(map[*ast.Ident]types.Object),
-		Uses:         make(map[*ast.Ident]types.Object),
-		Implicits:    make(map[ast.Node]types.Object),
-		Selections:   make(map[*ast.SelectorExpr]*types.Selection),
-		Scopes:       make(map[ast.Node]*types.Scope),
-		FileVersions: make(map[*ast.File]string),
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Instances:  make(map[*ast.Ident]types.Instance),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+		Implicits:  make(map[ast.Node]types.Object),
+		Scopes:     make(map[ast.Node]*types.Scope),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
 	importer := func(path string) (*types.Package, error) {
@@ -154,27 +150,12 @@ func (lp *loadingPackage) loadFromSource(loadMode LoadMode) error {
 		}
 		return imp.Types, nil
 	}
-
-	var goVersion string
-	if pkg.Module != nil && pkg.Module.GoVersion != "" {
-		goVersion = "go" + strings.TrimPrefix(pkg.Module.GoVersion, "go")
-	} else {
-		var err error
-		goVersion, err = goutil.CleanRuntimeVersion()
-		if err != nil {
-			return err
-		}
-	}
-
 	tc := &types.Config{
 		Importer: importerFunc(importer),
 		Error: func(err error) {
 			pkg.Errors = append(pkg.Errors, lp.convertError(err)...)
 		},
-		GoVersion: goVersion,
-		Sizes:     types.SizesFor(build.Default.Compiler, build.Default.GOARCH),
 	}
-
 	_ = types.NewChecker(tc, pkg.Fset, pkg.Types, pkg.TypesInfo).Files(pkg.Syntax)
 	// Don't handle error here: errors are adding by tc.Error function.
 
@@ -364,12 +345,12 @@ func (lp *loadingPackage) decUse(canClearTypes bool) {
 		pass.ImportPackageFact = nil
 		pass.ExportPackageFact = nil
 		act.pass = nil
-		act.Deps = nil
-		if act.Result != nil {
+		act.deps = nil
+		if act.result != nil {
 			if isMemoryDebug {
-				debugf("%s: decUse: nilling act result of size %d bytes", act, sizeOfValueTreeBytes(act.Result))
+				debugf("%s: decUse: nilling act result of size %d bytes", act, sizeOfValueTreeBytes(act.result))
 			}
-			act.Result = nil
+			act.result = nil
 		}
 	}
 
@@ -400,7 +381,7 @@ func (lp *loadingPackage) decUse(canClearTypes bool) {
 
 	for _, act := range lp.actions {
 		if !lp.isInitial {
-			act.Package = nil
+			act.pkg = nil
 		}
 		act.packageFacts = nil
 		act.objectFacts = nil
@@ -489,7 +470,7 @@ func sizeOfReflectValueTreeBytes(rv reflect.Value, visitedPtrs map[uintptr]struc
 		return sizeOfReflectValueTreeBytes(rv.Elem(), visitedPtrs)
 	case reflect.Struct:
 		ret := 0
-		for i := range rv.NumField() {
+		for i := 0; i < rv.NumField(); i++ {
 			ret += sizeOfReflectValueTreeBytes(rv.Field(i), visitedPtrs)
 		}
 		return ret

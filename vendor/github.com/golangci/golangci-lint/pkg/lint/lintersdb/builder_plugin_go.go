@@ -1,7 +1,6 @@
 package lintersdb
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/golangci/golangci-lint/pkg/config"
-	"github.com/golangci/golangci-lint/pkg/fsutils"
 	"github.com/golangci/golangci-lint/pkg/goanalysis"
 	"github.com/golangci/golangci-lint/pkg/lint/linter"
 	"github.com/golangci/golangci-lint/pkg/logutils"
@@ -44,6 +42,8 @@ func (b *PluginGoBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 		if settings.Type != goPluginType && settings.Type != "" {
 			continue
 		}
+
+		settings := settings
 
 		lc, err := b.loadConfig(cfg, name, &settings)
 		if err != nil {
@@ -83,21 +83,8 @@ func (b *PluginGoBuilder) loadConfig(cfg *config.Config, name string, settings *
 // or the linter does not implement the AnalyzerPlugin interface.
 func (b *PluginGoBuilder) getAnalyzerPlugin(cfg *config.Config, path string, settings any) ([]*analysis.Analyzer, error) {
 	if !filepath.IsAbs(path) {
-		// Hack for compatibility:
-		// the previous default (v1) was `cfg` but `fsutils.GetBasePath` defaults on `wd`.
-		// TODO(ldez): should be removed in v2.
-		relativePathMode := cfg.Run.RelativePathMode
-		if relativePathMode == "" {
-			relativePathMode = fsutils.RelativePathModeCfg
-		}
-
-		basePath, err := fsutils.GetBasePath(context.Background(), relativePathMode, cfg.GetConfigDir())
-		if err != nil {
-			return nil, fmt.Errorf("get base path: %w", err)
-		}
-
 		// resolve non-absolute paths relative to config file's directory
-		path = filepath.Join(basePath, path)
+		path = filepath.Join(cfg.GetConfigDir(), path)
 	}
 
 	plug, err := plugin.Open(path)

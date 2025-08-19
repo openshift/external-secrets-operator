@@ -44,8 +44,9 @@ func (k BranchKind) Deviates() bool {
 		return false
 	case Return, Continue, Break, Goto, Panic, Exit:
 		return true
+	default:
+		panic("invalid kind")
 	}
-	panic("invalid kind")
 }
 
 // Branch returns a Branch with the given kind
@@ -57,21 +58,22 @@ func (k BranchKind) String() string {
 	case Empty:
 		return ""
 	case Regular:
-		return ""
+		return "..."
 	case Return:
-		return "return"
+		return "... return"
 	case Continue:
-		return "continue"
+		return "... continue"
 	case Break:
-		return "break"
+		return "... break"
 	case Goto:
-		return "goto"
+		return "... goto"
 	case Panic:
-		return "panic()"
+		return "... panic()"
 	case Exit:
-		return "os.Exit()"
+		return "... os.Exit()"
+	default:
+		panic("invalid kind")
 	}
-	panic("invalid kind")
 }
 
 // LongString returns a longer form string representation
@@ -93,6 +95,7 @@ func (k BranchKind) LongString() string {
 		return "a function call that panics"
 	case Exit:
 		return "a function call that exits the program"
+	default:
+		panic("invalid kind")
 	}
-	panic("invalid kind")
 }

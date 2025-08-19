@@ -9,7 +9,7 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// ErrorfRule suggests using `fmt.Errorf` instead of `errors.New(fmt.Sprintf())`.
+// ErrorfRule lints given else constructs.
 type ErrorfRule struct{}
 
 // Apply applies the rule to given file.
@@ -69,7 +69,7 @@ func (w lintErrorf) Visit(n ast.Node) ast.Visitor {
 	}
 
 	failure := lint.Failure{
-		Category:   lint.FailureCategoryErrors,
+		Category:   "errors",
 		Node:       n,
 		Confidence: 1,
 		Failure:    fmt.Sprintf("should replace %s(fmt.Sprintf(...)) with %s.Errorf(...)", w.file.Render(se), errorfPrefix),

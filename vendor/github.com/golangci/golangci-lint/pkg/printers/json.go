@@ -8,13 +8,12 @@ import (
 	"github.com/golangci/golangci-lint/pkg/result"
 )
 
-// JSON prints issues in a JSON representation.
 type JSON struct {
-	rd *report.Data
+	rd *report.Data // TODO(ldez) should be drop in v2. Only use by JSON reporter.
 	w  io.Writer
 }
 
-func NewJSON(w io.Writer, rd *report.Data) *JSON {
+func NewJSON(rd *report.Data, w io.Writer) *JSON {
 	return &JSON{
 		rd: rd,
 		w:  w,

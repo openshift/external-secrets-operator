@@ -2,8 +2,6 @@ package wsl
 
 import (
 	"flag"
-	"go/ast"
-	"go/token"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -32,7 +30,6 @@ func defaultConfig() *Configuration {
 		ForceCuddleErrCheckAndAssign:     false,
 		ForceExclusiveShortDeclarations:  false,
 		StrictAppend:                     true,
-		IncludeGenerated:                 false,
 		AllowCuddleWithCalls:             []string{"Lock", "RLock"},
 		AllowCuddleWithRHS:               []string{"Unlock", "RUnlock"},
 		ErrorVariableNames:               []string{"err"},
@@ -67,7 +64,6 @@ func (wa *wslAnalyzer) flags() flag.FlagSet {
 	flags.BoolVar(&wa.config.ForceCuddleErrCheckAndAssign, "force-err-cuddling", false, "Force cuddling of error checks with error var assignment")
 	flags.BoolVar(&wa.config.ForceExclusiveShortDeclarations, "force-short-decl-cuddling", false, "Force short declarations to cuddle by themselves")
 	flags.BoolVar(&wa.config.StrictAppend, "strict-append", true, "Strict rules for append")
-	flags.BoolVar(&wa.config.IncludeGenerated, "include-generated", false, "Include generated files")
 	flags.IntVar(&wa.config.ForceCaseTrailingWhitespaceLimit, "force-case-trailing-whitespace", 0, "Force newlines for case blocks > this number.")
 
 	flags.Var(&multiStringValue{slicePtr: &wa.config.AllowCuddleWithCalls}, "allow-cuddle-with-calls", "Comma separated list of idents that can have cuddles after")
@@ -79,17 +75,8 @@ func (wa *wslAnalyzer) flags() flag.FlagSet {
 
 func (wa *wslAnalyzer) run(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
-		filename := getFilename(pass.Fset, file)
+		filename := pass.Fset.PositionFor(file.Pos(), false).Filename
 		if !strings.HasSuffix(filename, ".go") {
-			continue
-		}
-
-		// if the file is related to cgo the filename of the unadjusted position is a not a '.go' file.
-		fn := pass.Fset.PositionFor(file.Pos(), false).Filename
-
-		// The file is skipped if the "unadjusted" file is a Go file, and it's a generated file (ex: "_test.go" file).
-		// The other non-Go files are skipped by the first 'if' with the adjusted position.
-		if !wa.config.IncludeGenerated && ast.IsGenerated(file) && strings.HasSuffix(fn, ".go") {
 			continue
 		}
 
@@ -133,7 +120,7 @@ type multiStringValue struct {
 // Set implements the flag.Value interface and will overwrite the pointer to the
 // slice with a new pointer after splitting the flag by comma.
 func (m *multiStringValue) Set(value string) error {
-	var s []string
+	s := []string{}
 
 	for _, v := range strings.Split(value, ",") {
 		s = append(s, strings.TrimSpace(v))
@@ -151,13 +138,4 @@ func (m *multiStringValue) String() string {
 	}
 
 	return strings.Join(*m.slicePtr, ", ")
-}
-
-func getFilename(fset *token.FileSet, file *ast.File) string {
-	filename := fset.PositionFor(file.Pos(), true).Filename
-	if !strings.HasSuffix(filename, ".go") {
-		return fset.PositionFor(file.Pos(), false).Filename
-	}
-
-	return filename
 }
