@@ -91,8 +91,6 @@ rules:
   resources:
   - customresourcedefinitions
   verbs:
-  - create
-  - delete
   - get
   - patch
   - update
@@ -250,44 +248,9 @@ rules:
   - update
 - apiGroups:
   - rbac.authorization.k8s.io
-  resourceNames:
-  - external-secrets-cert-controller
-  - external-secrets-controller
-  resources:
-  - clusterrolebindings
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - rbac.authorization.k8s.io
   resources:
   - clusterrolebindings
   - clusterroles
-  verbs:
-  - list
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resourceNames:
-  - external-secrets-cert-controller
-  - external-secrets-controller
-  - external-secrets-edit
-  - external-secrets-servicebindings
-  - external-secrets-view
-  resources:
-  - clusterroles
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
   - rolebindings
   - roles
   verbs:

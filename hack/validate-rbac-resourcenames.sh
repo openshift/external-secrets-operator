@@ -109,20 +109,20 @@ validate_deployments() {
     validate_resource_type "Deployments" "deployments" "Deployment" "extract_asset_names"
 }
 
-validate_clusterroles() {
-    validate_resource_type "ClusterRoles" "clusterroles" "ClusterRole" "extract_asset_names"
-}
-
-validate_clusterrolebindings() {
-    validate_resource_type "ClusterRoleBindings" "clusterrolebindings" "ClusterRoleBinding" "extract_asset_names"
-}
-
 validate_webhooks() {
     validate_resource_type "ValidatingWebhookConfigurations" "validatingwebhookconfigurations" "ValidatingWebhookConfiguration" "extract_asset_names"
 }
 
 validate_crds() {
     validate_resource_type "CustomResourceDefinitions" "customresourcedefinitions" "" "extract_crd_names"
+}
+
+validate_roles() {
+    validate_resource_type "Roles" "roles" "Role" "extract_asset_names"
+}
+
+validate_rolebindings() {
+    validate_resource_type "RoleBindings" "rolebindings" "RoleBinding" "extract_asset_names"
 }
 
 main() {
@@ -133,13 +133,13 @@ main() {
     
     validate_deployments || exit_code=1
     echo
-    validate_clusterroles || exit_code=1
-    echo
-    validate_clusterrolebindings || exit_code=1
-    echo
     validate_webhooks || exit_code=1
     echo
     validate_crds || exit_code=1
+    echo
+    validate_roles || exit_code=1
+    echo
+    validate_rolebindings || exit_code=1
     echo
     
     if [[ $exit_code -eq 0 ]]; then
