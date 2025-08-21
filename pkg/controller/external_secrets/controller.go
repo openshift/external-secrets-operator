@@ -97,8 +97,8 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch
 
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=list;watch
-// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;create;update;patch,resourceNames=externalsecret-validate;secretstore-validate
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=create;update;patch,resourceNames=externalsecret-validate;secretstore-validate
 // +kubebuilder:rbac:groups="",resources=events;secrets;services;serviceaccounts,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;create;update,resourceNames=external-secrets;external-secrets-cert-controller;external-secrets-webhook;bitwarden-sdk-server
@@ -108,8 +108,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups="",resources=endpoints,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=list;watch
-// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;update;patch,resourceNames=externalsecrets.external-secrets.io;secretstores.external-secrets.io;clustersecretstores.external-secrets.io;clusterexternalsecrets.external-secrets.io;pushsecrets.external-secrets.io;clusterpushsecrets.external-secrets.io;acraccesstokens.generators.external-secrets.io;clustergenerators.generators.external-secrets.io;ecrauthorizationtokens.generators.external-secrets.io;gcraccesstokens.generators.external-secrets.io;generatorstates.generators.external-secrets.io;githubaccesstokens.generators.external-secrets.io;grafanas.generators.external-secrets.io;mfas.generators.external-secrets.io;passwords.generators.external-secrets.io;quayaccesstokens.generators.external-secrets.io;sshkeys.generators.external-secrets.io;stssessiontokens.generators.external-secrets.io;uuids.generators.external-secrets.io;vaultdynamicsecrets.generators.external-secrets.io;webhooks.generators.external-secrets.io;externalsecrets.operator.openshift.io;externalsecretsmanagers.operator.openshift.io
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets;clustersecretstores;clusterpushsecrets;externalsecrets;secretstores;pushsecrets,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/finalizers;clustersecretstores/finalizers;externalsecrets/finalizers;pushsecrets/finalizers;secretstores/finalizers;clusterpushsecrets/finalizers,verbs=get;update;patch
 // +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/status;clustersecretstores/status;externalsecrets/status;pushsecrets/status;secretstores/status;clusterpushsecrets/status,verbs=get;update;patch

@@ -41,6 +41,7 @@ rules:
   resources:
   - validatingwebhookconfigurations
   verbs:
+  - get
   - list
   - watch
 - apiGroups:
@@ -52,7 +53,6 @@ rules:
   - validatingwebhookconfigurations
   verbs:
   - create
-  - get
   - patch
   - update
 - apiGroups:
@@ -60,40 +60,11 @@ rules:
   resources:
   - customresourcedefinitions
   verbs:
+  - get
   - list
-  - watch
-- apiGroups:
-  - apiextensions.k8s.io
-  resourceNames:
-  - acraccesstokens.generators.external-secrets.io
-  - clusterexternalsecrets.external-secrets.io
-  - clustergenerators.generators.external-secrets.io
-  - clusterpushsecrets.external-secrets.io
-  - clustersecretstores.external-secrets.io
-  - ecrauthorizationtokens.generators.external-secrets.io
-  - externalsecrets.external-secrets.io
-  - externalsecrets.operator.openshift.io
-  - externalsecretsmanagers.operator.openshift.io
-  - gcraccesstokens.generators.external-secrets.io
-  - generatorstates.generators.external-secrets.io
-  - githubaccesstokens.generators.external-secrets.io
-  - grafanas.generators.external-secrets.io
-  - mfas.generators.external-secrets.io
-  - passwords.generators.external-secrets.io
-  - pushsecrets.external-secrets.io
-  - quayaccesstokens.generators.external-secrets.io
-  - secretstores.external-secrets.io
-  - sshkeys.generators.external-secrets.io
-  - stssessiontokens.generators.external-secrets.io
-  - uuids.generators.external-secrets.io
-  - vaultdynamicsecrets.generators.external-secrets.io
-  - webhooks.generators.external-secrets.io
-  resources:
-  - customresourcedefinitions
-  verbs:
-  - get
   - patch
   - update
+  - watch
 - apiGroups:
   - apps
   resources:
