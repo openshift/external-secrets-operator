@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -78,7 +79,15 @@ func (r *Reconciler) createOrApplyControllerRBACResources(es *operatorv1alpha1.E
 // the main external-secrets operand cert-controller.
 func (r *Reconciler) createOrApplyCertControllerRBACResources(es *operatorv1alpha1.ExternalSecrets, serviceAccountName string, resourceLabels map[string]string, recon bool) error {
 	if isCertManagerConfigEnabled(es) {
-		r.log.V(4).Info("skipping cert-controller rbac resources reconciliation, as cert-manager config is enabled")
+		r.log.V(4).Info("deleting cert-controller rbac resources if exists, as cert-manager config is enabled")
+		for asset, assetType := range map[string]client.Object{
+			certControllerClusterRoleAssetName:        &rbacv1.ClusterRole{},
+			certControllerClusterRoleBindingAssetName: &rbacv1.ClusterRoleBinding{},
+		} {
+			if err := common.DeleteObject(r.ctx, r.CtrlClient, assetType, asset); err != nil {
+				return fmt.Errorf("failed to delete cert-controller rbac resource: %w", err)
+			}
+		}
 		return nil
 	}
 
