@@ -289,6 +289,53 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		{
 			name: "rolebindings creation successful",
 		},
+		{
+			name: "cert-controller clusterrole deletion fails",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *rbacv1.ClusterRole:
+						sa := testClusterRole(certControllerClusterRoleAssetName)
+						sa.DeepCopyInto(o)
+					}
+					return true, nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError
+				})
+			},
+			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
+				if es.Spec.ExternalSecretsConfig == nil {
+					es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+						CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
+							Enabled: "true",
+						},
+					}
+				}
+			},
+			wantErr: `failed to delete cert-controller rbac resource: test client error`,
+		},
+		{
+			name: "cert-controller clusterrole deletion is successful when object not exists",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError
+				})
+			},
+			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
+				if es.Spec.ExternalSecretsConfig == nil {
+					es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+						CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
+							Enabled: "true",
+						},
+					}
+				}
+			},
+			wantErr: ``,
+		},
 	}
 
 	for _, tt := range tests {

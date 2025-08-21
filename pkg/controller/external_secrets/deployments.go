@@ -48,6 +48,9 @@ func (r *Reconciler) createOrApplyDeployments(externalsecrets *operatorv1alpha1.
 	// Apply deployments based on the specified conditions.
 	for _, d := range deployments {
 		if !d.condition {
+			if err := common.DeleteObject(r.ctx, r.CtrlClient, &appsv1.Deployment{}, d.assetName); err != nil {
+				return fmt.Errorf("failed to delete deployment resource: %w", err)
+			}
 			continue
 		}
 		if err := r.createOrApplyDeploymentFromAsset(externalsecrets, d.assetName, resourceLabels, externalsecretsCreateRecon); err != nil {

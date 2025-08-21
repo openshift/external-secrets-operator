@@ -116,6 +116,30 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 			wantErr: "failed to create serviceaccount external-secrets/external-secrets: test client error",
 		},
+		{
+			name: "cert-controller serviceaccount skipped when cert-manager enabled",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *corev1.ServiceAccount:
+						sa := testServiceAccount(certControllerServiceAccountAssetName)
+						sa.DeepCopyInto(o)
+					}
+					return true, nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError
+				})
+			},
+			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
+				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
+						Enabled: "true",
+					},
+				}
+			},
+			wantErr: `failed to delete cert-controller serviceaccount: test client error`,
+		},
 	}
 
 	for _, tt := range tests {

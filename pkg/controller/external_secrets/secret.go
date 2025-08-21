@@ -14,7 +14,10 @@ import (
 func (r *Reconciler) createOrApplySecret(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
 	// secrets are only created if isCertManagerConfig is not enabled
 	if isCertManagerConfigEnabled(es) {
-		r.log.V(4).Info("cert-manager config is enabled, skipping webhook component secret resource creation")
+		r.log.V(4).Info("cert-manager config is enabled, deleting webhook component secret resource if exists")
+		if err := common.DeleteObject(r.ctx, r.CtrlClient, &corev1.Secret{}, webhookTLSSecretAssetName); err != nil {
+			return fmt.Errorf("failed to delete secret resource of webhook component: %w", err)
+		}
 		return nil
 	}
 
