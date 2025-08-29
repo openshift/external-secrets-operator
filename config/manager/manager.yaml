@@ -55,6 +55,14 @@ spec:
           - --v=$(OPERATOR_LOG_LEVEL)
           - --leader-elect
           - --health-probe-bind-address=:8081
+          - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
+        ports:
+          - containerPort: 8443
+            name: https
+            protocol: TCP
+          - containerPort: 8080
+            name: http
+            protocol: TCP
         env:
           - name: WATCH_NAMESPACE
             valueFrom:
@@ -78,6 +86,8 @@ spec:
             value: ghcr.io/external-secrets/bitwarden-sdk-server:v0.5.1
           - name: BITWARDEN_SDK_SERVER_IMAGE_VERSION
             value: 0.5.1
+          - name: METRICS_BIND_ADDRESS
+            value: ":8443"
         image: controller:latest
         name: manager
         securityContext:
