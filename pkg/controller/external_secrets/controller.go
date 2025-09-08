@@ -108,10 +108,10 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets;clustersecretstores;externalsecrets;pushsecrets;secretstores,verbs=get;list;watch;create;update;patch;delete;deletecollection
-// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/finalizers;clustersecretstores/finalizers;externalsecrets/finalizers;pushsecrets/finalizers;secretstores/finalizers,verbs=get;update;patch
-// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/status;clustersecretstores/status;externalsecrets/status;pushsecrets/status;secretstores/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=generators.external-secrets.io,resources=acraccesstokens;clustergenerators;ecrauthorizationtokens;fakes;gcraccesstokens;generatorstates,verbs=get;list;watch;create;delete;update;patch;deletecollection
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets;clustersecretstores;clusterpushsecrets;externalsecrets;secretstores;pushsecrets,verbs=get;list;watch;create;update;patch;delete;deletecollection
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/finalizers;clustersecretstores/finalizers;externalsecrets/finalizers;pushsecrets/finalizers;secretstores/finalizers;clusterpushsecrets/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=external-secrets.io,resources=clusterexternalsecrets/status;clustersecretstores/status;externalsecrets/status;pushsecrets/status;secretstores/status;clusterpushsecrets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=generators.external-secrets.io,resources=acraccesstokens;clustergenerators;ecrauthorizationtokens;fakes;gcraccesstokens;generatorstates;sshkeys;mfas,verbs=get;list;watch;create;delete;update;patch;deletecollection
 // +kubebuilder:rbac:groups=generators.external-secrets.io,resources=githubaccesstokens;grafanas;passwords;quayaccesstokens;stssessiontokens;uuids;vaultdynamicsecrets;webhooks,verbs=get;list;watch;create;delete;update;patch;deletecollection
 
 // New is for building the reconciler instance consumed by the Reconcile method.
