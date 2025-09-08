@@ -21,12 +21,16 @@ var (
 )
 
 func (r *Reconciler) createOrApplyCertificates(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
-	if isCertManagerConfigEnabled(es) {
-		if err := r.createOrApplyCertificate(es, resourceLabels, webhookCertificateAssetName, recon); err != nil {
-			return err
-		}
+	// Only handle certificates if cert-manager is enabled
+	if !isCertManagerConfigEnabled(es) {
+		// If cert-manager is not enabled, we don't create or delete any certificates
+		return nil
 	}
 
+	// Create webhook certificate when cert-manager is enabled
+	if err := r.createOrApplyCertificate(es, resourceLabels, webhookCertificateAssetName, recon); err != nil {
+		return err
+	}
 	if isBitwardenConfigEnabled(es) {
 		bitwardenConfig := es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider
 		if bitwardenConfig.SecretRef.Name != "" {
@@ -35,7 +39,12 @@ func (r *Reconciler) createOrApplyCertificates(es *operatorv1alpha1.ExternalSecr
 		if err := r.createOrApplyCertificate(es, resourceLabels, bitwardenCertificateAssetName, recon); err != nil {
 			return err
 		}
+	} else {
+		if err := common.DeleteObject(r.ctx, r.CtrlClient, &certmanagerv1.Certificate{}, bitwardenCertificateAssetName); err != nil {
+			return fmt.Errorf("failed to delete bitwarden certificate: %w", err)
+		}
 	}
+
 	return nil
 }
 
