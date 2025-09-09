@@ -56,6 +56,7 @@ spec:
           - --leader-elect
           - --health-probe-bind-address=:8081
           - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
+          - --metrics-secure=$(METRICS_SECURE)
         ports:
           - containerPort: 8443
             name: https
@@ -88,6 +89,8 @@ spec:
             value: 0.5.1
           - name: METRICS_BIND_ADDRESS
             value: ":8443"
+          - name: METRICS_SECURE
+            value: "true"
         image: controller:latest
         name: manager
         securityContext:

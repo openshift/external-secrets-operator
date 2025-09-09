@@ -7,6 +7,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: controller-manager-metrics-service
   namespace: system
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+    service.beta.openshift.io/serving-cert-secret-name: metrics-serving-cert
 spec:
   ports:
   - name: https
