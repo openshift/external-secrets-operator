@@ -30,7 +30,7 @@ func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.Ext
 	for _, service := range servicesToCreate {
 		if !service.condition {
 			if err := common.DeleteObject(r.ctx, r.CtrlClient, &corev1.Service{}, service.assetName); err != nil {
-				return fmt.Errorf("failed to delete bitwarden-server service: %w", err)
+				return fmt.Errorf("failed to delete service object: %w", err)
 			}
 			continue
 		}

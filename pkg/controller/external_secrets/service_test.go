@@ -142,7 +142,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					},
 				}
 			},
-			wantErr: `failed to delete bitwarden-server service: test client error`,
+			wantErr: `failed to delete service object: test client error`,
 		},
 	}
 
