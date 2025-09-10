@@ -19,11 +19,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +34,7 @@ import (
 	"k8s.io/klog/v2/textlogger"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -43,6 +43,18 @@ import (
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/operator"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	// metricsCertFileName is the certificate filename, which should be present
+	// at the passed `metrics-cert-dir` path.
+	metricsCertFileName = "tls.crt"
+
+	// metricsKeyFileName is the private key filename, which should be present
+	// at the passed `metrics-cert-dir` path.
+	metricsKeyFileName = "tls.key"
+
+	openshiftCACertificateFile = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 )
 
 var (
@@ -64,15 +76,18 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var secureMetrics bool
-	var enableHTTP2 bool
-	var metricsTLSOpts []func(*tls.Config)
-	var webhookTLSOpts []func(*tls.Config)
-	var logLevel int
-	var metricsCerts string
+	var (
+		enableLeaderElection bool
+		probeAddr            string
+		logLevel             int
+		enableHTTP2          bool
+		secureMetrics        bool
+		metricsAddr          string
+		metricsCerts         string
+		metricsTLSOpts       []func(*tls.Config)
+		webhookTLSOpts       []func(*tls.Config)
+	)
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -84,28 +99,21 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.IntVar(&logLevel, "v", 1, "operator log verbosity")
-	flag.StringVar(&metricsCerts, "metrics-cert-dir", "", "Secret name containing the certificates for the metrics server which should be present in operator namespace. If not provided self-signed certificates can be used")
+	flag.StringVar(&metricsCerts, "metrics-cert-dir", "",
+		"Secret name containing the certificates for the metrics server which should be present in operator namespace. "+
+			"If not provided self-signed certificates will be used")
 	flag.Parse()
 
 	logConfig := textlogger.NewConfig(textlogger.Verbosity(logLevel))
 	ctrl.SetLogger(textlogger.NewLogger(logConfig))
 
-	// if the enable-http2 flag is false (the default), http/2 should be disabled
-	// due to its vulnerabilities. More specifically, disabling http/2 will
-	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
-	// Rapid Reset CVEs. For more information see:
-	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
-	// - https://github.com/advisories/GHSA-4374-p667-p6c8
-	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
-		c.NextProtos = []string{"http/1.1"}
-	}
-
-	//setMetricsServerName := func(c *tls.Config) {
-	//	c.ServerName = "external-secrets-operator-controller-manager-metrics-service.external-secrets-operator.svc.cluster.local"
-	//}
-
 	if !enableHTTP2 {
+		// if the enable-http2 flag is false (the default), http/2 should be disabled
+		// due to its vulnerabilities.
+		disableHTTP2 := func(c *tls.Config) {
+			setupLog.Info("disabling http/2 for both metrics and webhook servers")
+			c.NextProtos = []string{"http/1.1"}
+		}
 		metricsTLSOpts = append(metricsTLSOpts, disableHTTP2)
 		webhookTLSOpts = append(webhookTLSOpts, disableHTTP2)
 	}
@@ -119,22 +127,37 @@ func main() {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:   metricsAddr,
-		SecureServing: secureMetrics,
+		BindAddress: metricsAddr,
 	}
 
 	if secureMetrics {
+		setupLog.Info("setting up secure metrics server")
+		metricsServerOptions.SecureServing = secureMetrics
 		if metricsCerts != "" {
-			setupLog.Info("checking metrics server with TLS", metricsCerts)
-			if _, err := os.Stat(metricsCerts); os.IsNotExist(err) {
-				setupLog.Error(err, "certificate directory does not exist", "certDir", metricsCerts)
+			if _, err := os.Stat(filepath.Join(metricsCerts, metricsCertFileName)); err != nil {
+				setupLog.Error(err, "metrics certificate file not found at configured path")
 				os.Exit(1)
 			}
+			if _, err := os.Stat(filepath.Join(metricsCerts, metricsKeyFileName)); err != nil {
+				setupLog.Error(err, "metrics private key file not found at configured path")
+				os.Exit(1)
+			}
+			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
 			metricsServerOptions.CertDir = metricsCerts
-			metricsServerOptions.CertName = filepath.Join(metricsCerts, "tls.crt")
-			metricsServerOptions.KeyName = filepath.Join(metricsCerts, "tls.key")
-
+			metricsServerOptions.CertName = metricsCertFileName
+			metricsServerOptions.KeyName = metricsKeyFileName
 		}
+		metricsTLSOpts = append(metricsTLSOpts, func(c *tls.Config) {
+			certPool := x509.NewCertPool()
+			openshiftCACert, err := os.ReadFile(openshiftCACertificateFile)
+			if err != nil {
+				setupLog.Error(err, "failed to read OpenShift CA certificate")
+				os.Exit(1)
+			}
+			setupLog.Info("using openshift service CA for metrics client verification")
+			certPool.AppendCertsFromPEM(openshiftCACert)
+			c.RootCAs = certPool
+		})
 		metricsServerOptions.TLSOpts = metricsTLSOpts
 
 		// FilterProvider is used to protect the metrics endpoint with authn/authz.
@@ -143,7 +166,6 @@ func main() {
 		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/metrics/filters#WithAuthenticationAndAuthorization
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
-	fmt.Printf("checking metrics server options %+v \n", metricsServerOptions)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
