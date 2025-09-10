@@ -15,6 +15,6 @@ resources:
 - externalsecrets_viewer_role.yaml
 # The /metrics endpoint protected by AuthenticationAuthorizer
 # part of the operator, require SAR and token reviews.
-- auth_proxy_role.yaml
-- auth_proxy_role_binding.yaml
-- auth_proxy_client_clusterrole.yaml
+- metrics_auth_role.yaml
+- metrics_auth_role_binding.yaml
+- metrics_reader_role.yaml

@@ -7,3 +7,9 @@ rules:
   - "/metrics"
   verbs:
   - get
+- apiGroups:
+  - ""
+  resources:
+  - "services/metrics"
+  verbs:
+  - get
