@@ -135,9 +135,20 @@ update-operand-manifests: helm yq
 .PHONY: update-operand-manifests
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
+E2E_TIMEOUT ?= 1h
+# E2E_GINKGO_LABEL_FILTER is ginkgo label query for selecting tests. See
+# https://onsi.github.io/ginkgo/#spec-labels. The default is to run tests on the AWS platform.
+E2E_GINKGO_LABEL_FILTER ?= "Platform: isSubsetOf {AWS}"
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
 test-e2e:
-	go test ./test/e2e/ -v -ginkgo.v
+	go test \
+	-timeout $(E2E_TIMEOUT) \
+	-count 1 \
+	-v \
+	-p 1 \
+	-tags e2e \
+	./test/e2e \
+	-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -224,6 +235,11 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
+## Location to story temp outputs
+OUTPUTS_PATH ?= $(shell pwd)/_output
+$(OUTPUTS_PATH):
+	mkdir -p $(OUTPUTS_PATH)
+
 ## Tool Binaries
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -233,6 +249,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 YQ = $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
 REFERENCE_DOC_GENERATOR ?= $(LOCALBIN)/crd-ref-docs
+GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 
 ## Tool Versions
 YQ_VERSION = v4.45.2
@@ -261,6 +278,10 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: crd-ref-docs
 crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
 	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),github.com/elastic/crd-ref-docs)
+
+.PHONY: govulncheck
+govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
+	$(call go-install-tool,$(GOVULNCHECK),golang.org/x/vuln/cmd/govulncheck)
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -370,7 +391,7 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated
+verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated govulnscan
 
 ## update the relevant data based on new changes.
 .PHONY: update
@@ -385,3 +406,12 @@ check-git-diff: update
 .PHONY: docs
 docs: crd-ref-docs
 	$(REFERENCE_DOC_GENERATOR) --source-path=api/v1alpha1/ --renderer=markdown --config=hack/docs/config.yaml --output-path=docs/api_reference.md
+
+## perform vulnerabilities scan using govulncheck.
+.PHONY: govulnscan
+#GO-2025-3547 and GO-2025-3521 containing code is not directly used in the operator, hence will be ignored.
+KNOWN_VULNERABILITIES:="GO-2025-3547|GO-2025-3521"
+govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
+	- $(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1
+	$(eval reported_vulnerabilities = $(strip $(shell grep "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results | ([ -n $KNOWN_VULNERABILITIES ] && grep -Ev $(KNOWN_VULNERABILITIES) || cat) | wc -l)))
+	@(if [ $(reported_vulnerabilities) -ne 0 ]; then echo -e "\n-- ERROR -- $(reported_vulnerabilities) new vulnerabilities reported, please check\n"; exit 1; fi)
