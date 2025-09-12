@@ -21,20 +21,53 @@ var (
 )
 
 func (r *Reconciler) createOrApplyCertificates(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
-	if isCertManagerConfigEnabled(es) {
-		if err := r.createOrApplyCertificate(es, resourceLabels, webhookCertificateAssetName, recon); err != nil {
-			return err
-		}
+	// Handle webhook certificate
+	if err := r.handleWebhookCertificate(es, resourceLabels, recon); err != nil {
+		return err
 	}
 
+	// Handle bitwarden certificate
+	if err := r.handleBitwardenCertificate(es, resourceLabels, recon); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// handleWebhookCertificate manages the webhook certificate lifecycle
+func (r *Reconciler) handleWebhookCertificate(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+	// Only create webhook certificate if cert-manager is enabled
+	if !isCertManagerConfigEnabled(es) {
+		return nil
+	}
+
+	return r.createOrApplyCertificate(es, resourceLabels, webhookCertificateAssetName, recon)
+}
+
+// handleBitwardenCertificate manages the bitwarden certificate lifecycle
+func (r *Reconciler) handleBitwardenCertificate(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, recon bool) error {
+	// Bitwarden certificate handling is independent of cert-manager configuration
+	// Only handle bitwarden certificates when bitwarden is enabled
 	if isBitwardenConfigEnabled(es) {
 		bitwardenConfig := es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider
+		
+		// If a secret reference is provided, validate it exists instead of creating a certificate
 		if bitwardenConfig.SecretRef.Name != "" {
-			return r.assertSecretRefExists(es, es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider)
+			return r.assertSecretRefExists(es, bitwardenConfig)
 		}
-		if err := r.createOrApplyCertificate(es, resourceLabels, bitwardenCertificateAssetName, recon); err != nil {
-			return err
-		}
+		
+		// Create or update bitwarden certificate
+		return r.createOrApplyCertificate(es, resourceLabels, bitwardenCertificateAssetName, recon)
+	}
+
+	// If bitwarden is not enabled, clean up any existing bitwarden certificate
+	return r.cleanupBitwardenCertificate()
+}
+
+// cleanupBitwardenCertificate removes the bitwarden certificate when bitwarden is disabled
+func (r *Reconciler) cleanupBitwardenCertificate() error {
+	if err := common.DeleteObject(r.ctx, r.CtrlClient, &certmanagerv1.Certificate{}, bitwardenCertificateAssetName); err != nil {
+		return fmt.Errorf("failed to delete bitwarden certificate: %w", err)
 	}
 	return nil
 }

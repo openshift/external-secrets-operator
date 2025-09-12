@@ -74,6 +74,16 @@ rules:
   - cert-manager.io
   resources:
   - certificates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
   - clusterissuers
   - issuers
   verbs:

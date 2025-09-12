@@ -480,6 +480,10 @@ func DeleteObject(ctx context.Context, ctrlClient operatorclient.CtrlClient, obj
 		o = DecodeSecretObjBytes(assets.MustAsset(assetName))
 	case *corev1.ServiceAccount:
 		o = DecodeServiceAccountObjBytes(assets.MustAsset(assetName))
+	case *corev1.Service:
+		o = DecodeServiceObjBytes(assets.MustAsset(assetName))
+	case *certmanagerv1.Certificate:
+		o = DecodeCertificateObjBytes(assets.MustAsset(assetName))
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", obj))
 	}

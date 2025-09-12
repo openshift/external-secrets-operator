@@ -440,6 +440,91 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			recon: false,
 		},
+		{
+			name: "bitwarden certificate deleted when bitwarden disabled",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if ns.Name == serviceExternalSecretWebhookName {
+						return false, nil // webhook certificate doesn't exist, will be created
+					}
+					if ns.Name == "bitwarden-tls-certs" {
+						// Bitwarden certificate exists and needs to be deleted
+						cert := testCertificate(bitwardenCertificateAssetName)
+						cert.DeepCopyInto(obj.(*certmanagerv1.Certificate))
+						return true, nil
+					}
+					if ns.Name == "test-issuer" {
+						return true, nil // issuer exists
+					}
+					return false, nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError // Simulates deletion failure
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					cert, ok := obj.(*certmanagerv1.Certificate)
+					if !ok {
+						return fmt.Errorf("expected *certmanagerv1.Certificate, got %T", obj)
+					}
+					if cert.Name == serviceExternalSecretWebhookName {
+						return nil // webhook certificate creation succeeds
+					}
+					t.Errorf("Unexpected create call for %s", cert.Name)
+					return nil
+				})
+				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
+					if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
+						return nil
+					}
+					return fmt.Errorf("object not found")
+				})
+			},
+			es: func(es *v1alpha1.ExternalSecrets) {
+				es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled = "true"
+				es.Spec.ExternalSecretsConfig.CertManagerConfig.IssuerRef.Name = "test-issuer"
+				// Bitwarden is disabled (explicitly set to false), so deletion should be triggered
+				es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
+					Enabled: "false",
+				}
+			},
+			recon: false,
+			wantErr: "failed to delete bitwarden certificate: test client error",
+		},
+		{
+			name: "no certificate operations when cert-manager disabled",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				// Mock functions that should NOT be called
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					t.Errorf("Exists() should not be called when cert-manager is disabled, but was called for %s", ns.Name)
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					t.Errorf("Create() should not be called when cert-manager is disabled")
+					return nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					t.Errorf("Delete() should not be called when cert-manager is disabled")
+					return nil
+				})
+				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
+					t.Errorf("Get() should not be called when cert-manager is disabled")
+					return nil
+				})
+			},
+			es: func(es *v1alpha1.ExternalSecrets) {
+				// cert-manager is explicitly disabled (or not configured)
+				// This should trigger early return in createOrApplyCertificates
+				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
+					// No CertManagerConfig means cert-manager is disabled
+					BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{
+						Enabled: "true", // Even with Bitwarden enabled, no cert operations should happen
+					},
+				}
+			},
+			recon: false,
+			// No error expected - should return successfully without any operations
+		},
 	}
 
 	for _, tt := range tests {

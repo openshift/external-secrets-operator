@@ -112,6 +112,38 @@ func TestCreateOrApplyServices(t *testing.T) {
 			},
 			wantErr: `failed to create service external-secrets/external-secrets-webhook: test client error`,
 		},
+		{
+			name: "bitwarden service deleted when bitwarden disabled",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *corev1.Service:
+						if ns.Name == "bitwarden-sdk-server" {
+							svc := testService(bitwardenServiceAssetName)
+							svc.DeepCopyInto(o)
+							return true, nil // Service exists and needs to be deleted
+						}
+						// For webhook service
+						svc := testService("external-secrets/resources/service_external-secrets-webhook.yml")
+						svc.DeepCopyInto(o)
+						return true, nil
+					}
+					return false, nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError // Simulates deletion failure
+				})
+			},
+			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
+				// Bitwarden is disabled (default), so deletion should be triggered
+				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
+					BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
+						Enabled: "false", // This triggers deletion logic
+					},
+				}
+			},
+			wantErr: `failed to delete service object: test client error`,
+		},
 	}
 
 	for _, tt := range tests {
