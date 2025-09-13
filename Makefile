@@ -158,6 +158,13 @@ lint: golangci-lint ## Run golangci-lint linter
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+# Ignore the exit code of the fix lint, it will always error as there are unfixed issues
+# that cannot be fixed from historic commits.
+.PHONY: verify-lint-fix
+verify-lint-fix:
+	make lint-fix 2>/dev/null || true
+	git diff --exit-code
+
 ##@ Build
 
 build-operator: ## Build operator binary, no additional checks or code generation
@@ -250,6 +257,7 @@ YQ = $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
 REFERENCE_DOC_GENERATOR ?= $(LOCALBIN)/crd-ref-docs
 GOVULNCHECK ?= $(LOCALBIN)/govulncheck
+KUBEAPI_LINT = $(LOCALBIN)/kube-api-linter.so
 
 ## Tool Versions
 YQ_VERSION = v4.45.2
@@ -258,26 +266,30 @@ HELM_VERSION ?= v3.17.3
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5)
+	$(call go-install-tool,$(KUSTOMIZE),./vendor/sigs.k8s.io/kustomize/kustomize/v5)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen)
+	$(call go-install-tool,$(CONTROLLER_GEN),./vendor/sigs.k8s.io/controller-tools/cmd/controller-gen)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest)
+	$(call go-install-tool,$(ENVTEST),./vendor/sigs.k8s.io/controller-runtime/tools/setup-envtest)
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint)
+	$(call go-install-tool,$(GOLANGCI_LINT),./vendor/github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
 
 .PHONY: crd-ref-docs
 crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
-	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),github.com/elastic/crd-ref-docs)
+	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),./vendor/github.com/elastic/crd-ref-docs)
+
+.PHONY: kube-api-linter
+kube-api-linter: $(LOCALBIN)
+	go build -mod=vendor -buildmode=plugin -o $(KUBEAPI_LINT) ./vendor/sigs.k8s.io/kube-api-linter/pkg/plugin
 
 .PHONY: govulncheck
 govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
@@ -285,14 +297,14 @@ govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
-# $2 - package url which can be installed
+# $2 - vendor code path of the package
 define go-install-tool
 @[ -f "$(1)" ] || { \
 set -e; \
 package=$(2) ;\
-echo "Downloading $${package}" ;\
+echo "Building $${package}" ;\
 rm -f $(1) || true ;\
-GOBIN=$(LOCALBIN) go install $${package} ;\
+go build -mod=vendor -o $(LOCALBIN) $${package} ;\
 }
 endef
 
@@ -391,7 +403,7 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt golangci-lint verify-bindata verify-bindata-assets verify-generated govulnscan
+verify: vet fmt verify-bindata verify-bindata-assets verify-generated govulnscan
 
 ## update the relevant data based on new changes.
 .PHONY: update
