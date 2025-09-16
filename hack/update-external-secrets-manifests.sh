@@ -11,9 +11,23 @@ echo "---- Downloading external-secrets manifests ${EXTERNAL_SECRETS_VERSION} --
 
 bin/helm repo add external-secrets https://charts.external-secrets.io --force-update
 # render templates with certManager enabled to fetch cert-manager specific manifests.
-bin/helm template external-secrets external-secrets/external-secrets -n external-secrets --version "${EXTERNAL_SECRETS_VERSION}" --set webhook.certManager.enabled=true --set bitwarden-sdk-server.enabled=true > ${MANIFESTS_PATH}/manifests.yaml
+bin/helm template external-secrets external-secrets/external-secrets -n external-secrets \
+	--version "${EXTERNAL_SECRETS_VERSION}" \
+	--set webhook.certManager.enabled=true \
+	--set bitwarden-sdk-server.enabled=true \
+	--set metrics.service.enabled=true \
+	--set webhook.metrics.service.enabled=true \
+	--set certController.metrics.service.enabled=false \
+	> ${MANIFESTS_PATH}/manifests.yaml
 # render templates with certManager disabled to fetch cert-controller specific manifests.
-bin/helm template external-secrets external-secrets/external-secrets -n external-secrets --version "${EXTERNAL_SECRETS_VERSION}" --set webhook.certManager.enabled=false --set bitwarden-sdk-server.enabled=true >> ${MANIFESTS_PATH}/manifests.yaml
+bin/helm template external-secrets external-secrets/external-secrets -n external-secrets \
+	--version "${EXTERNAL_SECRETS_VERSION}" \
+	--set webhook.certManager.enabled=false \
+	--set bitwarden-sdk-server.enabled=true \
+	--set metrics.service.enabled=true \
+	--set webhook.metrics.service.enabled=true \
+	--set certController.metrics.service.enabled=true \
+	>> ${MANIFESTS_PATH}/manifests.yaml
 
 echo "---- Patching manifest ----"
 
