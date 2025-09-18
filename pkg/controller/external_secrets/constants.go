@@ -88,6 +88,8 @@ const (
 	webhookTLSSecretAssetName                     = "external-secrets/resources/secret_external-secrets-webhook.yml"
 	bitwardenServiceAssetName                     = "external-secrets/resources/service_bitwarden-sdk-server.yml"
 	webhookServiceAssetName                       = "external-secrets/resources/service_external-secrets-webhook.yml"
+	metricsServiceAssetName                       = "external-secrets/resources/service_external-secrets-metrics.yml"
+	certControllerMetricsServiceAssetName         = "external-secrets/resources/service_external-secrets-cert-controller-metrics.yml"
 	controllerServiceAccountAssetName             = "external-secrets/resources/serviceaccount_external-secrets.yml"
 	bitwardenServiceAccountAssetName              = "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml"
 	certControllerServiceAccountAssetName         = "external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml"

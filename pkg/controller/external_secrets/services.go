@@ -22,6 +22,14 @@ func (r *Reconciler) createOrApplyServices(externalsecrets *operatorv1alpha1.Ext
 			condition: true,
 		},
 		{
+			assetName: metricsServiceAssetName,
+			condition: true,
+		},
+		{
+			assetName: certControllerMetricsServiceAssetName,
+			condition: !isCertManagerConfigEnabled(externalsecrets),
+		},
+		{
 			assetName: bitwardenServiceAssetName,
 			condition: isBitwardenConfigEnabled(externalsecrets),
 		},

@@ -5,6 +5,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   labels:
+    app: external-secrets-operator
     app.kubernetes.io/name: external-secrets-operator
     app.kubernetes.io/managed-by: kustomize
   name: allow-metrics-traffic
@@ -12,7 +13,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      control-plane: controller-manager
+      app: external-secrets-operator
   policyTypes:
     - Ingress
   ingress:
