@@ -18,6 +18,8 @@
 // bindata/external-secrets/resources/rolebinding_external-secrets-leaderelection.yml
 // bindata/external-secrets/resources/secret_external-secrets-webhook.yml
 // bindata/external-secrets/resources/service_bitwarden-sdk-server.yml
+// bindata/external-secrets/resources/service_external-secrets-cert-controller-metrics.yml
+// bindata/external-secrets/resources/service_external-secrets-metrics.yml
 // bindata/external-secrets/resources/service_external-secrets-webhook.yml
 // bindata/external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml
 // bindata/external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml
@@ -1153,6 +1155,82 @@ func externalSecretsResourcesService_bitwardenSdkServerYml() (*asset, error) {
 	return a, nil
 }
 
+var _externalSecretsResourcesService_externalSecretsCertControllerMetricsYml = []byte(`---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-secrets-cert-controller-metrics
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets-cert-controller
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: metrics
+      name: metrics
+  selector:
+    app.kubernetes.io/name: external-secrets-cert-controller
+    app.kubernetes.io/instance: external-secrets
+`)
+
+func externalSecretsResourcesService_externalSecretsCertControllerMetricsYmlBytes() ([]byte, error) {
+	return _externalSecretsResourcesService_externalSecretsCertControllerMetricsYml, nil
+}
+
+func externalSecretsResourcesService_externalSecretsCertControllerMetricsYml() (*asset, error) {
+	bytes, err := externalSecretsResourcesService_externalSecretsCertControllerMetricsYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/resources/service_external-secrets-cert-controller-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsResourcesService_externalSecretsMetricsYml = []byte(`---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-secrets-metrics
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: metrics
+      name: metrics
+  selector:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+`)
+
+func externalSecretsResourcesService_externalSecretsMetricsYmlBytes() ([]byte, error) {
+	return _externalSecretsResourcesService_externalSecretsMetricsYml, nil
+}
+
+func externalSecretsResourcesService_externalSecretsMetricsYml() (*asset, error) {
+	bytes, err := externalSecretsResourcesService_externalSecretsMetricsYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/resources/service_external-secrets-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _externalSecretsResourcesService_externalSecretsWebhookYml = []byte(`---
 apiVersion: v1
 kind: Service
@@ -1172,6 +1250,10 @@ spec:
       targetPort: 10250
       protocol: TCP
       name: webhook
+    - port: 8080
+      protocol: TCP
+      targetPort: metrics
+      name: metrics
   selector:
     app.kubernetes.io/name: external-secrets-webhook
     app.kubernetes.io/instance: external-secrets
@@ -1478,6 +1560,8 @@ var _bindata = map[string]func() (*asset, error){
 	"external-secrets/resources/rolebinding_external-secrets-leaderelection.yml":            externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml,
 	"external-secrets/resources/secret_external-secrets-webhook.yml":                        externalSecretsResourcesSecret_externalSecretsWebhookYml,
 	"external-secrets/resources/service_bitwarden-sdk-server.yml":                           externalSecretsResourcesService_bitwardenSdkServerYml,
+	"external-secrets/resources/service_external-secrets-cert-controller-metrics.yml":       externalSecretsResourcesService_externalSecretsCertControllerMetricsYml,
+	"external-secrets/resources/service_external-secrets-metrics.yml":                       externalSecretsResourcesService_externalSecretsMetricsYml,
 	"external-secrets/resources/service_external-secrets-webhook.yml":                       externalSecretsResourcesService_externalSecretsWebhookYml,
 	"external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml":                    externalSecretsResourcesServiceaccount_bitwardenSdkServerYml,
 	"external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml":        externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml,
@@ -1550,6 +1634,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"rolebinding_external-secrets-leaderelection.yml":            {externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml, map[string]*bintree{}},
 			"secret_external-secrets-webhook.yml":                        {externalSecretsResourcesSecret_externalSecretsWebhookYml, map[string]*bintree{}},
 			"service_bitwarden-sdk-server.yml":                           {externalSecretsResourcesService_bitwardenSdkServerYml, map[string]*bintree{}},
+			"service_external-secrets-cert-controller-metrics.yml":       {externalSecretsResourcesService_externalSecretsCertControllerMetricsYml, map[string]*bintree{}},
+			"service_external-secrets-metrics.yml":                       {externalSecretsResourcesService_externalSecretsMetricsYml, map[string]*bintree{}},
 			"service_external-secrets-webhook.yml":                       {externalSecretsResourcesService_externalSecretsWebhookYml, map[string]*bintree{}},
 			"serviceaccount_bitwarden-sdk-server.yml":                    {externalSecretsResourcesServiceaccount_bitwardenSdkServerYml, map[string]*bintree{}},
 			"serviceaccount_external-secrets-cert-controller.yml":        {externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml, map[string]*bintree{}},

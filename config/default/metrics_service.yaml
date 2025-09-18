@@ -2,16 +2,24 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
+    app: external-secrets-operator
+    svc: external-secrets-operator-controller-manager-metrics-service
     control-plane: controller-manager
     app.kubernetes.io/name: external-secrets-operator
     app.kubernetes.io/managed-by: kustomize
   name: controller-manager-metrics-service
   namespace: system
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: metrics-serving-cert
 spec:
   ports:
-  - name: https
+  - name: metrics-https
     port: 8443
     protocol: TCP
     targetPort: 8443
+  - name: metrics-http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
   selector:
-    control-plane: controller-manager
+    app: external-secrets-operator
