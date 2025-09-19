@@ -21,14 +21,15 @@ import (
 func TestCreateOrApplyDeployments(t *testing.T) {
 	tests := []struct {
 		name                  string
-		preReq                func(*Reconciler, *fakes.FakeCtrlClient)
+		preReq                func(*Reconciler, *fakes.FakeCtrlClient, **appsv1.Deployment)
 		updateExternalSecrets func(*v1alpha1.ExternalSecrets)
+		validateDeployment    func(*testing.T, *appsv1.Deployment)
 		skipEnvVar            bool
 		wantErr               string
 	}{
 		{
 			name: "deployment reconciliation successful",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -37,14 +38,39 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					}
 					return true, nil
 				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
+					}
+					return nil
+				})
 			},
 			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
 				i.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
 			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				// Validate basic deployment structure
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+				// Validate container image is updated
+				if len(deployment.Spec.Template.Spec.Containers) > 0 {
+					container := deployment.Spec.Template.Spec.Containers[0]
+					if container.Image == "" {
+						t.Error("container image should be set")
+					}
+				}
+				// Validate labels are preserved
+				if deployment.Labels == nil || len(deployment.Labels) == 0 {
+					t.Error("deployment should have labels")
+				}
+			},
 		},
 		{
 			name: "deployment reconciliation fails as image env var is empty",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -59,7 +85,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation fails while checking if exists",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *appsv1.Deployment:
@@ -72,7 +98,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation failed while restoring to desired state",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -94,7 +120,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with user custom config successful",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -102,6 +128,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						deployment.DeepCopyInto(o)
 					}
 					return true, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
+					}
+					return nil
 				})
 			},
 			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
@@ -180,10 +213,110 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					},
 				}
 			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+
+				podSpec := &deployment.Spec.Template.Spec
+
+				// Validate Affinity
+				if podSpec.Affinity == nil {
+					t.Error("Affinity should be set")
+					return
+				}
+
+				// Validate NodeAffinity
+				if podSpec.Affinity.NodeAffinity == nil ||
+					podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil ||
+					len(podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 0 {
+					t.Error("NodeAffinity should be properly configured")
+				} else {
+					term := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0]
+					if len(term.MatchExpressions) == 0 ||
+						term.MatchExpressions[0].Key != "node" ||
+						term.MatchExpressions[0].Operator != corev1.NodeSelectorOpIn ||
+						len(term.MatchExpressions[0].Values) == 0 ||
+						term.MatchExpressions[0].Values[0] != "test" {
+						t.Error("NodeAffinity match expressions should be configured correctly")
+					}
+				}
+
+				// Validate PodAffinity
+				if podSpec.Affinity.PodAffinity == nil ||
+					len(podSpec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution) == 0 {
+					t.Error("PodAffinity should be configured")
+				} else {
+					podAffinityTerm := podSpec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0]
+					if podAffinityTerm.TopologyKey != "topology.kubernetes.io/zone" {
+						t.Errorf("PodAffinity TopologyKey should be 'topology.kubernetes.io/zone', got: %s", podAffinityTerm.TopologyKey)
+					}
+				}
+
+				// Validate PodAntiAffinity
+				if podSpec.Affinity.PodAntiAffinity == nil ||
+					len(podSpec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+					t.Error("PodAntiAffinity should be configured")
+				} else {
+					weightedTerm := podSpec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution[0]
+					if weightedTerm.Weight != 100 {
+						t.Errorf("PodAntiAffinity weight should be 100, got: %d", weightedTerm.Weight)
+					}
+					if weightedTerm.PodAffinityTerm.TopologyKey != "topology.kubernetes.io/zone" {
+						t.Errorf("PodAntiAffinity TopologyKey should be 'topology.kubernetes.io/zone', got: %s", weightedTerm.PodAffinityTerm.TopologyKey)
+					}
+				}
+
+				// Validate Tolerations
+				if len(podSpec.Tolerations) == 0 {
+					t.Error("Tolerations should be set")
+				} else {
+					toleration := podSpec.Tolerations[0]
+					if toleration.Key != "type" ||
+						toleration.Operator != corev1.TolerationOpEqual ||
+						toleration.Value != "test" ||
+						toleration.Effect != corev1.TaintEffectNoSchedule {
+						t.Errorf("Toleration configuration is incorrect: %+v", toleration)
+					}
+				}
+
+				// Validate NodeSelector
+				if podSpec.NodeSelector == nil {
+					t.Error("NodeSelector should be set")
+				} else {
+					if podSpec.NodeSelector["type"] != "test" {
+						t.Errorf("NodeSelector should have type=test, got: %v", podSpec.NodeSelector)
+					}
+				}
+
+				// Validate Resources
+				if len(podSpec.Containers) == 0 {
+					t.Error("Containers should be present")
+					return
+				}
+				container := podSpec.Containers[0]
+
+				expectedCPU := resource.MustParse("100m")
+				expectedMemory := resource.MustParse("100Mi")
+
+				if !container.Resources.Requests[corev1.ResourceCPU].Equal(expectedCPU) {
+					t.Errorf("CPU request should be %v, got: %v", expectedCPU, container.Resources.Requests[corev1.ResourceCPU])
+				}
+				if !container.Resources.Requests[corev1.ResourceMemory].Equal(expectedMemory) {
+					t.Errorf("Memory request should be %v, got: %v", expectedMemory, container.Resources.Requests[corev1.ResourceMemory])
+				}
+				if !container.Resources.Limits[corev1.ResourceCPU].Equal(expectedCPU) {
+					t.Errorf("CPU limit should be %v, got: %v", expectedCPU, container.Resources.Limits[corev1.ResourceCPU])
+				}
+				if !container.Resources.Limits[corev1.ResourceMemory].Equal(expectedMemory) {
+					t.Errorf("Memory limit should be %v, got: %v", expectedMemory, container.Resources.Limits[corev1.ResourceMemory])
+				}
+			},
 		},
 		{
 			name: "deployment reconciliation fails while updating image in externalsecrets status",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch obj.(type) {
 					case *appsv1.Deployment:
@@ -194,6 +327,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
 						deployment := testDeployment(controllerDeploymentAssetName)
 						deployment.DeepCopyInto(o)
 					}
@@ -211,7 +345,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid toleration configuration",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -237,7 +371,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid nodeSelector configuration",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -257,7 +391,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid affinity configuration",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -326,7 +460,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment reconciliation with invalid resource requirement configuration",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -356,7 +490,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "cert-controller deployment deletion fails",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -382,7 +516,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "cert-controller deployment NotFound, deletion is marked successful",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
@@ -405,14 +539,112 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "bitwarden is enabled with secretRef for certificates",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						// Create a deployment with bitwarden-tls-certs volume to test volume update
+						deployment := testDeployment(certControllerDeploymentAssetName)
+						deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
+							{
+								Name: "bitwarden-tls-certs",
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: "initial-secret-name", // This should be updated by reconciler
+									},
+								},
+							},
+						}
+						// Add a bitwarden-sdk-server container to test container image update
+						deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, corev1.Container{
+							Name:  "bitwarden-sdk-server",
+							Image: "initial-bitwarden-image:latest",
+						})
+						deployment.DeepCopyInto(o)
+					}
+					return true, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
+					}
+					return nil
+				})
+			},
+			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
+				if i.Spec.ExternalSecretsConfig == nil {
+					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
+						BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{
+							Enabled: "true",
+							SecretRef: v1alpha1.SecretReference{
+								Name: "bitwarden-certs",
+							},
+						},
+						CertManagerConfig: &v1alpha1.CertManagerConfig{
+							Enabled: "true",
+						},
+					}
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+
+				// Validate that bitwarden-tls-certs volume secret name was updated
+				foundVolume := false
+				for _, volume := range deployment.Spec.Template.Spec.Volumes {
+					if volume.Name == "bitwarden-tls-certs" {
+						foundVolume = true
+						if volume.Secret == nil {
+							t.Error("bitwarden-tls-certs volume should have a secret")
+						} else if volume.Secret.SecretName != "bitwarden-certs" {
+							t.Errorf("bitwarden-tls-certs volume secret name should be updated to 'bitwarden-certs', got: %s", volume.Secret.SecretName)
+						}
+						break
+					}
+				}
+				if !foundVolume {
+					t.Error("bitwarden-tls-certs volume should exist in deployment")
+				}
+
+				// Validate that bitwarden-sdk-server container image was updated
+				foundContainer := false
+				for _, container := range deployment.Spec.Template.Spec.Containers {
+					if container.Name == "bitwarden-sdk-server" {
+						foundContainer = true
+						if container.Image == "initial-bitwarden-image:latest" {
+							t.Error("bitwarden-sdk-server container image should have been updated from initial value")
+						}
+						// The reconciler should update this to the value from environment variable
+						// We set RELATED_IMAGE_BITWARDEN_SDK_SERVER in the test
+						break
+					}
+				}
+				if !foundContainer {
+					t.Error("bitwarden-sdk-server container should exist in deployment")
+				}
+
+				// Validate basic deployment structure
+				if len(deployment.Spec.Template.Spec.Containers) == 0 {
+					t.Error("deployment should have at least one container")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := testReconciler(t)
 			mock := &fakes.FakeCtrlClient{}
+			var capturedDeployment *appsv1.Deployment
+
 			if tt.preReq != nil {
-				tt.preReq(r, mock)
+				tt.preReq(r, mock, &capturedDeployment)
 			}
 			r.CtrlClient = mock
 			externalsecrets := commontest.TestExternalSecrets()
@@ -429,11 +661,16 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyDeployments() err: %v, wantErr: %v", err, tt.wantErr)
 			}
+
 			if tt.wantErr == "" {
-				if tt.wantErr == "" {
-					if externalsecrets.Status.ExternalSecretsImage != commontest.TestExternalSecretsImageName {
-						t.Errorf("createOrApplyDeployments() got image in status: %v, want: %v", externalsecrets.Status.ExternalSecretsImage, "test-image")
-					}
+				// Validate status update
+				if externalsecrets.Status.ExternalSecretsImage != commontest.TestExternalSecretsImageName {
+					t.Errorf("createOrApplyDeployments() got image in status: %v, want: %v", externalsecrets.Status.ExternalSecretsImage, commontest.TestExternalSecretsImageName)
+				}
+
+				// Validate deployment changes if validation function is provided
+				if tt.validateDeployment != nil && capturedDeployment != nil {
+					tt.validateDeployment(t, capturedDeployment)
 				}
 			}
 		})
