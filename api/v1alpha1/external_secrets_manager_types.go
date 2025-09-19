@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -10,7 +9,7 @@ func init() {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // ExternalSecretsManagerList is a list of ExternalSecretsManager objects.
 type ExternalSecretsManagerList struct {
@@ -23,18 +22,19 @@ type ExternalSecretsManagerList struct {
 }
 
 // +genclient
+// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:path=externalsecretsmanagers,scope=Cluster,categories={external-secrets-operator, external-secrets},shortName=esm;externalsecretsmanager;esmanager
+// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:metadata:labels={"app.kubernetes.io/name=externalsecretsmanager", "app.kubernetes.io/part-of=external-secrets-operator"}
 
-// ExternalSecretsManager describes configuration and information about the deployments managed by
-// the external-secrets-operator. The name must be `cluster` as this is a singleton object allowing
-// only one instance of ExternalSecretsManager per cluster.
+// ExternalSecretsManager describes configuration and information about the deployments managed by the external-secrets-operator.
+// The name must be `cluster` as this is a singleton object allowing only one instance of ExternalSecretsManager per cluster.
 //
-// It is mainly for configuring the global options and enabling optional features, which
-// serves as a common/centralized config for managing multiple controllers of the operator. The object
-// is automatically created during the operator installation.
+// It is mainly for configuring the global options and enabling optional features, which serves as a common/centralized config for managing multiple controllers of the operator.
+// The object is automatically created during the operator installation.
 //
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'cluster'",message="ExternalSecretsManager is a singleton, .metadata.name must be 'cluster'"
 // +operator-sdk:csv:customresourcedefinitions:displayName="ExternalSecretsManager"
@@ -48,77 +48,58 @@ type ExternalSecretsManager struct {
 	// spec is the specification of the desired behavior
 	Spec ExternalSecretsManagerSpec `json:"spec,omitempty"`
 
-	// status is the most recently observed status of controllers used by
-	// External Secrets Operator.
+	// status is the most recently observed status of controllers used by External Secrets Operator.
 	Status ExternalSecretsManagerStatus `json:"status,omitempty"`
 }
 
 // ExternalSecretsManagerSpec is the specification of the desired behavior of the ExternalSecretsManager.
 type ExternalSecretsManagerSpec struct {
-	// globalConfig is for configuring the behavior of deployments that are managed
-	// by external secrets-operator.
+	// globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator.
 	// +kubebuilder:validation:Optional
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
 
-	// features is for enabling the optional operator features.
+	// optionalFeatures is for enabling the optional operator features.
+	// +patchMergeKey=name
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
 	// +kubebuilder:validation:Optional
-	Features []Feature `json:"features,omitempty"`
+	OptionalFeatures []Feature `json:"optionalFeatures,omitempty"`
 }
 
 // GlobalConfig is for configuring the external-secrets-operator behavior.
 type GlobalConfig struct {
-	// logLevel supports value range as per [kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use).
-	// +kubebuilder:default:=1
-	// +kubebuilder:validation:Minimum:=1
-	// +kubebuilder:validation:Maximum:=5
-	// +kubebuilder:validation:Optional
-	LogLevel int32 `json:"logLevel,omitempty"`
-
-	// resources is for defining the resource requirements.
-	// Cannot be updated.
-	// ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-	// +kubebuilder:validation:Optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// affinity is for setting scheduling affinity rules.
-	// ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
-	// +kubebuilder:validation:Optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// tolerations is for setting the pod tolerations.
-	// ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
-	// +kubebuilder:validation:Optional
-	// +listType=atomic
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-
-	// nodeSelector is for defining the scheduling criteria using node labels.
-	// ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
-	// +kubebuilder:validation:Optional
-	// +mapType=atomic
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// labels to apply to all resources created for external-secrets deployment.
+	// labels to apply to all resources created by the operator.
+	// This field can have a maximum of 20 entries.
 	// +mapType=granular
+	// +kubebuilder:validation:MinProperties:=0
+	// +kubebuilder:validation:MaxProperties:=20
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	CommonConfigs `json:",inline,omitempty"`
 }
 
 // Feature is for enabling the optional features.
-// Feature is for enabling the optional features.
 type Feature struct {
-	// name of the optional feature.
+	// name of the optional feature. There are no optional features currently supported.
+	// +kubebuilder:validation:Enum:=""
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// enabled determines if feature should be turned on.
+	// mode indicates the feature state.
+	// Use Enabled or Disabled to indicate the preference.
+	// Enabled: Enables the optional feature and creates resources if required.
+	// Disabled: Disables the optional feature, but will not remove any resources created.
+	// +kubebuilder:validation:Enum:=Enabled;Disabled
 	// +kubebuilder:validation:Required
-	Enabled bool `json:"enabled"`
+	Mode Mode `json:"mode"`
 }
 
 // ExternalSecretsManagerStatus is the most recently observed status of the ExternalSecretsManager.
 type ExternalSecretsManagerStatus struct {
 	// controllerStatuses holds the observed conditions of the controllers part of the operator.
-	// +patchMergeKey=type
+	// +patchMergeKey=name
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=name
@@ -134,7 +115,7 @@ type ExternalSecretsManagerStatus struct {
 type ControllerStatus struct {
 	// name of the controller for which the observed condition is recorded.
 	// +kubebuilder:validation:Required
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 
 	// conditions holds information of the current state of the external-secrets-operator controllers.
 	// +patchMergeKey=type

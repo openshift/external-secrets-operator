@@ -116,14 +116,14 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 	}
 }
 
-func testExternalSecretsForValidateWebhookConfiguration() *v1alpha1.ExternalSecrets {
-	externalSecrets := commontest.TestExternalSecrets()
-	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
-		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+func testExternalSecretsForValidateWebhookConfiguration() *v1alpha1.ExternalSecretsConfig {
+	esc := commontest.TestExternalSecretsConfig()
+	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+		ApplicationConfig: v1alpha1.ApplicationConfig{
 			CertManagerConfig: &v1alpha1.CertManagerConfig{
-				AddInjectorAnnotations: "true",
+				InjectAnnotations: "true",
 			},
 		},
 	}
-	return externalSecrets
+	return esc
 }

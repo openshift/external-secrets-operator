@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	// TestExternalSecretsResourceName is the name for ExternalSecrets test CR.
-	TestExternalSecretsResourceName = "cluster"
+	// TestExternalSecretsConfigResourceName is the name for ExternalSecretsConfig test CR.
+	TestExternalSecretsConfigResourceName = "cluster"
 
 	// TestExternalSecretsImageName is the sample image name for external-secrets operand.
 	TestExternalSecretsImageName = "registry.redhat.io/external-secrets-operator/external-secrets-operator-rhel9"
@@ -30,11 +30,11 @@ var (
 	TestClientError = fmt.Errorf("test client error")
 )
 
-// TestExternalSecrets returns a sample ExternalSecrets object.
-func TestExternalSecrets() *operatorv1alpha1.ExternalSecrets {
-	return &operatorv1alpha1.ExternalSecrets{
+// TestExternalSecretsConfig returns a sample ExternalSecretsConfig object.
+func TestExternalSecretsConfig() *operatorv1alpha1.ExternalSecretsConfig {
+	return &operatorv1alpha1.ExternalSecretsConfig{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestExternalSecretsResourceName,
+			Name: TestExternalSecretsConfigResourceName,
 		},
 	}
 }
@@ -43,7 +43,7 @@ func TestExternalSecrets() *operatorv1alpha1.ExternalSecrets {
 func TestExternalSecretsManager() *operatorv1alpha1.ExternalSecretsManager {
 	return &operatorv1alpha1.ExternalSecretsManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestExternalSecretsResourceName,
+			Name: TestExternalSecretsConfigResourceName,
 		},
 	}
 }

@@ -68,13 +68,13 @@ func TestReconcile(t *testing.T) {
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := &operatorv1alpha1.ExternalSecrets{
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := &operatorv1alpha1.ExternalSecretsConfig{
 							ObjectMeta: metav1.ObjectMeta{
-								Name: common.ExternalSecretsObjectName,
+								Name: common.ExternalSecretsConfigObjectName,
 							},
-							Spec: operatorv1alpha1.ExternalSecretsSpec{},
-							Status: operatorv1alpha1.ExternalSecretsStatus{
+							Spec: operatorv1alpha1.ExternalSecretsConfigSpec{},
+							Status: operatorv1alpha1.ExternalSecretsConfigStatus{
 								ConditionalStatus: operatorv1alpha1.ConditionalStatus{
 									Conditions: []metav1.Condition{
 										{
@@ -91,7 +91,7 @@ func TestReconcile(t *testing.T) {
 								},
 							},
 						}
-						es.DeepCopyInto(o)
+						esc.DeepCopyInto(o)
 					case *operatorv1alpha1.ExternalSecretsManager:
 						esmObj := &operatorv1alpha1.ExternalSecretsManager{
 							ObjectMeta: metav1.ObjectMeta{
@@ -137,7 +137,7 @@ func TestReconcile(t *testing.T) {
 			wantErr:                 `failed to fetch externalsecretsmanager.openshift.operator.io "/cluster" during reconciliation: externalsecretsmanager.operator.openshift.io "cluster" not found`,
 		},
 		{
-			name: "es object not found",
+			name: "externalsecretsconfig object not found",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
@@ -149,8 +149,8 @@ func TestReconcile(t *testing.T) {
 							Spec: operatorv1alpha1.ExternalSecretsManagerSpec{},
 						}
 						esmObj.DeepCopyInto(o)
-					case *operatorv1alpha1.ExternalSecrets:
-						return errors.NewNotFound(operatorv1alpha1.Resource("externalsecrets"), ns.Name)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						return errors.NewNotFound(operatorv1alpha1.Resource("externalsecretsconfigs"), ns.Name)
 					}
 					return nil
 				})
@@ -158,7 +158,7 @@ func TestReconcile(t *testing.T) {
 			expectedStatusCondition: []operatorv1alpha1.ControllerStatus{},
 		},
 		{
-			name: "es fetch fails",
+			name: "externalsecretsconfig fetch fails",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
@@ -170,14 +170,14 @@ func TestReconcile(t *testing.T) {
 							Spec: operatorv1alpha1.ExternalSecretsManagerSpec{},
 						}
 						esmObj.DeepCopyInto(o)
-					case *operatorv1alpha1.ExternalSecrets:
-						return errors.NewServerTimeout(operatorv1alpha1.Resource("externalsecrets"), "Get", int(5))
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						return errors.NewServerTimeout(operatorv1alpha1.Resource("externalsecretsconfig"), "Get", int(5))
 					}
 					return nil
 				})
 			},
 			expectedStatusCondition: []operatorv1alpha1.ControllerStatus{},
-			wantErr:                 `failed to fetch externalsecrets.openshift.operator.io "/cluster" during reconciliation: The Get operation against externalsecrets.operator.openshift.io could not be completed at this time, please try again.`,
+			wantErr:                 `failed to fetch externalsecretsconfig.openshift.operator.io "/cluster" during reconciliation: The Get operation against externalsecretsconfig.operator.openshift.io could not be completed at this time, please try again.`,
 		},
 		{
 			name: "esm reconciliation successful with new conditions",
@@ -198,13 +198,13 @@ func TestReconcile(t *testing.T) {
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := &operatorv1alpha1.ExternalSecrets{
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := &operatorv1alpha1.ExternalSecretsConfig{
 							ObjectMeta: metav1.ObjectMeta{
-								Name: common.ExternalSecretsObjectName,
+								Name: common.ExternalSecretsConfigObjectName,
 							},
-							Spec: operatorv1alpha1.ExternalSecretsSpec{},
-							Status: operatorv1alpha1.ExternalSecretsStatus{
+							Spec: operatorv1alpha1.ExternalSecretsConfigSpec{},
+							Status: operatorv1alpha1.ExternalSecretsConfigStatus{
 								ConditionalStatus: operatorv1alpha1.ConditionalStatus{
 									Conditions: []metav1.Condition{
 										{
@@ -221,7 +221,7 @@ func TestReconcile(t *testing.T) {
 								},
 							},
 						}
-						es.DeepCopyInto(o)
+						esc.DeepCopyInto(o)
 					case *operatorv1alpha1.ExternalSecretsManager:
 						esmObj := &operatorv1alpha1.ExternalSecretsManager{
 							ObjectMeta: metav1.ObjectMeta{
