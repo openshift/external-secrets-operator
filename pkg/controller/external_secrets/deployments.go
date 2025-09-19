@@ -3,7 +3,6 @@ package external_secrets
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"unsafe"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,7 +20,7 @@ import (
 )
 
 // createOrApplyDeployments ensures required Deployment resources exist and are correctly configured.
-func (r *Reconciler) createOrApplyDeployments(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
 	// Define all Deployment assets to apply based on conditions.
 	deployments := []struct {
 		assetName string
@@ -37,11 +36,11 @@ func (r *Reconciler) createOrApplyDeployments(externalsecrets *operatorv1alpha1.
 		},
 		{
 			assetName: certControllerDeploymentAssetName,
-			condition: !isCertManagerConfigEnabled(externalsecrets),
+			condition: !isCertManagerConfigEnabled(esc),
 		},
 		{
 			assetName: bitwardenDeploymentAssetName,
-			condition: isBitwardenConfigEnabled(externalsecrets),
+			condition: isBitwardenConfigEnabled(esc),
 		},
 	}
 
@@ -53,23 +52,23 @@ func (r *Reconciler) createOrApplyDeployments(externalsecrets *operatorv1alpha1.
 			}
 			continue
 		}
-		if err := r.createOrApplyDeploymentFromAsset(externalsecrets, d.assetName, resourceLabels, externalsecretsCreateRecon); err != nil {
+		if err := r.createOrApplyDeploymentFromAsset(esc, d.assetName, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
 
-	if err := r.updateImageInStatus(externalsecrets); err != nil {
-		return common.FromClientError(err, "failed to update %s/%s status with image info", externalsecrets.GetNamespace(), externalsecrets.GetName())
+	if err := r.updateImageInStatus(esc); err != nil {
+		return common.FromClientError(err, "failed to update %s/%s status with image info", esc.GetNamespace(), esc.GetName())
 	}
 
 	return nil
 }
 
-func (r *Reconciler) createOrApplyDeploymentFromAsset(externalsecrets *operatorv1alpha1.ExternalSecrets, assetName string, resourceLabels map[string]string,
-	externalsecretsCreateRecon bool,
+func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string,
+	externalSecretsConfigCreateRecon bool,
 ) error {
 
-	deployment, err := r.getDeploymentObject(assetName, externalsecrets, resourceLabels)
+	deployment, err := r.getDeploymentObject(assetName, esc, resourceLabels)
 	if err != nil {
 		return err
 	}
@@ -84,20 +83,20 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(externalsecrets *operatorv
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s deployment resource already exists", deploymentName)
 	}
-	if exist && externalsecretsCreateRecon {
-		r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s deployment resource already exists", deploymentName)
+	if exist && externalSecretsConfigCreateRecon {
+		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s deployment resource already exists", deploymentName)
 	}
 	if exist && common.HasObjectChanged(deployment, fetched) {
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
-		r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "deployment resource %s updated", deploymentName)
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s updated", deploymentName)
 	} else if !exist {
 		if err := r.Create(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to create %s deployment resource", deploymentName)
 		}
-		r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "deployment resource %s created", deploymentName)
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s created", deploymentName)
 	} else {
 		r.log.V(4).Info("deployment resource already exists and is in expected state", "name", deploymentName)
 	}
@@ -105,9 +104,9 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(externalsecrets *operatorv
 	return nil
 }
 
-func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) (*appsv1.Deployment, error) {
+func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) (*appsv1.Deployment, error) {
 	deployment := common.DecodeDeploymentObjBytes(assets.MustAsset(assetName))
-	updateNamespace(deployment, externalsecrets)
+	updateNamespace(deployment, esc)
 	common.UpdateResourceLabels(deployment, resourceLabels)
 	updatePodTemplateLabels(deployment, resourceLabels)
 
@@ -119,11 +118,11 @@ func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *oper
 	if bitwardenImage == "" {
 		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with bitwarden-sdk-server image not set", bitwardenImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
 	}
-	logLevel := getLogLevel(externalsecrets.Spec.ExternalSecretsConfig)
+	logLevel := getLogLevel(esc.Spec)
 
 	switch assetName {
 	case controllerDeploymentAssetName:
-		updateContainerSpec(deployment, externalsecrets, image, logLevel)
+		updateContainerSpec(deployment, esc, image, logLevel)
 	case webhookDeploymentAssetName:
 		updateWebhookContainerSpec(deployment, image, logLevel)
 	case certControllerDeploymentAssetName:
@@ -133,16 +132,16 @@ func (r *Reconciler) getDeploymentObject(assetName string, externalsecrets *oper
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
 	}
 
-	if err := r.updateResourceRequirement(deployment, externalsecrets); err != nil {
+	if err := r.updateResourceRequirement(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update resource requirements: %w", err)
 	}
-	if err := r.updateAffinityRules(deployment, externalsecrets); err != nil {
+	if err := r.updateAffinityRules(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update affinity rules: %w", err)
 	}
-	if err := r.updatePodTolerations(deployment, externalsecrets); err != nil {
+	if err := r.updatePodTolerations(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update pod tolerations: %w", err)
 	}
-	if err := r.updateNodeSelector(deployment, externalsecrets); err != nil {
+	if err := r.updateNodeSelector(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update node selector: %w", err)
 	}
 
@@ -176,11 +175,11 @@ func updateContainerSecurityContext(container *corev1.Container) {
 }
 
 // updateResourceRequirement sets validated resource requirements to all containers.
-func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	rscReqs := corev1.ResourceRequirements{}
-	if externalsecrets.Spec.ExternalSecretsConfig != nil && !reflect.ValueOf(externalsecrets.Spec.ExternalSecretsConfig.Resources).IsZero() {
-		externalsecrets.Spec.ExternalSecretsConfig.Resources.DeepCopyInto(&rscReqs)
-	} else if r.esm.Spec.GlobalConfig != nil && !reflect.ValueOf(r.esm.Spec.GlobalConfig.Resources).IsZero() {
+	if esc.Spec.ApplicationConfig.Resources != nil {
+		esc.Spec.ApplicationConfig.Resources.DeepCopyInto(&rscReqs)
+	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil {
 		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
 	} else {
 		return nil
@@ -207,11 +206,11 @@ func validateResourceRequirements(requirements corev1.ResourceRequirements, fldP
 }
 
 // updateNodeSelector sets and validates node selector constraints.
-func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var nodeSelector map[string]string
 
-	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.NodeSelector != nil {
-		nodeSelector = externalsecrets.Spec.ExternalSecretsConfig.NodeSelector
+	if esc.Spec.ApplicationConfig.NodeSelector != nil {
+		nodeSelector = esc.Spec.ApplicationConfig.NodeSelector
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.NodeSelector != nil {
 		nodeSelector = r.esm.Spec.GlobalConfig.NodeSelector
 	}
@@ -220,7 +219,7 @@ func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, externals
 		return nil
 	}
 
-	if err := validateNodeSelectorConfig(nodeSelector, field.NewPath("spec", "externalSecretsConfig")); err != nil {
+	if err := validateNodeSelectorConfig(nodeSelector, field.NewPath("spec")); err != nil {
 		return err
 	}
 
@@ -229,11 +228,11 @@ func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, externals
 }
 
 // updateAffinityRules sets and validates pod affinity/anti-affinity rules.
-func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var affinity *corev1.Affinity
 
-	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.Affinity != nil {
-		affinity = externalsecrets.Spec.ExternalSecretsConfig.Affinity
+	if esc.Spec.ApplicationConfig.Affinity != nil {
+		affinity = esc.Spec.ApplicationConfig.Affinity
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Affinity != nil {
 		affinity = r.esm.Spec.GlobalConfig.Affinity
 	}
@@ -242,7 +241,7 @@ func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, external
 		return nil
 	}
 
-	if err := validateAffinityRules(affinity, field.NewPath("spec", "externalSecretsConfig", "affinity")); err != nil {
+	if err := validateAffinityRules(affinity, field.NewPath("spec", "affinity")); err != nil {
 		return err
 	}
 
@@ -251,11 +250,11 @@ func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, external
 }
 
 // updatePodTolerations sets and validates pod tolerations.
-func (r *Reconciler) updatePodTolerations(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets) error {
+func (r *Reconciler) updatePodTolerations(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var tolerations []corev1.Toleration
 
-	if externalsecrets.Spec.ExternalSecretsConfig != nil && externalsecrets.Spec.ExternalSecretsConfig.Tolerations != nil {
-		tolerations = externalsecrets.Spec.ExternalSecretsConfig.Tolerations
+	if esc.Spec.ApplicationConfig.Tolerations != nil {
+		tolerations = esc.Spec.ApplicationConfig.Tolerations
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Tolerations != nil {
 		tolerations = r.esm.Spec.GlobalConfig.Tolerations
 	}
@@ -264,7 +263,7 @@ func (r *Reconciler) updatePodTolerations(deployment *appsv1.Deployment, externa
 		return nil
 	}
 
-	if err := validateTolerationsConfig(tolerations, field.NewPath("spec", "externalSecretsConfig", "tolerations")); err != nil {
+	if err := validateTolerationsConfig(tolerations, field.NewPath("spec", "tolerations")); err != nil {
 		return err
 	}
 
@@ -291,18 +290,20 @@ func validateTolerationsConfig(tolerations []corev1.Toleration, fldPath *field.P
 	return corevalidation.ValidateTolerations(convTolerations, fldPath.Child("tolerations")).ToAggregate()
 }
 
-func (r *Reconciler) updateImageInStatus(externalsecrets *operatorv1alpha1.ExternalSecrets) error {
-	image := os.Getenv(externalsecretsImageEnvVarName)
-	if externalsecrets.Status.ExternalSecretsImage != image {
-		externalsecrets.Status.ExternalSecretsImage = image
-		return r.updateStatus(r.ctx, externalsecrets)
+func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsConfig) error {
+	externalSecretsImage := os.Getenv(externalsecretsImageEnvVarName)
+	bitwardenImage := os.Getenv(bitwardenImageEnvVarName)
+	if esc.Status.ExternalSecretsImage != externalSecretsImage || esc.Status.BitwardenSDKServerImage != bitwardenImage {
+		esc.Status.ExternalSecretsImage = externalSecretsImage
+		esc.Status.BitwardenSDKServerImage = bitwardenImage
+		return r.updateStatus(r.ctx, esc)
 	}
 	return nil
 }
 
 // argument list for external-secrets deployment resource
-func updateContainerSpec(deployment *appsv1.Deployment, externalsecrets *operatorv1alpha1.ExternalSecrets, image, logLevel string) {
-	namespace := getOperatingNamespace(externalsecrets)
+func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
+	namespace := getOperatingNamespace(esc)
 	args := []string{
 		"--concurrent=1",
 		"--metrics-addr=:8080",

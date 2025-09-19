@@ -161,7 +161,7 @@ rules:
 - apiGroups:
   - operator.openshift.io
   resources:
-  - externalsecrets
+  - externalsecretsconfigs
   verbs:
   - create
   - get
@@ -171,14 +171,14 @@ rules:
 - apiGroups:
   - operator.openshift.io
   resources:
-  - externalsecrets/finalizers
+  - externalsecretsconfigs/finalizers
   - externalsecretsmanagers/finalizers
   verbs:
   - update
 - apiGroups:
   - operator.openshift.io
   resources:
-  - externalsecrets/status
+  - externalsecretsconfigs/status
   verbs:
   - get
   - update

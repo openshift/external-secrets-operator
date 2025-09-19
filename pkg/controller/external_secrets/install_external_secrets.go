@@ -20,14 +20,14 @@ var (
 	disallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
 )
 
-func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.ExternalSecrets, recon bool) error {
-	if err := r.validateExternalSecretsConfig(es); err != nil {
-		return common.NewIrrecoverableError(err, "%s/%s configuration validation failed", es.GetObjectKind().GroupVersionKind().String(), es.GetName())
+func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.ExternalSecretsConfig, recon bool) error {
+	if err := r.validateExternalSecretsConfig(esc); err != nil {
+		return common.NewIrrecoverableError(err, "%s/%s configuration validation failed", esc.GetObjectKind().GroupVersionKind().String(), esc.GetName())
 	}
 
 	// if user has set custom labels to be added to all resources created by the controller
 	// merge it with the controller's own default labels. Labels defined in `ExternalSecretsManager`
-	// Spec will have the lowest priority, followed by the labels in `ExternalSecrets` Spec and
+	// Spec will have the lowest priority, followed by the labels in `ExternalSecretsConfig` Spec and
 	// controllerDefaultResourceLabels will have the highest priority.
 	resourceLabels := make(map[string]string)
 	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
@@ -39,10 +39,10 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 			resourceLabels[k] = v
 		}
 	}
-	if es.Spec.ControllerConfig != nil && len(es.Spec.ControllerConfig.Labels) != 0 {
-		for k, v := range es.Spec.ControllerConfig.Labels {
+	if len(esc.Spec.ControllerConfig.Labels) != 0 {
+		for k, v := range esc.Spec.ControllerConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
-				r.log.V(1).Info("skip adding unallowed label configured in externalsecrets.operator.openshift.io", "label", k, "value", v)
+				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
 				continue
 			}
 			resourceLabels[k] = v
@@ -52,59 +52,59 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(es *operatorv1alpha1.Ext
 		resourceLabels[k] = v
 	}
 
-	if err := r.createOrApplyNamespace(es, resourceLabels); err != nil {
+	if err := r.createOrApplyNamespace(esc, resourceLabels); err != nil {
 		r.log.Error(err, "failed to create namespace")
 	}
 
-	if err := r.createOrApplyServiceAccounts(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServiceAccounts(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile serviceaccount resource")
 		return err
 	}
 
-	if err := r.createOrApplyCertificates(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyCertificates(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile certificates resource")
 		return err
 	}
 
-	if err := r.createOrApplySecret(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplySecret(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile secret resource")
 		return err
 	}
 
-	if err := r.createOrApplyRBACResource(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyRBACResource(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile rbac resources")
 		return err
 	}
 
-	if err := r.createOrApplyServices(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServices(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile service resource")
 		return err
 	}
 
-	if err := r.createOrApplyDeployments(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyDeployments(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile deployment resource")
 		return err
 	}
 
-	if err := r.createOrApplyValidatingWebhookConfiguration(es, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err
 	}
 
-	if addProcessedAnnotation(es) {
-		if err := r.UpdateWithRetry(r.ctx, es); err != nil {
-			return fmt.Errorf("failed to update processed annotation to %s: %w", es.GetName(), err)
+	if addProcessedAnnotation(esc) {
+		if err := r.UpdateWithRetry(r.ctx, esc); err != nil {
+			return fmt.Errorf("failed to update processed annotation to %s: %w", esc.GetName(), err)
 		}
 	}
 
-	r.log.V(4).Info("finished reconciliation of external-secrets", "namespace", es.GetNamespace(), "name", es.GetName())
+	r.log.V(4).Info("finished reconciliation of external-secrets", "namespace", esc.GetNamespace(), "name", esc.GetName())
 	return nil
 }
 
 // createOrApplyNamespace is for the creating the namespace in which the `external-secrets`
 // resources will be created.
-func (r *Reconciler) createOrApplyNamespace(es *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string) error {
-	namespace := getNamespace(es)
+func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
+	namespace := getNamespace(esc)
 	obj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   namespace,

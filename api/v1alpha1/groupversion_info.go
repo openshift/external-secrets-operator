@@ -35,8 +35,8 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// Resource takes an unqualified resource and returns a Group qualified GroupResource.
 // Manually added to conform to k8s code-generator lister-gen.
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
 func Resource(resource string) schema.GroupResource {
 	return GroupVersion.WithResource(resource).GroupResource()
 }

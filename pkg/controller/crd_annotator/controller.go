@@ -106,7 +106,7 @@ func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
 			&crdv1.CustomResourceDefinition{}: {
 				Label: managedResourceLabelReqSelector,
 			},
-			&operatorv1alpha1.ExternalSecrets{}: {},
+			&operatorv1alpha1.ExternalSecretsConfig{}: {},
 		},
 		ReaderFailOnMissingInformer: true,
 	}
@@ -117,7 +117,7 @@ func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
 	if _, err = customCache.GetInformer(context.Background(), &crdv1.CustomResourceDefinition{}); err != nil {
 		return nil, err
 	}
-	if _, err = customCache.GetInformer(context.Background(), &operatorv1alpha1.ExternalSecrets{}); err != nil {
+	if _, err = customCache.GetInformer(context.Background(), &operatorv1alpha1.ExternalSecretsConfig{}); err != nil {
 		return nil, err
 	}
 
@@ -154,7 +154,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 		}
 		if obj.GetObjectKind().GroupVersionKind().GroupKind().String() ==
-			(&operatorv1alpha1.ExternalSecrets{}).GetObjectKind().GroupVersionKind().GroupKind().String() {
+			(&operatorv1alpha1.ExternalSecretsConfig{}).GetObjectKind().GroupVersionKind().GroupKind().String() {
 			objName = reconcileObjectIdentifier
 		}
 		if objName != "" {
@@ -180,7 +180,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		WatchesMetadata(&crdv1.CustomResourceDefinition{}, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate).
-		Watches(&operatorv1alpha1.ExternalSecrets{}, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&operatorv1alpha1.ExternalSecretsConfig{}, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
@@ -189,30 +189,30 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.log.V(1).Info("reconciling", "request", req)
 
-	// Fetch the externalsecrets.openshift.operator.io CR
-	es := &operatorv1alpha1.ExternalSecrets{}
+	// Fetch the externalsecretsconfig.openshift.operator.io CR
+	esc := &operatorv1alpha1.ExternalSecretsConfig{}
 	key := types.NamespacedName{
-		Name: common.ExternalSecretsObjectName,
+		Name: common.ExternalSecretsConfigObjectName,
 	}
-	if err := r.Get(ctx, key, es); err != nil {
+	if err := r.Get(ctx, key, esc); err != nil {
 		if errors.IsNotFound(err) {
 			// NotFound errors, would mean the object hasn't been created yet and
 			// not required to reconcile yet.
-			r.log.V(1).Info("externalsecrets.openshift.operator.io object not found, skipping reconciliation", "key", key)
+			r.log.V(1).Info("externalsecretsconfig.openshift.operator.io object not found, skipping reconciliation", "key", key)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q during reconciliation: %w", key, err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsconfig.openshift.operator.io %q during reconciliation: %w", key, err)
 	}
 
-	if common.IsInjectCertManagerAnnotationEnabled(es) {
-		return r.processReconcileRequest(es, req.NamespacedName)
+	if common.IsInjectCertManagerAnnotationEnabled(esc) {
+		return r.processReconcileRequest(esc, req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil
 }
 
 // processReconcileRequest is the reconciliation handler to manage the resources.
-func (r *Reconciler) processReconcileRequest(es *operatorv1alpha1.ExternalSecrets, req types.NamespacedName) (ctrl.Result, error) {
+func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecretsConfig, req types.NamespacedName) (ctrl.Result, error) {
 	var oErr error = nil
 	if req.Name == reconcileObjectIdentifier {
 		if err := r.updateAnnotationsInAllCRDs(); err != nil {
@@ -234,7 +234,7 @@ func (r *Reconciler) processReconcileRequest(es *operatorv1alpha1.ExternalSecret
 		}
 	}
 
-	if err := r.updateCondition(es, oErr); err != nil {
+	if err := r.updateCondition(esc, oErr); err != nil {
 		return ctrl.Result{}, utilerrors.NewAggregate([]error{err, oErr})
 	}
 
@@ -278,10 +278,10 @@ func (r *Reconciler) updateAnnotationsInAllCRDs() error {
 	return nil
 }
 
-func (r *Reconciler) updateCondition(es *operatorv1alpha1.ExternalSecrets, err error) error {
+func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig, err error) error {
 	cond := metav1.Condition{
 		Type:               operatorv1alpha1.UpdateAnnotation,
-		ObservedGeneration: es.GetGeneration(),
+		ObservedGeneration: esc.GetGeneration(),
 	}
 
 	if err != nil {
@@ -294,26 +294,26 @@ func (r *Reconciler) updateCondition(es *operatorv1alpha1.ExternalSecrets, err e
 		cond.Message = "successfully updated annotations"
 	}
 
-	if apimeta.SetStatusCondition(&es.Status.Conditions, cond) {
-		return r.updateStatus(r.ctx, es)
+	if apimeta.SetStatusCondition(&esc.Status.Conditions, cond) {
+		return r.updateStatus(r.ctx, esc)
 	}
 
 	return nil
 }
 
-// updateStatus is for updating the status subresource of externalsecrets.openshift.operator.io.
-func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecrets) error {
+// updateStatus is for updating the status subresource of externalsecretsconfig.openshift.operator.io.
+func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecretsConfig) error {
 	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		r.log.V(4).Info("updating externalsecrets.openshift.operator.io status", "request", namespacedName)
-		current := &operatorv1alpha1.ExternalSecrets{}
+		r.log.V(4).Info("updating externalsecretsconfig.openshift.operator.io status", "request", namespacedName)
+		current := &operatorv1alpha1.ExternalSecretsConfig{}
 		if err := r.Get(ctx, namespacedName, current); err != nil {
-			return fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q for status update: %w", namespacedName, err)
+			return fmt.Errorf("failed to fetch externalsecretsconfig.openshift.operator.io %q for status update: %w", namespacedName, err)
 		}
 		changed.Status.DeepCopyInto(&current.Status)
 
 		if err := r.StatusUpdate(ctx, current); err != nil {
-			return fmt.Errorf("failed to update externalsecrets.openshift.operator.io %q status: %w", namespacedName, err)
+			return fmt.Errorf("failed to update externalsecretsconfig.openshift.operator.io %q status: %w", namespacedName, err)
 		}
 
 		return nil

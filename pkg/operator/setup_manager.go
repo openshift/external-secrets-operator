@@ -20,18 +20,18 @@ func StartControllers(ctx context.Context, mgr ctrl.Manager) error {
 		return err
 	}
 
-	externalsecrets, err := escontroller.New(ctx, mgr)
+	externalSecretsConfig, err := escontroller.New(ctx, mgr)
 	if err != nil {
 		logger.Error(err, "failed to create controller", "controller", escontroller.ControllerName)
 		return err
 	}
-	if err = externalsecrets.SetupWithManager(mgr); err != nil {
+	if err = externalSecretsConfig.SetupWithManager(mgr); err != nil {
 		logger.Error(err, "failed to set up controller with manager",
 			"controller", escontroller.ControllerName)
 		return err
 	}
 
-	if externalsecrets.IsCertManagerInstalled() {
+	if externalSecretsConfig.IsCertManagerInstalled() {
 		crdAnnotator, err := crdannotator.New(mgr)
 		if err != nil {
 			logger.Error(err, "failed to create crd annotator controller", "controller", crdannotator.ControllerName)
