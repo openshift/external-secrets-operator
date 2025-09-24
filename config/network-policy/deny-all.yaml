@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-traffic
+  namespace: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app: external-secrets-operator
+  policyTypes:
+    - Ingress
+    - Egress
