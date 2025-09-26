@@ -2,12 +2,12 @@ package crd_annotator
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"testing"
 
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,12 +28,14 @@ func testReconciler(t *testing.T) *Reconciler {
 	}
 }
 
-// testExtendExternalSecrets enables CRD annotation specific configs on existing externalsecrets object.
-func testExtendExternalSecrets(es *operatorv1alpha1.ExternalSecrets) {
-	es.Spec = operatorv1alpha1.ExternalSecretsSpec{
-		ExternalSecretsConfig: &operatorv1alpha1.ExternalSecretsConfig{
-			CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
-				AddInjectorAnnotations: "true",
+// testExtendExternalSecretsConfig enables CRD annotation specific configs on existing externalsecretsconfig object.
+func testExtendExternalSecretsConfig(esc *operatorv1alpha1.ExternalSecretsConfig) {
+	esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
+		ControllerConfig: operatorv1alpha1.ControllerConfig{
+			CertProvider: &operatorv1alpha1.CertProvidersConfig{
+				CertManager: &operatorv1alpha1.CertManagerConfig{
+					InjectAnnotations: "true",
+				},
 			},
 		},
 	}
@@ -72,10 +74,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -101,10 +103,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -141,7 +143,7 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
+					case *operatorv1alpha1.ExternalSecretsConfig:
 						return commontest.TestClientError
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
@@ -157,10 +159,10 @@ func TestReconcile(t *testing.T) {
 					Reason: operatorv1alpha1.ReasonFailed,
 				},
 			},
-			wantErr: `failed to fetch externalsecrets.openshift.operator.io "/cluster" during reconciliation: test client error`,
+			wantErr: `failed to fetch externalsecretsconfigs.operator.openshift.io "/cluster" during reconciliation: test client error`,
 		},
 		{
-			name: "reconciliation successful externalsecrets does not exist",
+			name: "reconciliation successful externalsecretsconfigs does not exist",
 			request: ctrl.Request{
 				NamespacedName: types.NamespacedName{
 					Name: commontest.TestCRDName,
@@ -169,11 +171,11 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
+					case *operatorv1alpha1.ExternalSecretsConfig:
 						return errors.NewNotFound(schema.GroupResource{
 							Group:    operatorv1alpha1.GroupVersion.Group,
-							Resource: "externalsecrets",
-						}, commontest.TestExternalSecretsResourceName)
+							Resource: "externalsecretsconfigs",
+						}, commontest.TestExternalSecretsConfigResourceName)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -193,9 +195,9 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -215,10 +217,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						return commontest.TestClientError
 					}
@@ -247,10 +249,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						return commontest.TestClientError
 					}
@@ -284,10 +286,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						return commontest.TestClientError
 					}
@@ -313,10 +315,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						return errors.NewNotFound(schema.GroupResource{
 							Group:    crdv1.SchemeGroupVersion.Group,
@@ -344,10 +346,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -377,10 +379,10 @@ func TestReconcile(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecrets:
-						es := commontest.TestExternalSecrets()
-						testExtendExternalSecrets(es)
-						es.DeepCopyInto(o)
+					case *operatorv1alpha1.ExternalSecretsConfig:
+						esc := commontest.TestExternalSecretsConfig()
+						testExtendExternalSecretsConfig(esc)
+						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -398,7 +400,7 @@ func TestReconcile(t *testing.T) {
 					Reason: operatorv1alpha1.ReasonCompleted,
 				},
 			},
-			wantErr: `failed to update externalsecrets.openshift.operator.io "/cluster" status: test client error`,
+			wantErr: `failed to update externalsecretsconfigs.operator.openshift.io "/cluster" status: test client error`,
 		},
 	}
 
@@ -415,12 +417,12 @@ func TestReconcile(t *testing.T) {
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("Reconcile() err: %v, wantErr: %v", err, tt.wantErr)
 			}
-			es := &operatorv1alpha1.ExternalSecrets{}
+			esc := &operatorv1alpha1.ExternalSecretsConfig{}
 			key := types.NamespacedName{
-				Name: common.ExternalSecretsObjectName,
+				Name: common.ExternalSecretsConfigObjectName,
 			}
-			r.CtrlClient.Get(r.ctx, key, es)
-			for _, c1 := range es.Status.Conditions {
+			_ = r.CtrlClient.Get(r.ctx, key, esc)
+			for _, c1 := range esc.Status.Conditions {
 				for _, c2 := range tt.expectedStatusCondition {
 					if c1.Type == c2.Type {
 						if c1.Status != c2.Status || c1.Reason != c2.Reason {

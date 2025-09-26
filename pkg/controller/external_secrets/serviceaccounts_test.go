@@ -27,10 +27,10 @@ func staticServiceAccounts() map[string]string {
 
 func TestCreateOrApplyServiceAccounts(t *testing.T) {
 	tests := []struct {
-		name                     string
-		preReq                   func(*Reconciler, *fakes.FakeCtrlClient)
-		updateExternalSecretsObj func(*operatorv1alpha1.ExternalSecrets)
-		wantErr                  string
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(*operatorv1alpha1.ExternalSecretsConfig)
+		wantErr                     string
 	}{
 		{
 			name: "all static serviceaccounts created successfully",
@@ -72,10 +72,12 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 					return nil
 				})
 			},
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
-					BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
-						Enabled: "true",
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
+					Plugins: operatorv1alpha1.PluginsConfig{
+						BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
+							Mode: operatorv1alpha1.Enabled,
+						},
 					},
 				}
 			},
@@ -93,10 +95,14 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				})
 			},
 			wantErr: "", // <- no error expected
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
-					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
-						Enabled: "true",
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
+					ControllerConfig: operatorv1alpha1.ControllerConfig{
+						CertProvider: &operatorv1alpha1.CertProvidersConfig{
+							CertManager: &operatorv1alpha1.CertManagerConfig{
+								Mode: operatorv1alpha1.Enabled,
+							},
+						},
 					},
 				}
 			},
@@ -131,10 +137,12 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 					return commontest.TestClientError
 				})
 			},
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
-					CertManagerConfig: &operatorv1alpha1.CertManagerConfig{
-						Enabled: "true",
+			updateExternalSecretsConfig: func(es *operatorv1alpha1.ExternalSecretsConfig) {
+				es.Spec.ControllerConfig = operatorv1alpha1.ControllerConfig{
+					CertProvider: &operatorv1alpha1.CertProvidersConfig{
+						CertManager: &operatorv1alpha1.CertManagerConfig{
+							Mode: operatorv1alpha1.Enabled,
+						},
 					},
 				}
 			},
@@ -151,12 +159,12 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 
-			es := commontest.TestExternalSecrets()
-			if tt.updateExternalSecretsObj != nil {
-				tt.updateExternalSecretsObj(es)
+			esc := commontest.TestExternalSecretsConfig()
+			if tt.updateExternalSecretsConfig != nil {
+				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyServiceAccounts(es, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyServiceAccounts(esc, controllerDefaultResourceLabels, false)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)

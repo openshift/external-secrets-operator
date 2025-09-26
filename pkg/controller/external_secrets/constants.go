@@ -16,8 +16,8 @@ const (
 	// ControllerName is the name of the controller used in logs and events.
 	ControllerName = externalsecretsCommonName + "-controller"
 
-	// finalizer name for external-secrets.openshift.operator.io resource.
-	finalizer = "externalsecrets.openshift.operator.io/" + ControllerName
+	// finalizer name for externalsecretsconfigs.operator.openshift.io resource.
+	finalizer = "externalsecretsconfigs.operator.openshift.io/" + ControllerName
 
 	// controllerProcessedAnnotation is the annotation added to external-secrets resource once after
 	// successful reconciliation by the controller.
@@ -46,7 +46,7 @@ const (
 	bitwardenImageVersionEnvVarName = "BITWARDEN_SDK_SERVER_IMAGE_VERSION"
 
 	// externalsecretsDefaultNamespace is the namespace where the `external-secrets` operand required resources
-	// will be created, when ExternalSecrets.Spec.ControllerConfig.Namespace is not set.
+	// will be created, when ExternalSecretsConfig.Spec.Namespace is not set.
 	externalsecretsDefaultNamespace = "external-secrets"
 )
 

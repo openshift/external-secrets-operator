@@ -22,18 +22,18 @@ Using the External Secrets Operator ensures the following:
 The External Secrets Operator for Red Hat OpenShift uses the [`external-secrets`](https://github.com/openshift/external-secrets) helm charts
 to install application. The operator has three controllers to achieve the same:
 - `external_secrets_manager` controller: This is responsible for
-  * reconciling the `externalsecretsmanagers.openshift.operator.io` resource.
+  * reconciling the `externalsecretsmanagers.operator.openshift.io` resource.
   * providing the status of other controllers.
 - `external_secrets` controller: This is responsible for
-  * reconciling the `externalsecrets.openshift.operator.io` resource.
-  * installing and managing the `external-secrets` application based on the user defined configurations in `externalsecrets.openshift.operator.io` resource.
-  * reconciling the `externalsecretsmanagers.openshift.operator.io` resource for the global configurations and updates the `external-scerets` deployment accordingly.
+  * reconciling the `externalsecretsconfigs.operator.openshift.io` resource.
+  * installing and managing the `external-secrets` application based on the user defined configurations in `externalsecretsconfigs.operator.openshift.io` resource.
+  * reconciling the `externalsecretsmanagers.operator.openshift.io` resource for the global configurations and updates the `external-scerets` deployment accordingly.
 - `crd_annotator` controller:
   * This is responsible for adding `cert-manager.io/inject-ca-from` annotation in the `external-secrets` provided CRDs.
   * This is an optional controller, which will be activated only when [`cert-manager`](https://cert-manager.io/) is installed.
   * When `cert-manager` is installed after External Secrets Operator installation, `external-secrets-operator-controller-manager` deployment must be restarted to activate the controller.
 
-The operator automatically creates a cluster-scoped `externalsecretsmanagers.openshift.operator.io` object named `cluster`.
+The operator automatically creates a cluster-scoped `externalsecretsmanagers.operator.openshift.io` object named `cluster`.
 
 For more information about
 - `external-secrets-operator for Red Hat OpenShift`, refer to the [link](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/security_and_compliance/external-secrets-operator-for-red-hat-openshift)
