@@ -148,6 +148,8 @@ test-e2e:
 	-p 1 \
 	-tags e2e \
 	./test/e2e \
+	-ginkgo.v \
+	-ginkgo.show-node-events \
 	-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
 
 .PHONY: lint
