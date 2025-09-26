@@ -22,47 +22,48 @@ func TestCreateOrApplySecret(t *testing.T) {
 	tests := []struct {
 		name    string
 		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
-		es      func(*v1alpha1.ExternalSecrets)
+		esc     func(*v1alpha1.ExternalSecretsConfig)
 		wantErr string
 	}{
 		{
 			name:   "external secret spec disabled",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec = v1alpha1.ExternalSecretsSpec{}
-			},
-		},
-		{
-			name:   "externalSecretConfig is nil",
-			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = nil
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{}
 			},
 		},
 		{
 			name:   "webhook config is nil",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-					WebhookConfig: nil,
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						WebhookConfig: nil,
+					},
 				}
 			},
 		},
 		{
 			name:   "webhook config is empty",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-					WebhookConfig: &v1alpha1.WebhookConfig{},
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						WebhookConfig: &v1alpha1.WebhookConfig{},
+					},
 				}
 			},
 		},
 		{
 			name:   "cert manager config is nil",
 			preReq: nil,
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-					CertManagerConfig: nil,
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+					ControllerConfig: v1alpha1.ControllerConfig{
+						CertProvider: &v1alpha1.CertProvidersConfig{
+							CertManager: nil,
+						},
+					},
 				}
 			},
 		},
@@ -198,10 +199,12 @@ func TestCreateOrApplySecret(t *testing.T) {
 					return commontest.TestClientError
 				})
 			},
-			es: func(es *v1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-					CertManagerConfig: &v1alpha1.CertManagerConfig{
-						Enabled: "true",
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig = v1alpha1.ControllerConfig{
+					CertProvider: &v1alpha1.CertProvidersConfig{
+						CertManager: &v1alpha1.CertManagerConfig{
+							Mode: v1alpha1.Enabled,
+						},
 					},
 				}
 			},
@@ -217,12 +220,12 @@ func TestCreateOrApplySecret(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
-			es := testExternalSecretsForSecrets()
-			if tt.es != nil {
-				tt.es(es)
+			esc := testExternalSecretsConfigForSecrets()
+			if tt.esc != nil {
+				tt.esc(esc)
 			}
 
-			err := r.createOrApplySecret(es, controllerDefaultResourceLabels, false)
+			err := r.createOrApplySecret(esc, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplySecret() err: %v, wantErr: %v", err, tt.wantErr)
 			}
@@ -230,18 +233,18 @@ func TestCreateOrApplySecret(t *testing.T) {
 	}
 }
 
-func testExternalSecretsForSecrets() *v1alpha1.ExternalSecrets {
-	externalSecrets := commontest.TestExternalSecrets()
+func testExternalSecretsConfigForSecrets() *v1alpha1.ExternalSecretsConfig {
+	esc := commontest.TestExternalSecretsConfig()
 
-	externalSecrets.Spec = v1alpha1.ExternalSecretsSpec{
-		ControllerConfig: &v1alpha1.ControllerConfig{
-			Namespace: commontest.TestExternalSecretsNamespace,
-		},
-		ExternalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
-			CertManagerConfig: &v1alpha1.CertManagerConfig{
-				Enabled: "false",
+	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
+		ControllerConfig: v1alpha1.ControllerConfig{
+			CertProvider: &v1alpha1.CertProvidersConfig{
+				CertManager: &v1alpha1.CertManagerConfig{
+					Mode: v1alpha1.Disabled,
+				},
 			},
 		},
+		ApplicationConfig: v1alpha1.ApplicationConfig{},
 	}
-	return externalSecrets
+	return esc
 }

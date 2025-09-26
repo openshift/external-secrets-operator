@@ -12,7 +12,7 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
-// CreateDefaultESMResource is for creating the default externalsecretsmanager.openshift.operator.io resource,
+// CreateDefaultESMResource is for creating the default externalsecretsmanagers.operator.openshift.io resource,
 // which will be updated by the user with required configurations. Controller creates and manages the resource.
 func CreateDefaultESMResource(ctx context.Context, client client.Client) error {
 	esm := &operatorv1alpha1.ExternalSecretsManager{

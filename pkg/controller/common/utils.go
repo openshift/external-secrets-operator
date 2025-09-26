@@ -381,16 +381,23 @@ func ParseBool(val string) bool {
 	return val == "true"
 }
 
+// EvalMode is for evaluating the Mode values and return a boolean. This is very specific to the values
+// read from CR which allows only `Enabled`, `Disabled` or `DisabledAndCleanup` as values. Returns
+// true when has `Enabled` and false for every other value.
+func EvalMode(val operatorv1alpha1.Mode) bool {
+	return val == operatorv1alpha1.Enabled
+}
+
 // IsESMSpecEmpty returns whether ExternalSecretsManager CR Spec is empty.
 func IsESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
 	return esm != nil && !reflect.DeepEqual(esm.Spec, operatorv1alpha1.ExternalSecretsManagerSpec{})
 }
 
 // IsInjectCertManagerAnnotationEnabled is for check if add cert-manager annotation is enabled.
-func IsInjectCertManagerAnnotationEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec.ExternalSecretsConfig != nil &&
-		es.Spec.ExternalSecretsConfig.CertManagerConfig != nil &&
-		ParseBool(es.Spec.ExternalSecretsConfig.CertManagerConfig.AddInjectorAnnotations)
+func IsInjectCertManagerAnnotationEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	return esc.Spec.ControllerConfig.CertProvider != nil &&
+		esc.Spec.ControllerConfig.CertProvider.CertManager != nil &&
+		ParseBool(esc.Spec.ControllerConfig.CertProvider.CertManager.InjectAnnotations)
 }
 
 // AddFinalizer adds finalizer to the passed resource object.
@@ -412,8 +419,8 @@ func AddFinalizer(ctx context.Context, obj client.Object, opClient operatorclien
 				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
 			}
 			updated.DeepCopyInto(o)
-		case *operatorv1alpha1.ExternalSecrets:
-			updated := &operatorv1alpha1.ExternalSecrets{}
+		case *operatorv1alpha1.ExternalSecretsConfig:
+			updated := &operatorv1alpha1.ExternalSecretsConfig{}
 			if err := opClient.Get(ctx, namespacedName, updated); err != nil {
 				return fmt.Errorf("failed to fetch %q after updating finalizers: %w", namespacedName, err)
 			}
@@ -431,11 +438,11 @@ func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorcl
 	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		if !controllerutil.RemoveFinalizer(obj, finalizer) {
-			return fmt.Errorf("failed to create %q externalsecrets.openshift.operator.io object with finalizers removed", namespacedName)
+			return fmt.Errorf("failed to update %q externalsecretsconfigs.operator.openshift.io object with finalizers removed", namespacedName)
 		}
 
 		if err := opClient.UpdateWithRetry(ctx, obj); err != nil {
-			return fmt.Errorf("failed to remove finalizers on %q externalsecrets.openshift.operator.io with %w", namespacedName, err)
+			return fmt.Errorf("failed to remove finalizers on %q externalsecretsconfigs.operator.openshift.io with %w", namespacedName, err)
 		}
 		return nil
 	}
@@ -455,7 +462,7 @@ func (n *Now) Do(f func()) {
 	}
 }
 
-// Reset is for allowing Do to call the func f again.
+// Reset is for allowing the Do method to call the func f again.
 func (n *Now) Reset() {
 	n.Lock()
 	defer n.Unlock()

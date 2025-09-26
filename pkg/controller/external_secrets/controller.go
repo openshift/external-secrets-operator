@@ -78,7 +78,7 @@ var (
 	}
 )
 
-// Reconciler reconciles a ExternalSecrets object
+// Reconciler reconciles a ExternalSecretsConfig object
 type Reconciler struct {
 	operatorclient.CtrlClient
 	UncachedClient        operatorclient.CtrlClient
@@ -90,10 +90,10 @@ type Reconciler struct {
 	optionalResourcesList map[string]struct{}
 }
 
-// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs/status,verbs=get;update
+// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsmanagers,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/status,verbs=get;update
-// +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecrets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch
 
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -178,7 +178,7 @@ func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
 			Label: managedResourceLabelReqSelector,
 		}
 	}
-	ownObject := &operatorv1alpha1.ExternalSecrets{}
+	ownObject := &operatorv1alpha1.ExternalSecretsConfig{}
 	objectList[ownObject] = cache.ByObject{}
 	esmObject := &operatorv1alpha1.ExternalSecretsManager{}
 	objectList[esmObject] = cache.ByObject{}
@@ -257,12 +257,11 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{
 					{
 						NamespacedName: types.NamespacedName{
-							Name: common.ExternalSecretsObjectName,
+							Name: common.ExternalSecretsConfigObjectName,
 						},
 					},
 				}
 			}
-
 		}
 		r.log.V(4).Info("object not of interest, ignoring reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
 		return []reconcile.Request{}
@@ -276,7 +275,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	managedResourcePredicate := builder.WithPredicates(managedResources)
 
 	mgrBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.ExternalSecrets{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&operatorv1alpha1.ExternalSecretsConfig{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named(ControllerName)
 
 	for _, res := range controllerManagedResources {
@@ -325,33 +324,33 @@ func isCRDInstalled(config *rest.Config, name, groupVersion string) (bool, error
 }
 
 // Reconcile is the reconciliation loop to manage the current state external-secrets
-// deployment to reflect desired state configured in `externalsecrets.openshift.operator.io`.
+// deployment to reflect desired state configured in `externalsecretsconfigs.operator.openshift.io`.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.log.V(1).Info("reconciling", "request", req)
 
-	// Fetch the externalsecrets.openshift.operator.io CR
-	externalsecrets := &operatorv1alpha1.ExternalSecrets{}
-	if err := r.Get(ctx, req.NamespacedName, externalsecrets); err != nil {
+	// Fetch the externalsecretsconfigs.operator.openshift.io CR
+	esc := &operatorv1alpha1.ExternalSecretsConfig{}
+	if err := r.Get(ctx, req.NamespacedName, esc); err != nil {
 		if errors.IsNotFound(err) {
 			// NotFound errors, since they can't be fixed by an immediate
 			// requeue (have to wait for a new notification), and can be processed
 			// on deleted requests.
-			r.log.V(1).Info("externalsecrets.openshift.operator.io object not found, skipping reconciliation", "request", req)
+			r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io object not found, skipping reconciliation", "request", req)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q during reconciliation: %w", req.NamespacedName, err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsconfigs.operator.openshift.io %q during reconciliation: %w", req.NamespacedName, err)
 	}
 
-	if !externalsecrets.DeletionTimestamp.IsZero() {
-		r.log.V(1).Info("externalsecrets.openshift.operator.io is marked for deletion", "namespace", req.NamespacedName)
+	if !esc.DeletionTimestamp.IsZero() {
+		r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io is marked for deletion", "namespace", req.NamespacedName)
 
-		if requeue, err := r.cleanUp(externalsecrets); err != nil {
-			return ctrl.Result{}, fmt.Errorf("clean up failed for %q externalsecrets.openshift.operator.io instance deletion: %w", req.NamespacedName, err)
+		if requeue, err := r.cleanUp(esc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("clean up failed for %q externalsecretsconfigs.operator.openshift.io instance deletion: %w", req.NamespacedName, err)
 		} else if requeue {
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 		}
 
-		if err := common.RemoveFinalizer(ctx, externalsecrets, r.CtrlClient, finalizer); err != nil {
+		if err := common.RemoveFinalizer(ctx, esc, r.CtrlClient, finalizer); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -359,12 +358,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	// Set finalizers on the externalsecrets.openshift.operator.io resource
-	if err := common.AddFinalizer(ctx, externalsecrets, r.CtrlClient, finalizer); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecrets.openshift.operator.io with finalizers: %w", req.NamespacedName, err)
+	// Set finalizers on the externalsecretsconfigs.operator.openshift.io resource
+	if err := common.AddFinalizer(ctx, esc, r.CtrlClient, finalizer); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update %q externalsecretsconfigs.operator.openshift.io with finalizers: %w", req.NamespacedName, err)
 	}
 
-	// Fetch the externalsecretsmanager.openshift.operator.io CR
+	// Fetch the externalsecretsmanagers.operator.openshift.io CR
 	esmNamespacedName := types.NamespacedName{
 		Name: common.ExternalSecretsManagerObjectName,
 	}
@@ -372,25 +371,25 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if errors.IsNotFound(err) {
 			// NotFound errors, since they can't be fixed by an immediate
 			// requeue (have to wait for a new notification).
-			r.log.V(1).Info("externalsecretsmanager.openshift.operator.io object not found, continuing without it")
+			r.log.V(1).Info("externalsecretsmanagers.operator.openshift.io object not found, continuing without it")
 		} else {
-			return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsmanager.openshift.operator.io %q during reconciliation: %w", esmNamespacedName, err)
+			return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsmanagers.operator.openshift.io %q during reconciliation: %w", esmNamespacedName, err)
 		}
 	}
 
-	return r.processReconcileRequest(externalsecrets, req.NamespacedName)
+	return r.processReconcileRequest(esc, req.NamespacedName)
 }
 
-func (r *Reconciler) processReconcileRequest(externalsecrets *operatorv1alpha1.ExternalSecrets, req types.NamespacedName) (ctrl.Result, error) {
+func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecretsConfig, req types.NamespacedName) (ctrl.Result, error) {
 	createRecon := false
-	if !containsProcessedAnnotation(externalsecrets) && reflect.DeepEqual(externalsecrets.Status, operatorv1alpha1.ExternalSecretsStatus{}) {
-		r.log.V(1).Info("starting reconciliation of newly created externalsecrets.openshift.operator.io", "namespace", externalsecrets.GetNamespace(), "name", externalsecrets.GetName())
+	if !containsProcessedAnnotation(esc) && reflect.DeepEqual(esc.Status, operatorv1alpha1.ExternalSecretsConfigStatus{}) {
+		r.log.V(1).Info("starting reconciliation of newly created externalsecretsconfigs.operator.openshift.io", "namespace", esc.GetNamespace(), "name", esc.GetName())
 		createRecon = true
 	}
 
 	var errUpdate error = nil
-	observedGeneration := externalsecrets.GetGeneration()
-	err := r.reconcileExternalSecretsDeployment(externalsecrets, createRecon)
+	observedGeneration := esc.GetGeneration()
+	err := r.reconcileExternalSecretsDeployment(esc, createRecon)
 	if err != nil {
 		r.log.Error(err, "failed to reconcile external-secrets deployment", "request", req)
 		isFatal := common.IsIrrecoverableError(err)
@@ -420,9 +419,9 @@ func (r *Reconciler) processReconcileRequest(externalsecrets *operatorv1alpha1.E
 			readyCond.Message = fmt.Sprintf("reconciliation failed, retrying: %v", err)
 		}
 
-		if apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, degradedCond) ||
-			apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, readyCond) {
-			errUpdate = r.updateCondition(externalsecrets, err)
+		if apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond) ||
+			apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond) {
+			errUpdate = r.updateCondition(esc, err)
 			err = utilerrors.NewAggregate([]error{err, errUpdate})
 		}
 
@@ -447,17 +446,17 @@ func (r *Reconciler) processReconcileRequest(externalsecrets *operatorv1alpha1.E
 		ObservedGeneration: observedGeneration,
 	}
 
-	if apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, degradedCond) ||
-		apimeta.SetStatusCondition(&externalsecrets.Status.Conditions, readyCond) {
-		errUpdate = r.updateCondition(externalsecrets, nil)
+	if apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond) ||
+		apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond) {
+		errUpdate = r.updateCondition(esc, nil)
 	}
 
 	return ctrl.Result{}, errUpdate
 }
 
-// cleanUp handles deletion of externalsecrets.openshift.operator.io gracefully.
-func (r *Reconciler) cleanUp(externalsecrets *operatorv1alpha1.ExternalSecrets) (bool, error) {
+// cleanUp handles deletion of externalsecretsconfigs.operator.openshift.io gracefully.
+func (r *Reconciler) cleanUp(esc *operatorv1alpha1.ExternalSecretsConfig) (bool, error) {
 	// TODO: For GA, handle cleaning up of resources created for installing external-secrets operand.
-	r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "RemoveDeployment", "%s/%s externalsecrets.openshift.operator.io marked for deletion, remove reference in deployment and remove all resources created for deployment", externalsecrets.GetNamespace(), externalsecrets.GetName())
+	r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "RemoveDeployment", "%s/%s externalsecretsconfigs.operator.openshift.io marked for deletion, remove reference in deployment and remove all resources created for deployment", esc.GetNamespace(), esc.GetName())
 	return false, nil
 }
