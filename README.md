@@ -27,7 +27,7 @@ to install application. The operator has three controllers to achieve the same:
 - `external_secrets` controller: This is responsible for
   * reconciling the `externalsecretsconfigs.operator.openshift.io` resource.
   * installing and managing the `external-secrets` application based on the user defined configurations in `externalsecretsconfigs.operator.openshift.io` resource.
-  * reconciling the `externalsecretsmanagers.operator.openshift.io` resource for the global configurations and updates the `external-scerets` deployment accordingly.
+  * reconciling the `externalsecretsmanagers.operator.openshift.io` resource for the global configurations and updates the `external-secrets` deployment accordingly.
 - `crd_annotator` controller:
   * This is responsible for adding `cert-manager.io/inject-ca-from` annotation in the `external-secrets` provided CRDs.
   * This is an optional controller, which will be activated only when [`cert-manager`](https://cert-manager.io/) is installed.

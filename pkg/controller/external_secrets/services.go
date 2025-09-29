@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -57,11 +57,7 @@ func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.Externa
 	r.log.V(4).Info("Reconciling service", "name", serviceName)
 
 	fetched := &corev1.Service{}
-	key := types.NamespacedName{
-		Name:      service.GetName(),
-		Namespace: service.GetNamespace(),
-	}
-	exists, err := r.Exists(r.ctx, key, fetched)
+	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(service), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check existence of service %s", serviceName)
 	}

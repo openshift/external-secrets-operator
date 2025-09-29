@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -45,7 +46,7 @@ import (
 const (
 	ControllerName = "external-secrets-manager"
 
-	// finalizer name for externalsecretsconfigs.operator.openshift.io resource.
+	// finalizer name for externalsecretsmanagers.operator.openshift.io resource.
 	finalizer = "externalsecretsmanagers.operator.openshift.io/" + ControllerName
 )
 
@@ -225,7 +226,7 @@ func (r *Reconciler) updateStatusCondition(esm *operatorv1alpha1.ExternalSecrets
 
 // updateStatus is for updating the status subresource of externalsecretsmanagers.operator.openshift.io.
 func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecretsManager) error {
-	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
+	namespacedName := client.ObjectKeyFromObject(changed)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		r.log.V(4).Info("updating externalsecretsmanagers.operator.openshift.io status", "request", namespacedName)
 		current := &operatorv1alpha1.ExternalSecretsManager{}

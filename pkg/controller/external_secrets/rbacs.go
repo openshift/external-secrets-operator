@@ -5,7 +5,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -111,15 +110,11 @@ func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecr
 	var (
 		exist           bool
 		err             error
-		key             types.NamespacedName
 		clusterRoleName = obj.GetName()
 		fetched         = &rbacv1.ClusterRole{}
 	)
 
-	key = types.NamespacedName{
-		Name: clusterRoleName,
-	}
-	exist, err = r.Exists(r.ctx, key, fetched)
+	exist, err = r.Exists(r.ctx, client.ObjectKeyFromObject(obj), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s clusterrole resource already exists", clusterRoleName)
 	}
@@ -159,15 +154,11 @@ func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.Exter
 	var (
 		exist                  bool
 		err                    error
-		key                    types.NamespacedName
 		clusterRoleBindingName = obj.GetName()
 		fetched                = &rbacv1.ClusterRoleBinding{}
 	)
 	r.log.V(4).Info("reconciling clusterrolebinding resource", "name", clusterRoleBindingName)
-	key = types.NamespacedName{
-		Name: clusterRoleBindingName,
-	}
-	exist, err = r.Exists(r.ctx, key, fetched)
+	exist, err = r.Exists(r.ctx, client.ObjectKeyFromObject(obj), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s clusterrolebinding resource already exists", clusterRoleBindingName)
 	}
@@ -209,11 +200,7 @@ func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConf
 	roleName := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 	r.log.V(4).Info("reconciling role resource", "name", roleName)
 	fetched := &rbacv1.Role{}
-	key := types.NamespacedName{
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
-	}
-	exist, err := r.Exists(r.ctx, key, fetched)
+	exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(obj), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s role resource already exists", roleName)
 	}
@@ -254,11 +241,7 @@ func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecr
 	roleBindingName := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 	r.log.V(4).Info("reconciling rolebinding resource", "name", roleBindingName)
 	fetched := &rbacv1.RoleBinding{}
-	key := types.NamespacedName{
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
-	}
-	exist, err := r.Exists(r.ctx, key, fetched)
+	exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(obj), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s rolebinding resource already exists", roleBindingName)
 	}

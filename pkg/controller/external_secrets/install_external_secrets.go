@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -112,12 +113,23 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 			Labels: resourceLabels,
 		},
 	}
-	if err := r.Create(r.ctx, obj); err != nil {
-		if errors.IsAlreadyExists(err) {
-			r.log.V(4).Info("namespace already exists", "namespace", namespace)
-			return nil
+
+	got := &corev1.Namespace{}
+	err := r.Get(r.ctx, client.ObjectKeyFromObject(obj), got)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to fetch %s namespace: %w", namespace, err)
 		}
-		return err
+		if err = r.Create(r.ctx, obj); err != nil {
+			return fmt.Errorf("failed to create %s namespace: %w", namespace, err)
+		}
+		return nil
+	}
+	if common.ObjectMetadataModified(obj, got) {
+		common.UpdateResourceLabels(got, resourceLabels)
+		if err = r.Update(r.ctx, obj); err != nil {
+			return fmt.Errorf("failed to update %s namespace with labels: %w", namespace, err)
+		}
 	}
 	return nil
 }

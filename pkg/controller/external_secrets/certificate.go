@@ -53,11 +53,7 @@ func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecr
 	certificateName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 	r.log.V(4).Info("reconciling certificate resource", "name", certificateName)
 	fetched := &certmanagerv1.Certificate{}
-	key := types.NamespacedName{
-		Name:      desired.GetName(),
-		Namespace: desired.GetNamespace(),
-	}
-	exist, err := r.Exists(r.ctx, key, fetched)
+	exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s certificate resource already exists", certificateName)
 	}
@@ -103,10 +99,10 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 		certManageConfig = esc.Spec.ControllerConfig.CertProvider.CertManager
 	}
 	if reflect.ValueOf(certManageConfig.IssuerRef).IsZero() {
-		return fmt.Errorf("certManageConfig is enabled without IssuerRef")
+		return fmt.Errorf("cert-manager is enabled but issuerRef is not configured")
 	}
 	if certManageConfig.IssuerRef.Name == "" {
-		return fmt.Errorf("issuerRef.Name not present")
+		return fmt.Errorf("cert-manager.issuerRef.name is not configured")
 	}
 	externalSecretsNamespace := getNamespace(esc)
 

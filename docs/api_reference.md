@@ -317,7 +317,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `globalConfig` _[GlobalConfig](#globalconfig)_ | globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator. |  | Optional: \{\} <br /> |
-| `optionalFeatures` _[Feature](#feature) array_ | optionalFeatures is for enabling the optional operator features. |  | Optional: \{\} <br /> |
 
 
 #### ExternalSecretsManagerStatus
@@ -335,23 +334,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `controllerStatuses` _[ControllerStatus](#controllerstatus) array_ | controllerStatuses holds the observed conditions of the controllers part of the operator. |  |  |
 | `lastTransitionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | lastTransitionTime is the last time the condition transitioned from one status to another. |  | Format: date-time <br />Type: string <br /> |
-
-
-#### Feature
-
-
-
-Feature is for enabling the optional features.
-
-
-
-_Appears in:_
-- [ExternalSecretsManagerSpec](#externalsecretsmanagerspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | name of the optional feature. There are no optional features currently supported. |  | Enum: [] <br />Required: \{\} <br /> |
-| `mode` _[Mode](#mode)_ | mode indicates the feature state.<br />Use Enabled or Disabled to indicate the preference.<br />Enabled: Enables the optional feature and creates resources if required.<br />Disabled: Disables the optional feature, but will not remove any resources created. |  | Enum: [Enabled Disabled] <br />Required: \{\} <br /> |
 
 
 #### GlobalConfig
@@ -387,13 +369,11 @@ Mode indicates the operational state of the optional features.
 _Appears in:_
 - [BitwardenSecretManagerProvider](#bitwardensecretmanagerprovider)
 - [CertManagerConfig](#certmanagerconfig)
-- [Feature](#feature)
 
 | Field | Description |
 | --- | --- |
 | `Enabled` | Enabled indicates the optional configuration is enabled.<br /> |
 | `Disabled` | Disabled indicates the optional configuration is disabled.<br /> |
-| `DisabledAndCleanup` | DisabledAndCleanup indicates the optional configuration is disabled and created resources are automatically removed.<br /> |
 
 
 #### ObjectReference
@@ -448,8 +428,6 @@ _Appears in:_
 | `httpProxy` _string_ | httpProxy is the URL of the proxy for HTTP requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br />Optional: \{\} <br /> |
 | `httpsProxy` _string_ | httpsProxy is the URL of the proxy for HTTPS requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br />Optional: \{\} <br /> |
 | `noProxy` _string_ | noProxy is a comma-separated list of hostnames and/or CIDRs and/or IPs for which the proxy should not be used.<br />This field can have a maximum of 4096 characters. |  | MaxLength: 4096 <br />MinLength: 0 <br />Optional: \{\} <br /> |
-
-
 
 
 #### SecretReference
