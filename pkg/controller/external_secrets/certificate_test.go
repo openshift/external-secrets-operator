@@ -86,7 +86,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = "Issuer"
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: issuerRef.Name not present", commontest.TestExternalSecretsNamespace, testExternalSecretsConfigForCertificate().GetName()),
+			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: cert-manager.issuerRef.name is not configured", commontest.TestExternalSecretsNamespace, testExternalSecretsConfigForCertificate().GetName()),
 		},
 		{
 			name: "reconciliation of webhook certificate fails while checking if exists",

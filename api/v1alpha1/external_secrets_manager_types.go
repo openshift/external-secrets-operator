@@ -57,14 +57,6 @@ type ExternalSecretsManagerSpec struct {
 	// globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator.
 	// +kubebuilder:validation:Optional
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
-
-	// optionalFeatures is for enabling the optional operator features.
-	// +patchMergeKey=name
-	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=name
-	// +kubebuilder:validation:Optional
-	OptionalFeatures []Feature `json:"optionalFeatures,omitempty"`
 }
 
 // GlobalConfig is for configuring the external-secrets-operator behavior.
@@ -77,23 +69,7 @@ type GlobalConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
-	CommonConfigs `json:",inline,omitempty"`
-}
-
-// Feature is for enabling the optional features.
-type Feature struct {
-	// name of the optional feature. There are no optional features currently supported.
-	// +kubebuilder:validation:Enum:=""
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// mode indicates the feature state.
-	// Use Enabled or Disabled to indicate the preference.
-	// Enabled: Enables the optional feature and creates resources if required.
-	// Disabled: Disables the optional feature, but will not remove any resources created.
-	// +kubebuilder:validation:Enum:=Enabled;Disabled
-	// +kubebuilder:validation:Required
-	Mode Mode `json:"mode"`
+	CommonConfigs `json:",inline"`
 }
 
 // ExternalSecretsManagerStatus is the most recently observed status of the ExternalSecretsManager.

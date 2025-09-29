@@ -342,20 +342,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !esc.DeletionTimestamp.IsZero() {
-		r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io is marked for deletion", "namespace", req.NamespacedName)
+		r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io is marked for deletion", "name", req.NamespacedName)
 
-		if requeue, err := r.cleanUp(esc); err != nil {
+		if requeue, err := r.cleanUp(esc, req); err != nil {
 			return ctrl.Result{}, fmt.Errorf("clean up failed for %q externalsecretsconfigs.operator.openshift.io instance deletion: %w", req.NamespacedName, err)
 		} else if requeue {
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 		}
-
-		if err := common.RemoveFinalizer(ctx, esc, r.CtrlClient, finalizer); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		r.log.V(1).Info("removed finalizer, cleanup complete", "request", req.NamespacedName)
-		return ctrl.Result{}, nil
 	}
 
 	// Set finalizers on the externalsecretsconfigs.operator.openshift.io resource
@@ -455,8 +448,14 @@ func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecre
 }
 
 // cleanUp handles deletion of externalsecretsconfigs.operator.openshift.io gracefully.
-func (r *Reconciler) cleanUp(esc *operatorv1alpha1.ExternalSecretsConfig) (bool, error) {
+func (r *Reconciler) cleanUp(esc *operatorv1alpha1.ExternalSecretsConfig, req ctrl.Request) (bool, error) {
 	// TODO: For GA, handle cleaning up of resources created for installing external-secrets operand.
 	r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "RemoveDeployment", "%s/%s externalsecretsconfigs.operator.openshift.io marked for deletion, remove reference in deployment and remove all resources created for deployment", esc.GetNamespace(), esc.GetName())
+
+	if err := common.RemoveFinalizer(r.ctx, esc, r.CtrlClient, finalizer); err != nil {
+		return true, err
+	}
+	r.log.V(1).Info("removed finalizer, cleanup complete", "request", req.NamespacedName)
+
 	return false, nil
 }

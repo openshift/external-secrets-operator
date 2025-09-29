@@ -302,7 +302,7 @@ func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig
 
 // updateStatus is for updating the status subresource of externalsecretsconfigs.operator.openshift.io.
 func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecretsConfig) error {
-	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
+	namespacedName := client.ObjectKeyFromObject(changed)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		r.log.V(4).Info("updating externalsecretsconfigs.operator.openshift.io status", "request", namespacedName)
 		current := &operatorv1alpha1.ExternalSecretsConfig{}

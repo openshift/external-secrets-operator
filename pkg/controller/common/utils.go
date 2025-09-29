@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -61,6 +60,9 @@ func init() {
 
 func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 	l := obj.GetLabels()
+	if l == nil {
+		l = make(map[string]string, len(labels))
+	}
 	for k, v := range labels {
 		l[k] = v
 	}
@@ -402,7 +404,7 @@ func IsInjectCertManagerAnnotationEnabled(esc *operatorv1alpha1.ExternalSecretsC
 
 // AddFinalizer adds finalizer to the passed resource object.
 func AddFinalizer(ctx context.Context, obj client.Object, opClient operatorclient.CtrlClient, finalizer string) error {
-	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	namespacedName := client.ObjectKeyFromObject(obj)
 	if !controllerutil.ContainsFinalizer(obj, finalizer) {
 		if !controllerutil.AddFinalizer(obj, finalizer) {
 			return fmt.Errorf("failed to create %q object with finalizers added", namespacedName)
@@ -435,14 +437,14 @@ func AddFinalizer(ctx context.Context, obj client.Object, opClient operatorclien
 
 // RemoveFinalizer removes finalizers added from the passed resource object.
 func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorclient.CtrlClient, finalizer string) error {
-	namespacedName := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	namespacedName := client.ObjectKeyFromObject(obj)
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		if !controllerutil.RemoveFinalizer(obj, finalizer) {
-			return fmt.Errorf("failed to update %q externalsecretsconfigs.operator.openshift.io object with finalizers removed", namespacedName)
+			return fmt.Errorf("failed to remove finalizers on %q", namespacedName)
 		}
 
 		if err := opClient.UpdateWithRetry(ctx, obj); err != nil {
-			return fmt.Errorf("failed to remove finalizers on %q externalsecretsconfigs.operator.openshift.io with %w", namespacedName, err)
+			return fmt.Errorf("update failed to remove finalizers on %q: %w", namespacedName, err)
 		}
 		return nil
 	}
@@ -490,7 +492,7 @@ func DeleteObject(ctx context.Context, ctrlClient operatorclient.CtrlClient, obj
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", obj))
 	}
-	exists, err := ctrlClient.Exists(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, o)
+	exists, err := ctrlClient.Exists(ctx, client.ObjectKeyFromObject(o), o)
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,7 @@ import (
 
 	webhook "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -22,10 +22,7 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 		validatingWebhookName := desired.GetName()
 		r.log.V(4).Info("reconciling validatingWebhook resource", "name", validatingWebhookName)
 		fetched := &webhook.ValidatingWebhookConfiguration{}
-		key := types.NamespacedName{
-			Name: desired.GetName(),
-		}
-		exist, err := r.Exists(r.ctx, key, fetched)
+		exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
 		if err != nil {
 			return common.FromClientError(err, "failed to check %s validatingWebhook resource already exists", validatingWebhookName)
 		}

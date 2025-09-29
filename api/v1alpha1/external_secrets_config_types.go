@@ -72,7 +72,7 @@ type ExternalSecretsConfigSpec struct {
 // ExternalSecretsConfigStatus is the most recently observed status of the ExternalSecretsConfig.
 type ExternalSecretsConfigStatus struct {
 	// conditions holds information of the current state of the external-secrets deployment.
-	ConditionalStatus `json:",inline,omitempty"`
+	ConditionalStatus `json:",inline"`
 
 	// externalSecretsImage is the name of the image and the tag used for deploying external-secrets.
 	ExternalSecretsImage string `json:"externalSecretsImage,omitempty"`
@@ -95,7 +95,7 @@ type ApplicationConfig struct {
 	WebhookConfig *WebhookConfig `json:"webhookConfig,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	CommonConfigs `json:",inline,omitempty"`
+	CommonConfigs `json:",inline"`
 }
 
 // ControllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,7 +53,7 @@ func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig
 
 // updateStatus is for updating the status subresource of externalsecretsconfigs.operator.openshift.io.
 func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecretsConfig) error {
-	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
+	namespacedName := client.ObjectKeyFromObject(changed)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		r.log.V(4).Info("updating externalsecretsconfigs.operator.openshift.io status", "request", namespacedName)
 		current := &operatorv1alpha1.ExternalSecretsConfig{}
@@ -80,7 +79,7 @@ func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1
 func (r *Reconciler) validateExternalSecretsConfig(esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	if isCertManagerConfigEnabled(esc) {
 		if _, ok := r.optionalResourcesList[certificateCRDGKV]; !ok {
-			return fmt.Errorf("spec.certManagerConfig.enabled is set, but cert-manager is not installed")
+			return fmt.Errorf("spec.controllerConfig.certProvider.certManager.mode is set, but cert-manager is not installed")
 		}
 	}
 	return nil

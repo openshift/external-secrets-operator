@@ -8,11 +8,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
 	corevalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -74,12 +74,8 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	}
 
 	deploymentName := fmt.Sprintf("%s/%s", deployment.GetNamespace(), deployment.GetName())
-	key := types.NamespacedName{
-		Name:      deployment.GetName(),
-		Namespace: deployment.GetNamespace(),
-	}
 	fetched := &appsv1.Deployment{}
-	exist, err := r.Exists(r.ctx, key, fetched)
+	exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(deployment), fetched)
 	if err != nil {
 		return common.FromClientError(err, "failed to check %s deployment resource already exists", deploymentName)
 	}
@@ -124,7 +120,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	case controllerDeploymentAssetName:
 		updateContainerSpec(deployment, esc, image, logLevel)
 	case webhookDeploymentAssetName:
-		checkInterval := "5m"
+		var checkInterval string
 		if esc.Spec.ApplicationConfig.WebhookConfig != nil &&
 			esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval != nil {
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
@@ -133,7 +129,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
 	case bitwardenDeploymentAssetName:
-		deployment.Labels["app.kubernetes.io/version"] = bitwardenImageVersionEnvVarName
+		deployment.Labels["app.kubernetes.io/version"] = os.Getenv(bitwardenImageVersionEnvVarName)
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
 	}
 
