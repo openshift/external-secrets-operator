@@ -419,9 +419,8 @@ docs: crd-ref-docs
 .PHONY: govulnscan
 #The ignored vulnerabilities are not in the operator code, but in the vendored packages.
 # - https://pkg.go.dev/vuln/GO-2025-3956
-# - https://pkg.go.dev/vuln/GO-2025-3915
 # - https://pkg.go.dev/vuln/GO-2025-3547
-# _ https://pkg.go.dev/vuln/GO-2025-3521
+# - https://pkg.go.dev/vuln/GO-2025-3521
 KNOWN_VULNERABILITIES:="GO-2025-3547|GO-2025-3521|GO-2025-3956|GO-2025-3915"
 govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
 	- $(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1
