@@ -2,7 +2,6 @@ package external_secrets
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -98,7 +97,7 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 	if esc.Spec.ControllerConfig.CertProvider != nil && esc.Spec.ControllerConfig.CertProvider.CertManager != nil {
 		certManageConfig = esc.Spec.ControllerConfig.CertProvider.CertManager
 	}
-	if reflect.ValueOf(certManageConfig.IssuerRef).IsZero() {
+	if certManageConfig.IssuerRef == nil {
 		return fmt.Errorf("cert-manager is enabled but issuerRef is not configured")
 	}
 	if certManageConfig.IssuerRef.Name == "" {

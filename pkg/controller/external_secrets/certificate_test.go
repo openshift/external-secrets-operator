@@ -471,7 +471,9 @@ func testExternalSecretsConfigForCertificate() *v1alpha1.ExternalSecretsConfig {
 	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
 		ControllerConfig: v1alpha1.ControllerConfig{
 			CertProvider: &v1alpha1.CertProvidersConfig{
-				CertManager: &v1alpha1.CertManagerConfig{},
+				CertManager: &v1alpha1.CertManagerConfig{
+					IssuerRef: &v1alpha1.ObjectReference{},
+				},
 			},
 		},
 		ApplicationConfig: v1alpha1.ApplicationConfig{

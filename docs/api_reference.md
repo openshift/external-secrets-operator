@@ -69,7 +69,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[Mode](#mode)_ | mode indicates whether to use cert-manager for certificate management, instead of built-in cert-controller.<br />Enabled: Makes use of cert-manager for obtaining the certificates for webhook server and other components.<br />Disabled: Makes use of in-built cert-controller for obtaining the certificates for webhook server, which is the default behavior.<br />This field is immutable once set. | Disabled | Enum: [Enabled Disabled] <br />Required: \{\} <br /> |
+| `mode` _[Mode](#mode)_ | mode indicates whether to use cert-manager for certificate management, instead of built-in cert-controller.<br />Enabled: Makes use of cert-manager for obtaining the certificates for webhook server and other components.<br />Disabled: Makes use of in-built cert-controller for obtaining the certificates for webhook server, which is the default behavior.<br />This field is immutable once set. |  | Enum: [Enabled Disabled] <br />Required: \{\} <br /> |
 | `injectAnnotations` _string_ | injectAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the webhooks and CRDs to automatically setup webhook to use the cert-manager CA. This requires CA Injector to be enabled in cert-manager.<br />Use `true` or `false` to indicate the preference. This field is immutable once set. | false | Enum: [true false] <br />Optional: \{\} <br /> |
 | `issuerRef` _ObjectReference_ | issuerRef contains details of the referenced object used for obtaining certificates.<br />When `issuerRef.Kind` is `Issuer`, it must exist in the `external-secrets` namespace.<br />This field is immutable once set. |  | Optional: \{\} <br /> |
 | `certificateDuration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateDuration is the validity period of the webhook certificate. | 8760h | Optional: \{\} <br /> |
@@ -378,7 +378,7 @@ _Appears in:_
 
 #### ObjectReference
 
-
+_Underlying type:_ _[struct{Name string "json:\"name\""; Kind string "json:\"kind,omitempty\""; Group string "json:\"group,omitempty\""}](#struct{name-string-"json:\"name\"";-kind-string-"json:\"kind,omitempty\"";-group-string-"json:\"group,omitempty\""})_
 
 ObjectReference is a reference to an object with a given name, kind and group.
 
@@ -387,11 +387,6 @@ ObjectReference is a reference to an object with a given name, kind and group.
 _Appears in:_
 - [CertManagerConfig](#certmanagerconfig)
 
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | Name of the resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `kind` _string_ | Kind of the resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `group` _string_ | Group of the resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### PluginsConfig
