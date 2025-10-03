@@ -157,7 +157,6 @@ type CertManagerConfig struct {
 	// This field is immutable once set.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="mode is immutable once set"
 	// +kubebuilder:validation:Enum:=Enabled;Disabled
-	// +kubebuilder:default:=Disabled
 	// +kubebuilder:validation:Required
 	Mode Mode `json:"mode,omitempty"`
 
@@ -176,7 +175,7 @@ type CertManagerConfig struct {
 	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind.lowerAscii() == 'issuer' || self.kind.lowerAscii() == 'clusterissuer'",message="kind must be either 'Issuer' or 'ClusterIssuer'"
 	// +kubebuilder:validation:XValidation:rule="!has(self.group) || self.group.lowerAscii() == 'cert-manager.io'",message="group must be 'cert-manager.io'"
 	// +kubebuilder:validation:Optional
-	IssuerRef ObjectReference `json:"issuerRef,omitempty"`
+	IssuerRef *ObjectReference `json:"issuerRef,omitempty"`
 
 	// certificateDuration is the validity period of the webhook certificate.
 	// +kubebuilder:default:="8760h"
