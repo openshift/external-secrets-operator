@@ -98,10 +98,16 @@ func isBitwardenConfigEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool 
 		common.EvalMode(esc.Spec.Plugins.BitwardenSecretManagerProvider.Mode)
 }
 
-func getLogLevel(config operatorv1alpha1.ExternalSecretsConfigSpec) string {
-	switch config.ApplicationConfig.LogLevel {
+func getLogLevel(esc *operatorv1alpha1.ExternalSecretsConfig, esm *operatorv1alpha1.ExternalSecretsManager) string {
+	var logLevel int32 = 1
+	if esc.Spec.ApplicationConfig.LogLevel != 0 {
+		logLevel = esc.Spec.ApplicationConfig.LogLevel
+	} else if esm.Spec.GlobalConfig != nil && esm.Spec.GlobalConfig.LogLevel != 0 {
+		logLevel = esm.Spec.GlobalConfig.LogLevel
+	}
+	switch logLevel {
 	case 0, 1, 2:
-		return zapcore.Level(config.ApplicationConfig.LogLevel).String()
+		return zapcore.Level(logLevel).String()
 	case 4, 5:
 		return zapcore.DebugLevel.String()
 	}

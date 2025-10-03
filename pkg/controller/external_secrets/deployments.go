@@ -114,13 +114,13 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	if bitwardenImage == "" {
 		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with bitwarden-sdk-server image not set", bitwardenImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
 	}
-	logLevel := getLogLevel(esc.Spec)
+	logLevel := getLogLevel(esc, r.esm)
 
 	switch assetName {
 	case controllerDeploymentAssetName:
 		updateContainerSpec(deployment, esc, image, logLevel)
 	case webhookDeploymentAssetName:
-		var checkInterval string
+		checkInterval := "5m"
 		if esc.Spec.ApplicationConfig.WebhookConfig != nil &&
 			esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval != nil {
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
