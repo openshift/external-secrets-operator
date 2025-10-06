@@ -128,6 +128,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	case bitwardenDeploymentAssetName:
 		deployment.Labels["app.kubernetes.io/version"] = os.Getenv(bitwardenImageVersionEnvVarName)
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
+		updateBitwardenVolumeConfig(deployment, esc)
 	}
 
 	if err := r.updateResourceRequirement(deployment, esc); err != nil {
@@ -386,6 +387,17 @@ func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image str
 			deployment.Spec.Template.Spec.Containers[i].Image = image
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
+		}
+	}
+}
+
+func updateBitwardenVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef != nil &&
+		esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name != "" {
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			if deployment.Spec.Template.Spec.Volumes[i].Name == "bitwarden-tls-certs" {
+				deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name
+			}
 		}
 	}
 }
