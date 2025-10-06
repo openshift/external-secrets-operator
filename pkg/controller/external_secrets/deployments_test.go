@@ -20,11 +20,11 @@ import (
 
 func TestCreateOrApplyDeployments(t *testing.T) {
 	tests := []struct {
-		name                  string
-		preReq                func(*Reconciler, *fakes.FakeCtrlClient)
-		updateExternalSecrets func(*v1alpha1.ExternalSecrets)
-		skipEnvVar            bool
-		wantErr               string
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(*v1alpha1.ExternalSecretsConfig)
+		skipEnvVar                  bool
+		wantErr                     string
 	}{
 		{
 			name: "deployment reconciliation successful",
@@ -38,7 +38,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
 				i.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
 			},
 		},
@@ -104,11 +104,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{}
-				}
-				i.Spec.ExternalSecretsConfig.Affinity = &corev1.Affinity{
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig.Affinity = &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 							NodeSelectorTerms: []corev1.NodeSelectorTerm{
@@ -160,7 +157,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						},
 					},
 				}
-				i.Spec.ExternalSecretsConfig.Tolerations = []corev1.Toleration{
+				i.Spec.ApplicationConfig.Tolerations = []corev1.Toleration{
 					{
 						Key:      "type",
 						Operator: corev1.TolerationOpEqual,
@@ -168,8 +165,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						Effect:   corev1.TaintEffectNoSchedule,
 					},
 				}
-				i.Spec.ExternalSecretsConfig.NodeSelector = map[string]string{"type": "test"}
-				i.Spec.ExternalSecretsConfig.Resources = corev1.ResourceRequirements{
+				i.Spec.ApplicationConfig.NodeSelector = map[string]string{"type": "test"}
+				i.Spec.ApplicationConfig.Resources = &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
 						corev1.ResourceMemory: resource.MustParse("100Mi"),
@@ -201,13 +198,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 				m.StatusUpdateCalls(func(ctx context.Context, obj client.Object, _ ...client.SubResourceUpdateOption) error {
 					switch obj.(type) {
-					case *v1alpha1.ExternalSecrets:
+					case *v1alpha1.ExternalSecretsConfig:
 						return commontest.TestClientError
 					}
 					return nil
 				})
 			},
-			wantErr: `failed to update /cluster status with image info: failed to update externalsecrets.openshift.operator.io "/cluster" status: test client error`,
+			wantErr: `failed to update /cluster status with image info: failed to update externalsecretsconfigs.operator.openshift.io "/cluster" status: test client error`,
 		},
 		{
 			name: "deployment reconciliation with invalid toleration configuration",
@@ -221,11 +218,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{}
-				}
-				i.Spec.ExternalSecretsConfig.Tolerations = []corev1.Toleration{
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig.Tolerations = []corev1.Toleration{
 					{
 						Operator: corev1.TolerationOpExists,
 						Value:    "test",
@@ -233,7 +227,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					},
 				}
 			},
-			wantErr: "failed to update pod tolerations: spec.externalSecretsConfig.tolerations.tolerations[0].operator: Invalid value: \"test\": value must be empty when `operator` is 'Exists'",
+			wantErr: "failed to update pod tolerations: spec.tolerations.tolerations[0].operator: Invalid value: \"test\": value must be empty when `operator` is 'Exists'",
 		},
 		{
 			name: "deployment reconciliation with invalid nodeSelector configuration",
@@ -247,13 +241,10 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{}
-				}
-				i.Spec.ExternalSecretsConfig.NodeSelector = map[string]string{"node/Label/2": "value2"}
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig.NodeSelector = map[string]string{"node/Label/2": "value2"}
 			},
-			wantErr: `failed to update node selector: spec.externalSecretsConfig.nodeSelector: Invalid value: "node/Label/2": a qualified name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')`,
+			wantErr: `failed to update node selector: spec.nodeSelector: Invalid value: "node/Label/2": a qualified name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')`,
 		},
 		{
 			name: "deployment reconciliation with invalid affinity configuration",
@@ -267,12 +258,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{}
-				}
-
-				i.Spec.ExternalSecretsConfig.Affinity = &corev1.Affinity{
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig.Affinity = &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 							NodeSelectorTerms: []corev1.NodeSelectorTerm{
@@ -322,7 +309,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					},
 				}
 			},
-			wantErr: "failed to update affinity rules: [spec.externalSecretsConfig.affinity.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values: Required value: must be specified when `operator` is 'In' or 'NotIn', spec.externalSecretsConfig.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Required value: can not be empty, spec.externalSecretsConfig.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Invalid value: \"\": name part must be non-empty, spec.externalSecretsConfig.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Invalid value: \"\": name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'), spec.externalSecretsConfig.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Required value: can not be empty, spec.externalSecretsConfig.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Invalid value: \"\": name part must be non-empty, spec.externalSecretsConfig.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Invalid value: \"\": name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')]",
+			wantErr: "failed to update affinity rules: [spec.affinity.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values: Required value: must be specified when `operator` is 'In' or 'NotIn', spec.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Required value: can not be empty, spec.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Invalid value: \"\": name part must be non-empty, spec.affinity.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey: Invalid value: \"\": name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'), spec.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Required value: can not be empty, spec.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Invalid value: \"\": name part must be non-empty, spec.affinity.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey: Invalid value: \"\": name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')]",
 		},
 		{
 			name: "deployment reconciliation with invalid resource requirement configuration",
@@ -336,11 +323,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return true, nil
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{}
-				}
-				i.Spec.ExternalSecretsConfig.Resources = corev1.ResourceRequirements{
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig.Resources = &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
 						corev1.ResourceMemory: resource.MustParse("100Mi"),
@@ -369,13 +353,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return commontest.TestClientError
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-						CertManagerConfig: &v1alpha1.CertManagerConfig{
-							Enabled: "true",
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ControllerConfig = v1alpha1.ControllerConfig{
+					CertProvider: &v1alpha1.CertProvidersConfig{
+						CertManager: &v1alpha1.CertManagerConfig{
+							Mode: v1alpha1.Enabled,
 						},
-					}
+					},
 				}
 			},
 			wantErr: `failed to delete deployment resource: test client error`,
@@ -395,13 +379,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return errors.NewNotFound(schema.GroupResource{}, obj.GetName())
 				})
 			},
-			updateExternalSecrets: func(i *v1alpha1.ExternalSecrets) {
-				if i.Spec.ExternalSecretsConfig == nil {
-					i.Spec.ExternalSecretsConfig = &v1alpha1.ExternalSecretsConfig{
-						CertManagerConfig: &v1alpha1.CertManagerConfig{
-							Enabled: "true",
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ControllerConfig = v1alpha1.ControllerConfig{
+					CertProvider: &v1alpha1.CertProvidersConfig{
+						CertManager: &v1alpha1.CertManagerConfig{
+							Mode: v1alpha1.Enabled,
 						},
-					}
+					},
 				}
 			},
 		},
@@ -415,10 +399,10 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
-			externalsecrets := commontest.TestExternalSecrets()
+			externalsecrets := commontest.TestExternalSecretsConfig()
 
-			if tt.updateExternalSecrets != nil {
-				tt.updateExternalSecrets(externalsecrets)
+			if tt.updateExternalSecretsConfig != nil {
+				tt.updateExternalSecretsConfig(externalsecrets)
 			}
 			if !tt.skipEnvVar {
 				t.Setenv("RELATED_IMAGE_EXTERNAL_SECRETS", commontest.TestExternalSecretsImageName)
@@ -429,12 +413,8 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyDeployments() err: %v, wantErr: %v", err, tt.wantErr)
 			}
-			if tt.wantErr == "" {
-				if tt.wantErr == "" {
-					if externalsecrets.Status.ExternalSecretsImage != commontest.TestExternalSecretsImageName {
-						t.Errorf("createOrApplyDeployments() got image in status: %v, want: %v", externalsecrets.Status.ExternalSecretsImage, "test-image")
-					}
-				}
+			if tt.wantErr == "" && externalsecrets.Status.ExternalSecretsImage != commontest.TestExternalSecretsImageName {
+				t.Errorf("createOrApplyDeployments() got image in status: %v, want: %v", externalsecrets.Status.ExternalSecretsImage, "test-image")
 			}
 		})
 	}

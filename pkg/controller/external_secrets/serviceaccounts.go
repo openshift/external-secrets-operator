@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -12,7 +12,7 @@ import (
 )
 
 // createOrApplyServiceAccounts ensures required service Account resources exist and are correctly configured.
-func (r *Reconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alpha1.ExternalSecrets, resourceLabels map[string]string, externalsecretsCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
 	serviceAccountsToCreate := []struct {
 		assetName string
 		condition bool
@@ -27,11 +27,11 @@ func (r *Reconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alp
 		},
 		{
 			assetName: certControllerServiceAccountAssetName,
-			condition: !isCertManagerConfigEnabled(externalsecrets),
+			condition: !isCertManagerConfigEnabled(esc),
 		},
 		{
 			assetName: bitwardenServiceAccountAssetName,
-			condition: isBitwardenConfigEnabled(externalsecrets),
+			condition: isBitwardenConfigEnabled(esc),
 		},
 	}
 
@@ -44,33 +44,28 @@ func (r *Reconciler) createOrApplyServiceAccounts(externalsecrets *operatorv1alp
 		}
 
 		desired := common.DecodeServiceAccountObjBytes(assets.MustAsset(serviceAccount.assetName))
-		updateNamespace(desired, externalsecrets)
+		updateNamespace(desired, esc)
 		common.UpdateResourceLabels(desired, resourceLabels)
 
 		serviceAccountName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 		r.log.V(4).Info("reconciling serviceaccount resource", "name", serviceAccountName)
 
-		key := types.NamespacedName{
-			Name:      desired.GetName(),
-			Namespace: desired.GetNamespace(),
-		}
-
 		fetched := &corev1.ServiceAccount{}
-		exist, err := r.Exists(r.ctx, key, fetched)
+		exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
 		if err != nil {
 			return common.FromClientError(err, "failed to check if serviceaccount %s exists", serviceAccountName)
 		}
 
 		if exist {
-			if externalsecretsCreateRecon {
-				r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s serviceaccount already exists, possibly from a previous install", serviceAccountName)
+			if externalSecretsConfigCreateRecon {
+				r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s serviceaccount already exists, possibly from a previous install", serviceAccountName)
 			}
 			r.log.V(4).Info("serviceaccount exists", "name", serviceAccountName)
 		} else {
 			if err := r.Create(r.ctx, desired); err != nil {
 				return common.FromClientError(err, "failed to create serviceaccount %s", serviceAccountName)
 			}
-			r.eventRecorder.Eventf(externalsecrets, corev1.EventTypeNormal, "Reconciled", "Created serviceaccount %s", serviceAccountName)
+			r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Created serviceaccount %s", serviceAccountName)
 		}
 	}
 

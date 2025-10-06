@@ -94,6 +94,7 @@ spec:
           - name: METRICS_SECURE
             value: "true"
         image: controller:latest
+        imagePullPolicy: Always
         name: manager
         securityContext:
           readOnlyRootFilesystem: true

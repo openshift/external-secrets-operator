@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,39 +14,35 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
-func getNamespace(es *operatorv1alpha1.ExternalSecrets) string {
-	ns := externalsecretsDefaultNamespace
-	if es.Spec.ControllerConfig != nil && es.Spec.ControllerConfig.Namespace != "" {
-		ns = es.Spec.ControllerConfig.Namespace
-	}
-	return ns
+func getNamespace(_ *operatorv1alpha1.ExternalSecretsConfig) string {
+	return externalsecretsDefaultNamespace
 }
 
-func updateNamespace(obj client.Object, es *operatorv1alpha1.ExternalSecrets) {
-	obj.SetNamespace(getNamespace(es))
+func updateNamespace(obj client.Object, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	obj.SetNamespace(getNamespace(esc))
 }
 
-func containsProcessedAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets) bool {
-	_, exist := externalsecrets.GetAnnotations()[controllerProcessedAnnotation]
+func containsProcessedAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	_, exist := esc.GetAnnotations()[controllerProcessedAnnotation]
 	return exist
 }
 
-func addProcessedAnnotation(externalsecrets *operatorv1alpha1.ExternalSecrets) bool {
-	annotations := externalsecrets.GetAnnotations()
+func addProcessedAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	annotations := esc.GetAnnotations()
 	if annotations == nil {
 		annotations = make(map[string]string, 1)
 	}
 	if _, exist := annotations[controllerProcessedAnnotation]; !exist {
 		annotations[controllerProcessedAnnotation] = "true"
-		externalsecrets.SetAnnotations(annotations)
+		esc.SetAnnotations(annotations)
 		return true
 	}
 	return false
 }
 
-func (r *Reconciler) updateCondition(externalsecrets *operatorv1alpha1.ExternalSecrets, prependErr error) error {
-	if err := r.updateStatus(r.ctx, externalsecrets); err != nil {
-		errUpdate := fmt.Errorf("failed to update %s/%s status: %w", externalsecrets.GetNamespace(), externalsecrets.GetName(), err)
+func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig, prependErr error) error {
+	if err := r.updateStatus(r.ctx, esc); err != nil {
+		errUpdate := fmt.Errorf("failed to update %s/%s status: %w", esc.GetNamespace(), esc.GetName(), err)
 		if prependErr != nil {
 			return utilerrors.NewAggregate([]error{err, errUpdate})
 		}
@@ -56,19 +51,19 @@ func (r *Reconciler) updateCondition(externalsecrets *operatorv1alpha1.ExternalS
 	return prependErr
 }
 
-// updateStatus is for updating the status subresource of externalsecrets.openshift.operator.io.
-func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecrets) error {
-	namespacedName := types.NamespacedName{Name: changed.Name, Namespace: changed.Namespace}
+// updateStatus is for updating the status subresource of externalsecretsconfigs.operator.openshift.io.
+func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1.ExternalSecretsConfig) error {
+	namespacedName := client.ObjectKeyFromObject(changed)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		r.log.V(4).Info("updating externalsecrets.openshift.operator.io status", "request", namespacedName)
-		current := &operatorv1alpha1.ExternalSecrets{}
+		r.log.V(4).Info("updating externalsecretsconfigs.operator.openshift.io status", "request", namespacedName)
+		current := &operatorv1alpha1.ExternalSecretsConfig{}
 		if err := r.Get(ctx, namespacedName, current); err != nil {
-			return fmt.Errorf("failed to fetch externalsecrets.openshift.operator.io %q for status update: %w", namespacedName, err)
+			return fmt.Errorf("failed to fetch externalsecretsconfigs.operator.openshift.io %q for status update: %w", namespacedName, err)
 		}
 		changed.Status.DeepCopyInto(&current.Status)
 
 		if err := r.StatusUpdate(ctx, current); err != nil {
-			return fmt.Errorf("failed to update externalsecrets.openshift.operator.io %q status: %w", namespacedName, err)
+			return fmt.Errorf("failed to update externalsecretsconfigs.operator.openshift.io %q status: %w", namespacedName, err)
 		}
 
 		return nil
@@ -79,43 +74,48 @@ func (r *Reconciler) updateStatus(ctx context.Context, changed *operatorv1alpha1
 	return nil
 }
 
-// validateExternalSecretsConfig is for validating the ExternalSecrets CR fields, apart from the
+// validateExternalSecretsConfig is for validating the ExternalSecretsConfig CR fields, apart from the
 // CEL validations present in CRD.
-func (r *Reconciler) validateExternalSecretsConfig(es *operatorv1alpha1.ExternalSecrets) error {
-	if isCertManagerConfigEnabled(es) {
+func (r *Reconciler) validateExternalSecretsConfig(esc *operatorv1alpha1.ExternalSecretsConfig) error {
+	if isCertManagerConfigEnabled(esc) {
 		if _, ok := r.optionalResourcesList[certificateCRDGKV]; !ok {
-			return fmt.Errorf("spec.externalSecretsConfig.webhookConfig.certManagerConfig.enabled is set, but cert-manager is not installed")
+			return fmt.Errorf("spec.controllerConfig.certProvider.certManager.mode is set, but cert-manager is not installed")
 		}
-
 	}
 	return nil
 }
 
-// isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
-func isCertManagerConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil &&
-		es.Spec.ExternalSecretsConfig.CertManagerConfig != nil &&
-		common.ParseBool(es.Spec.ExternalSecretsConfig.CertManagerConfig.Enabled)
+// isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecretsConfig CR Spec.
+func isCertManagerConfigEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	return esc.Spec.ControllerConfig.CertProvider != nil &&
+		esc.Spec.ControllerConfig.CertProvider.CertManager != nil &&
+		common.EvalMode(esc.Spec.ControllerConfig.CertProvider.CertManager.Mode)
 }
 
-// isBitwardenConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecrets CR Spec.
-func isBitwardenConfigEnabled(es *operatorv1alpha1.ExternalSecrets) bool {
-	return es.Spec != (operatorv1alpha1.ExternalSecretsSpec{}) && es.Spec.ExternalSecretsConfig != nil && es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider != nil &&
-		common.ParseBool(es.Spec.ExternalSecretsConfig.BitwardenSecretManagerProvider.Enabled)
+// isBitwardenConfigEnabled returns whether BitwardenSecretManagerProvider is enabled in ExternalSecretsConfig CR Spec.
+func isBitwardenConfigEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
+	return esc.Spec.Plugins.BitwardenSecretManagerProvider != nil &&
+		common.EvalMode(esc.Spec.Plugins.BitwardenSecretManagerProvider.Mode)
 }
 
-func getLogLevel(config *operatorv1alpha1.ExternalSecretsConfig) string {
-	if config != nil {
-		return zapcore.Level(config.LogLevel).String()
+func getLogLevel(esc *operatorv1alpha1.ExternalSecretsConfig, esm *operatorv1alpha1.ExternalSecretsManager) string {
+	var logLevel int32 = 1
+	if esc.Spec.ApplicationConfig.LogLevel != 0 {
+		logLevel = esc.Spec.ApplicationConfig.LogLevel
+	} else if esm.Spec.GlobalConfig != nil && esm.Spec.GlobalConfig.LogLevel != 0 {
+		logLevel = esm.Spec.GlobalConfig.LogLevel
 	}
-	return "info"
+	switch logLevel {
+	case 0, 1, 2:
+		return zapcore.Level(logLevel).String()
+	case 4, 5:
+		return zapcore.DebugLevel.String()
+	}
+	return zapcore.InfoLevel.String()
 }
 
-func getOperatingNamespace(externalsecrets *operatorv1alpha1.ExternalSecrets) string {
-	if externalsecrets == nil || externalsecrets.Spec.ExternalSecretsConfig == nil {
-		return ""
-	}
-	return externalsecrets.Spec.ExternalSecretsConfig.OperatingNamespace
+func getOperatingNamespace(esc *operatorv1alpha1.ExternalSecretsConfig) string {
+	return esc.Spec.ApplicationConfig.OperatingNamespace
 }
 
 func (r *Reconciler) IsCertManagerInstalled() bool {
