@@ -477,7 +477,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
 						// Create a deployment with bitwarden-tls-certs volume to test volume update
-						deployment := testDeployment(certControllerDeploymentAssetName)
+						deployment := testDeployment(bitwardenDeploymentAssetName)
 						deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
 							{
 								Name: "bitwarden-tls-certs",
@@ -488,11 +488,6 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 								},
 							},
 						}
-						// Add a bitwarden-sdk-server container to test container image update
-						deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, corev1.Container{
-							Name:  "bitwarden-sdk-server",
-							Image: "initial-bitwarden-image:latest",
-						})
 						deployment.DeepCopyInto(o)
 					}
 					return true, nil
@@ -550,11 +545,9 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				for _, container := range deployment.Spec.Template.Spec.Containers {
 					if container.Name == "bitwarden-sdk-server" {
 						foundContainer = true
-						if container.Image == "initial-bitwarden-image:latest" {
-							t.Error("bitwarden-sdk-server container image should have been updated from initial value")
+						if container.Image != commontest.TestBitwardenImageName {
+							t.Errorf("bitwarden-sdk-server container image should be %s, got: %s", commontest.TestBitwardenImageName, container.Image)
 						}
-						// The reconciler should update this to the value from environment variable
-						// We set RELATED_IMAGE_BITWARDEN_SDK_SERVER in the test
 						break
 					}
 				}
