@@ -15,10 +15,10 @@ import (
 
 func TestCreateOrApplyServices(t *testing.T) {
 	tests := []struct {
-		name                     string
-		preReq                   func(*Reconciler, *fakes.FakeCtrlClient)
-		updateExternalSecretsObj func(*operatorv1alpha1.ExternalSecrets)
-		wantErr                  string
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(config *operatorv1alpha1.ExternalSecretsConfig)
+		wantErr                     string
 	}{
 		{
 			name: "service reconciliation successful",
@@ -56,10 +56,12 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return nil
 				})
 			},
-			updateExternalSecretsObj: func(es *operatorv1alpha1.ExternalSecrets) {
-				es.Spec.ExternalSecretsConfig = &operatorv1alpha1.ExternalSecretsConfig{
-					BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
-						Enabled: "true",
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
+					Plugins: operatorv1alpha1.PluginsConfig{
+						BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
+							Mode: operatorv1alpha1.Enabled,
+						},
 					},
 				}
 			},
@@ -122,11 +124,11 @@ func TestCreateOrApplyServices(t *testing.T) {
 				tt.preReq(r, mock)
 			}
 			r.CtrlClient = mock
-			es := commontest.TestExternalSecrets()
-			if tt.updateExternalSecretsObj != nil {
-				tt.updateExternalSecretsObj(es)
+			esc := commontest.TestExternalSecretsConfig()
+			if tt.updateExternalSecretsConfig != nil {
+				tt.updateExternalSecretsConfig(esc)
 			}
-			err := r.createOrApplyServices(es, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyServices(esc, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyServices() err: %v, wantErr: %v", err, tt.wantErr)
 			}

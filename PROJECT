@@ -16,7 +16,7 @@ resources:
   controller: true
   domain: openshift.io
   group: operator
-  kind: ExternalSecrets
+  kind: ExternalSecretsConfig
   path: github.com/openshift/external-secrets-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

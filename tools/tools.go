@@ -11,6 +11,7 @@ import (
 	_ "github.com/elastic/crd-ref-docs"
 	_ "github.com/go-bindata/go-bindata/go-bindata"
 	_ "github.com/maxbrunsfeld/counterfeiter/v6"
+	_ "github.com/onsi/ginkgo/v2/ginkgo"
 	_ "github.com/openshift/build-machinery-go"
 	_ "golang.org/x/vuln/cmd/govulncheck"
 

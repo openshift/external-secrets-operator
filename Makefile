@@ -55,7 +55,7 @@ OPERATOR_SDK_VERSION ?= v1.39.0
 # Image URL to use all building/pushing image targets
 IMG ?= openshift.io/external-secrets-operator:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.31.0
+ENVTEST_K8S_VERSION = 1.32.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -127,8 +127,11 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate fmt vet envtest test-apis test-unit ## Run tests.
+
+.PHONY: test-unit
+test-unit: vet ## Run unit tests.
+	go test $$(go list ./... | grep -vE 'test/[e2e|apis|utils]') -coverprofile cover.out
 
 update-operand-manifests: helm yq
 	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
@@ -250,6 +253,7 @@ YQ = $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
 REFERENCE_DOC_GENERATOR ?= $(LOCALBIN)/crd-ref-docs
 GOVULNCHECK ?= $(LOCALBIN)/govulncheck
+GINKGO ?= $(LOCALBIN)/ginkgo
 
 ## Tool Versions
 YQ_VERSION = v4.45.2
@@ -283,11 +287,15 @@ crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
 govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
 	$(call go-install-tool,$(GOVULNCHECK),golang.org/x/vuln/cmd/govulncheck)
 
+.PHONY: ginkgo
+ginkgo: $(LOCALBIN) ## Download ginkgo locally if necessary.
+	$(call go-install-tool,$(GINKGO),github.com/onsi/ginkgo/v2/ginkgo)
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed
 define go-install-tool
-@[ -f "$(1)" ] || { \
+@{ \
 set -e; \
 package=$(2) ;\
 echo "Downloading $${package}" ;\
@@ -409,9 +417,21 @@ docs: crd-ref-docs
 
 ## perform vulnerabilities scan using govulncheck.
 .PHONY: govulnscan
-#GO-2025-3547 and GO-2025-3521 containing code is not directly used in the operator, hence will be ignored.
-KNOWN_VULNERABILITIES:="GO-2025-3547|GO-2025-3521"
+#The ignored vulnerabilities are not in the operator code, but in the vendored packages.
+# - https://pkg.go.dev/vuln/GO-2025-3956
+# - https://pkg.go.dev/vuln/GO-2025-3547
+# - https://pkg.go.dev/vuln/GO-2025-3521
+KNOWN_VULNERABILITIES:="GO-2025-3547|GO-2025-3521|GO-2025-3956|GO-2025-3915"
 govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
 	- $(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1
 	$(eval reported_vulnerabilities = $(strip $(shell grep "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results | ([ -n $KNOWN_VULNERABILITIES ] && grep -Ev $(KNOWN_VULNERABILITIES) || cat) | wc -l)))
 	@(if [ $(reported_vulnerabilities) -ne 0 ]; then echo -e "\n-- ERROR -- $(reported_vulnerabilities) new vulnerabilities reported, please check\n"; exit 1; fi)
+
+# Utilize controller-runtime provided envtest for API integration test
+.PHONY: test-apis  ## Run only the api integration tests.
+test-apis: envtest ginkgo
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ./hack/test-apis.sh
+
+.PHONY: clean
+clean:
+	rm -rf $(LOCALBIN) $(OUTPUTS_PATH) cover.out dist
