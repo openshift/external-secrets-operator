@@ -12,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,7 +21,6 @@ import (
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	operatorclient "github.com/openshift/external-secrets-operator/pkg/controller/client"
-	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 var (
@@ -470,36 +468,4 @@ func (n *Now) Reset() {
 	defer n.Unlock()
 
 	n.done.Store(0)
-}
-
-// DeleteObject is for deleting an object mentioned in the asset file passed.
-// Does not treat NotFound as an error, and can be extended in future with arg, whether to
-// return an error.
-// TODO: Extend for other object types as and when required.
-func DeleteObject(ctx context.Context, ctrlClient operatorclient.CtrlClient, obj client.Object, assetName string) error {
-	var o client.Object
-	switch obj.(type) {
-	case *rbacv1.ClusterRole:
-		o = DecodeClusterRoleObjBytes(assets.MustAsset(assetName))
-	case *rbacv1.ClusterRoleBinding:
-		o = DecodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
-	case *appsv1.Deployment:
-		o = DecodeDeploymentObjBytes(assets.MustAsset(assetName))
-	case *corev1.Secret:
-		o = DecodeSecretObjBytes(assets.MustAsset(assetName))
-	case *corev1.ServiceAccount:
-		o = DecodeServiceAccountObjBytes(assets.MustAsset(assetName))
-	default:
-		panic(fmt.Sprintf("unsupported object type: %T", obj))
-	}
-	exists, err := ctrlClient.Exists(ctx, client.ObjectKeyFromObject(o), o)
-	if err != nil {
-		return err
-	}
-	if exists {
-		if err := ctrlClient.Delete(ctx, o); err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-	}
-	return nil
 }
