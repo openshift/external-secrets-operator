@@ -78,15 +78,7 @@ func (r *Reconciler) createOrApplyControllerRBACResources(esc *operatorv1alpha1.
 // the main external-secrets operand cert-controller.
 func (r *Reconciler) createOrApplyCertControllerRBACResources(esc *operatorv1alpha1.ExternalSecretsConfig, serviceAccountName string, resourceLabels map[string]string, recon bool) error {
 	if isCertManagerConfigEnabled(esc) {
-		r.log.V(4).Info("deleting cert-controller rbac resources if exists, as cert-manager config is enabled")
-		for asset, assetType := range map[string]client.Object{
-			certControllerClusterRoleAssetName:        &rbacv1.ClusterRole{},
-			certControllerClusterRoleBindingAssetName: &rbacv1.ClusterRoleBinding{},
-		} {
-			if err := common.DeleteObject(r.ctx, r.CtrlClient, assetType, asset); err != nil {
-				return fmt.Errorf("failed to delete cert-controller rbac resource: %w", err)
-			}
-		}
+		r.log.V(4).Info("skipping cert-controller rbac resources reconciliation, as cert-manager config is enabled")
 		return nil
 	}
 

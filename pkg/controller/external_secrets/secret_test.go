@@ -184,32 +184,6 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 			},
 		},
-		{
-			name: "webhook secret deletion fails",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *corev1.Secret:
-						secret := testSecret(webhookTLSSecretAssetName)
-						secret.DeepCopyInto(o)
-					}
-					return true, nil
-				})
-				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-					return commontest.TestClientError
-				})
-			},
-			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig = v1alpha1.ControllerConfig{
-					CertProvider: &v1alpha1.CertProvidersConfig{
-						CertManager: &v1alpha1.CertManagerConfig{
-							Mode: v1alpha1.Enabled,
-						},
-					},
-				}
-			},
-			wantErr: `failed to delete secret resource of webhook component: test client error`,
-		},
 	}
 
 	for _, tt := range tests {

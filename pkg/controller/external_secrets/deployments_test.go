@@ -6,10 +6,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -337,57 +335,6 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				}
 			},
 			wantErr: `failed to update resource requirements: invalid resource requirements: [spec.resources.requests[test]: Invalid value: test: must be a standard resource type or fully qualified, spec.resources.requests[test]: Invalid value: test: must be a standard resource for containers]`,
-		},
-		{
-			name: "cert-controller deployment deletion fails",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						deployment := testDeployment(certControllerDeploymentAssetName)
-						deployment.DeepCopyInto(o)
-					}
-					return true, nil
-				})
-				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-					return commontest.TestClientError
-				})
-			},
-			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
-				i.Spec.ControllerConfig = v1alpha1.ControllerConfig{
-					CertProvider: &v1alpha1.CertProvidersConfig{
-						CertManager: &v1alpha1.CertManagerConfig{
-							Mode: v1alpha1.Enabled,
-						},
-					},
-				}
-			},
-			wantErr: `failed to delete deployment resource: test client error`,
-		},
-		{
-			name: "cert-controller deployment NotFound, deletion is marked successful",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						deployment := testDeployment(certControllerDeploymentAssetName)
-						deployment.DeepCopyInto(o)
-					}
-					return true, nil
-				})
-				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-					return errors.NewNotFound(schema.GroupResource{}, obj.GetName())
-				})
-			},
-			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
-				i.Spec.ControllerConfig = v1alpha1.ControllerConfig{
-					CertProvider: &v1alpha1.CertProvidersConfig{
-						CertManager: &v1alpha1.CertManagerConfig{
-							Mode: v1alpha1.Enabled,
-						},
-					},
-				}
-			},
 		},
 	}
 
