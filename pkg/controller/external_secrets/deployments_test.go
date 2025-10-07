@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -598,4 +599,630 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateProxyConfiguration(t *testing.T) {
+	// Expected trusted CA bundle volume
+	expectedTrustedCAVolume := corev1.Volume{
+		Name: "trusted-ca-bundle",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "external-secrets-trusted-ca-bundle",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name                     string
+		deployment               *appsv1.Deployment
+		externalSecretsConfig    *v1alpha1.ExternalSecretsConfig
+		externalSecretsManager   *v1alpha1.ExternalSecretsManager
+		olmEnvVars               map[string]string
+		expectedContainerEnvVars map[string][]corev1.EnvVar      // container name -> env vars
+		expectedVolumes          []corev1.Volume                 // expected volumes in the deployment
+		expectedVolumeMounts     map[string][]corev1.VolumeMount // container name -> volume mounts
+	}{
+		{
+			name: "ExternalSecretsConfig proxy takes precedence",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{Name: "init-migration"},
+							},
+							Containers: []corev1.Container{
+								{Name: "external-secrets"},
+								{Name: "webhook"},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy:  "http://esc-proxy:8080",
+								HTTPSProxy: "https://esc-proxy:8443",
+								NoProxy:    "esc.local",
+							},
+						},
+					},
+				},
+			},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{
+				Spec: v1alpha1.ExternalSecretsManagerSpec{
+					GlobalConfig: &v1alpha1.GlobalConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy:  "http://esm-proxy:8080",
+								HTTPSProxy: "https://esm-proxy:8443",
+								NoProxy:    "esm.local",
+							},
+						},
+					},
+				},
+			},
+			olmEnvVars: map[string]string{
+				"HTTP_PROXY":  "http://olm-proxy:8080",
+				"HTTPS_PROXY": "https://olm-proxy:8443",
+				"NO_PROXY":    "olm.local",
+			},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"init-migration": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
+				"webhook": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"init-migration": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+				"webhook": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "ExternalSecretsManager proxy when ESC has no proxy",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "external-secrets"},
+								{Name: "webhook"},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							// No proxy config
+						},
+					},
+				},
+			},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{
+				Spec: v1alpha1.ExternalSecretsManagerSpec{
+					GlobalConfig: &v1alpha1.GlobalConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy:  "http://esm-proxy:8080",
+								HTTPSProxy: "https://esm-proxy:8443",
+								NoProxy:    "esm.local",
+							},
+						},
+					},
+				},
+			},
+			olmEnvVars: map[string]string{
+				"HTTP_PROXY":  "http://olm-proxy:8080",
+				"HTTPS_PROXY": "https://olm-proxy:8443",
+				"NO_PROXY":    "olm.local",
+			},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://esm-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esm-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esm.local"},
+					{Name: "http_proxy", Value: "http://esm-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esm-proxy:8443"},
+					{Name: "no_proxy", Value: "esm.local"},
+				},
+				"webhook": {
+					{Name: "HTTP_PROXY", Value: "http://esm-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esm-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esm.local"},
+					{Name: "http_proxy", Value: "http://esm-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esm-proxy:8443"},
+					{Name: "no_proxy", Value: "esm.local"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+				"webhook": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "OLM environment variables used when no config proxy",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "external-secrets"},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig:  &v1alpha1.ExternalSecretsConfig{},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars: map[string]string{
+				"HTTP_PROXY":  "http://olm-proxy:8080",
+				"HTTPS_PROXY": "https://olm-proxy:8443",
+				"NO_PROXY":    "olm.local",
+			},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://olm-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://olm-proxy:8443"},
+					{Name: "NO_PROXY", Value: "olm.local"},
+					{Name: "http_proxy", Value: "http://olm-proxy:8080"},
+					{Name: "https_proxy", Value: "https://olm-proxy:8443"},
+					{Name: "no_proxy", Value: "olm.local"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "Partial proxy configuration",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "external-secrets"},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy: "http://esc-proxy:8080",
+								// HTTPSProxy and NoProxy are empty
+							},
+						},
+					},
+				},
+			},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "Update existing proxy environment variables",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "external-secrets",
+									Env: []corev1.EnvVar{
+										{Name: "HTTP_PROXY", Value: "http://old-proxy:8080"},
+										{Name: "EXISTING_VAR", Value: "existing-value"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy:  "http://new-proxy:8080",
+								HTTPSProxy: "https://new-proxy:8443",
+								NoProxy:    "localhost",
+							},
+						},
+					},
+				},
+			},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://new-proxy:8080"},
+					{Name: "EXISTING_VAR", Value: "existing-value"},
+					{Name: "HTTPS_PROXY", Value: "https://new-proxy:8443"},
+					{Name: "NO_PROXY", Value: "localhost"},
+					{Name: "http_proxy", Value: "http://new-proxy:8080"},
+					{Name: "https_proxy", Value: "https://new-proxy:8443"},
+					{Name: "no_proxy", Value: "localhost"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "No proxy configuration results in no changes",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "external-secrets",
+									Env: []corev1.EnvVar{
+										{Name: "EXISTING_VAR", Value: "existing-value"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig:  &v1alpha1.ExternalSecretsConfig{},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"external-secrets": {
+					{Name: "EXISTING_VAR", Value: "existing-value"},
+				},
+			},
+			expectedVolumes:      []corev1.Volume{},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{},
+		},
+		{
+			name: "Proxy configuration applied to init containers",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{Name: "init-setup"},
+							},
+							Containers: []corev1.Container{
+								{Name: "external-secrets"},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ApplicationConfig: v1alpha1.ApplicationConfig{
+						CommonConfigs: v1alpha1.CommonConfigs{
+							Proxy: &v1alpha1.ProxyConfig{
+								HTTPProxy:  "http://esc-proxy:8080",
+								HTTPSProxy: "https://esc-proxy:8443",
+								NoProxy:    "esc.local",
+							},
+						},
+					},
+				},
+			},
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"init-setup": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
+				"external-secrets": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"init-setup": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+				"external-secrets": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
+			},
+		},
+		{
+			name: "Proxy configuration removal cleans up environment variables and volumes",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name: "init-setup",
+									Env: []corev1.EnvVar{
+										{Name: "HTTP_PROXY", Value: "http://old-proxy:8080"},
+										{Name: "HTTPS_PROXY", Value: "https://old-proxy:8443"},
+										{Name: "NO_PROXY", Value: "old.local"},
+										{Name: "http_proxy", Value: "http://old-proxy:8080"},
+										{Name: "https_proxy", Value: "https://old-proxy:8443"},
+										{Name: "no_proxy", Value: "old.local"},
+										{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+										{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+									},
+								},
+							},
+							Containers: []corev1.Container{
+								{
+									Name: "external-secrets",
+									Env: []corev1.EnvVar{
+										{Name: "HTTP_PROXY", Value: "http://old-proxy:8080"},
+										{Name: "HTTPS_PROXY", Value: "https://old-proxy:8443"},
+										{Name: "NO_PROXY", Value: "old.local"},
+										{Name: "http_proxy", Value: "http://old-proxy:8080"},
+										{Name: "https_proxy", Value: "https://old-proxy:8443"},
+										{Name: "no_proxy", Value: "old.local"},
+										{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+										{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+									},
+								},
+							},
+							Volumes: []corev1.Volume{
+								{
+									Name: "trusted-ca-bundle",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "external-secrets-trusted-ca-bundle",
+											},
+										},
+									},
+								},
+								{
+									Name: "other-volume",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig:  &v1alpha1.ExternalSecretsConfig{}, // No proxy configuration
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"init-setup": {
+					{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+				},
+				"external-secrets": {
+					{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{
+				{
+					Name: "other-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"init-setup": {
+					{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+				},
+				"external-secrets": {
+					{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variables
+			for key, value := range tt.olmEnvVars {
+				t.Setenv(key, value)
+			}
+
+			r := &Reconciler{
+				esm: tt.externalSecretsManager,
+			}
+
+			err := r.updateProxyConfiguration(tt.deployment, tt.externalSecretsConfig)
+			if err != nil {
+				t.Errorf("updateProxyConfiguration() error = %v", err)
+				return
+			}
+
+			validateEnvironmentVariables(t, tt.deployment, tt.expectedContainerEnvVars)
+			validateVolumes(t, tt.deployment, tt.expectedVolumes)
+			validateVolumeMounts(t, tt.deployment, tt.expectedVolumeMounts)
+		})
+	}
+}
+
+// validateEnvironmentVariables validates that containers have expected environment variables
+func validateEnvironmentVariables(t *testing.T, deployment *appsv1.Deployment, expectedContainerEnvVars map[string][]corev1.EnvVar) {
+	for containerName, expectedEnvVars := range expectedContainerEnvVars {
+		container := findContainer(deployment, containerName)
+		if container == nil {
+			t.Errorf("Container %s not found in deployment", containerName)
+			return
+		}
+		if !reflect.DeepEqual(container.Env, expectedEnvVars) {
+			t.Errorf("Container %s environment variables mismatch.\nExpected: %+v\nActual: %+v",
+				containerName, expectedEnvVars, container.Env)
+		}
+	}
+}
+
+// validateVolumes validates that deployment has expected volumes
+func validateVolumes(t *testing.T, deployment *appsv1.Deployment, expectedVolumes []corev1.Volume) {
+	if len(expectedVolumes) == 0 {
+		// Verify no trusted CA bundle volume was added
+		for _, volume := range deployment.Spec.Template.Spec.Volumes {
+			if volume.Name == trustedCABundleVolumeName {
+				t.Errorf("Expected no trusted CA bundle volume, but found one: %+v", volume)
+			}
+		}
+		return
+	}
+
+	// Verify expected volumes exist and match exactly
+	if !reflect.DeepEqual(deployment.Spec.Template.Spec.Volumes, expectedVolumes) {
+		t.Errorf("Volumes mismatch.\nExpected: %+v\nActual: %+v",
+			expectedVolumes, deployment.Spec.Template.Spec.Volumes)
+	}
+}
+
+// validateVolumeMounts validates that containers have expected volume mounts
+func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedVolumeMounts map[string][]corev1.VolumeMount) {
+	if len(expectedVolumeMounts) == 0 {
+		// Verify no trusted CA bundle volume mounts exist in any container
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			trustedCAMounts := filterTrustedCAMounts(container.VolumeMounts)
+			if len(trustedCAMounts) > 0 {
+				t.Errorf("Expected no trusted CA bundle volume mount in container %s, but found: %+v",
+					container.Name, trustedCAMounts)
+			}
+		}
+		return
+	}
+
+	// Verify expected volume mounts exist
+	for containerName, expectedMounts := range expectedVolumeMounts {
+		container := findContainer(deployment, containerName)
+		if container == nil {
+			t.Errorf("Container %s not found for volume mount validation", containerName)
+			continue
+		}
+
+		// Determine if we're testing for trusted CA mounts or non-trusted CA mounts
+		var actualMounts []corev1.VolumeMount
+		if len(expectedMounts) > 0 && expectedMounts[0].Name == trustedCABundleVolumeName {
+			// Testing for trusted CA mounts
+			actualMounts = filterTrustedCAMounts(container.VolumeMounts)
+		} else {
+			// Testing for non-trusted CA mounts (e.g., in removal scenarios)
+			actualMounts = filterNonTrustedCAMounts(container.VolumeMounts)
+		}
+
+		if !reflect.DeepEqual(actualMounts, expectedMounts) {
+			t.Errorf("Container %s volume mounts mismatch.\nExpected: %+v\nActual: %+v",
+				containerName, expectedMounts, actualMounts)
+		}
+	}
+}
+
+// findContainer finds a container by name in the deployment
+func findContainer(deployment *appsv1.Deployment, containerName string) *corev1.Container {
+	// Search regular containers first
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == containerName {
+			return &deployment.Spec.Template.Spec.Containers[i]
+		}
+	}
+	// Search init containers
+	for i, container := range deployment.Spec.Template.Spec.InitContainers {
+		if container.Name == containerName {
+			return &deployment.Spec.Template.Spec.InitContainers[i]
+		}
+	}
+	return nil
+}
+
+// filterTrustedCAMounts filters volume mounts to only include trusted CA bundle mounts
+func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
+	var trustedCAMounts []corev1.VolumeMount
+	for _, mount := range volumeMounts {
+		if mount.Name == trustedCABundleVolumeName {
+			trustedCAMounts = append(trustedCAMounts, mount)
+		}
+	}
+	return trustedCAMounts
+}
+
+// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts
+func filterNonTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
+	var nonTrustedCAMounts []corev1.VolumeMount
+	for _, mount := range volumeMounts {
+		if mount.Name != trustedCABundleVolumeName {
+			nonTrustedCAMounts = append(nonTrustedCAMounts, mount)
+		}
+	}
+	return nonTrustedCAMounts
 }

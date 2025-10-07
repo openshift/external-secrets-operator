@@ -220,22 +220,9 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
-	if desired.Spec.Template.Spec.Volumes != nil && len(desired.Spec.Template.Spec.Volumes) != len(fetched.Spec.Template.Spec.Volumes) {
+	// Check volumes
+	if !volumesEqual(desired.Spec.Template.Spec.Volumes, fetched.Spec.Template.Spec.Volumes) {
 		return true
-	}
-	for _, desiredVolume := range desired.Spec.Template.Spec.Volumes {
-		if desiredVolume.Secret != nil {
-			for _, fetchedVolume := range fetched.Spec.Template.Spec.Volumes {
-				if desiredVolume.Name == fetchedVolume.Name {
-					if !reflect.DeepEqual(desiredVolume.Secret.Items, fetchedVolume.Secret.Items) {
-						return true
-					}
-					if !reflect.DeepEqual(desiredVolume.Secret.SecretName, fetchedVolume.Secret.SecretName) {
-						return true
-					}
-				}
-			}
-		}
 	}
 
 	if desired.Spec.Template.Spec.NodeSelector != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
@@ -250,13 +237,49 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
+	// Check regular containers
 	if len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
 		return true
 	}
+	fetchedContainers := make(map[string]*corev1.Container)
+	for i := range fetched.Spec.Template.Spec.Containers {
+		fetchedContainers[fetched.Spec.Template.Spec.Containers[i].Name] = &fetched.Spec.Template.Spec.Containers[i]
+	}
+	for i := range desired.Spec.Template.Spec.Containers {
+		desiredContainer := &desired.Spec.Template.Spec.Containers[i]
+		fetchedContainer, exists := fetchedContainers[desiredContainer.Name]
+		if !exists {
+			return true
+		}
+		if containerSpecModified(desiredContainer, fetchedContainer) {
+			return true
+		}
+	}
 
-	desiredContainer := desired.Spec.Template.Spec.Containers[0]
-	fetchedContainer := fetched.Spec.Template.Spec.Containers[0]
+	// Check init containers
+	if len(desired.Spec.Template.Spec.InitContainers) != len(fetched.Spec.Template.Spec.InitContainers) {
+		return true
+	}
+	fetchedInitContainers := make(map[string]*corev1.Container)
+	for i := range fetched.Spec.Template.Spec.InitContainers {
+		fetchedInitContainers[fetched.Spec.Template.Spec.InitContainers[i].Name] = &fetched.Spec.Template.Spec.InitContainers[i]
+	}
+	for i := range desired.Spec.Template.Spec.InitContainers {
+		desiredInitContainer := &desired.Spec.Template.Spec.InitContainers[i]
+		fetchedInitContainer, exists := fetchedInitContainers[desiredInitContainer.Name]
+		if !exists {
+			return true
+		}
+		if containerSpecModified(desiredInitContainer, fetchedInitContainer) {
+			return true
+		}
+	}
 
+	return false
+}
+
+func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container) bool {
+	// Check basic container properties
 	if !reflect.DeepEqual(desiredContainer.Args, fetchedContainer.Args) ||
 		desiredContainer.Name != fetchedContainer.Name ||
 		desiredContainer.Image != fetchedContainer.Image ||
@@ -264,6 +287,12 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
+	// Check environment variables
+	if !reflect.DeepEqual(desiredContainer.Env, fetchedContainer.Env) {
+		return true
+	}
+
+	// Check ports
 	if len(desiredContainer.Ports) != len(fetchedContainer.Ports) {
 		return true
 	}
@@ -300,16 +329,75 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
-	if desiredContainer.VolumeMounts != nil && !reflect.DeepEqual(desiredContainer.VolumeMounts, fetchedContainer.VolumeMounts) {
+	// Check volume mounts
+	if !reflect.DeepEqual(desiredContainer.VolumeMounts, fetchedContainer.VolumeMounts) {
 		return true
 	}
 
-	if reflect.DeepEqual(desiredContainer.Resources, corev1.ResourceRequirements{}) &&
-		!reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) {
+	// Check resources
+	if !reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) {
 		return true
 	}
 
 	return false
+}
+
+func volumesEqual(desired, fetched []corev1.Volume) bool {
+	if len(desired) == 0 && len(fetched) == 0 {
+		return true
+	}
+	if len(desired) != len(fetched) {
+		return false
+	}
+
+	// Create a map of fetched volumes by name for easier lookup
+	fetchedMap := make(map[string]corev1.Volume)
+	for _, v := range fetched {
+		fetchedMap[v.Name] = v
+	}
+
+	// Check each desired volume exists and matches in fetched
+	for _, desiredVol := range desired {
+		fetchedVol, exists := fetchedMap[desiredVol.Name]
+		if !exists {
+			return false
+		}
+
+		// Compare volume sources
+		// Check ConfigMap volume
+		if desiredVol.ConfigMap != nil {
+			if fetchedVol.ConfigMap == nil {
+				return false
+			}
+			if desiredVol.ConfigMap.Name != fetchedVol.ConfigMap.Name {
+				return false
+			}
+		}
+
+		// Check Secret volume
+		if desiredVol.Secret != nil {
+			if fetchedVol.Secret == nil {
+				return false
+			}
+			if desiredVol.Secret.SecretName != fetchedVol.Secret.SecretName {
+				return false
+			}
+			if !reflect.DeepEqual(desiredVol.Secret.Items, fetchedVol.Secret.Items) {
+				return false
+			}
+		}
+
+		// Check EmptyDir volume
+		if desiredVol.EmptyDir != nil {
+			if fetchedVol.EmptyDir == nil {
+				return false
+			}
+		}
+
+		// Add other volume types as needed (PVC, HostPath, etc.)
+	}
+
+	return true
 }
 
 func serviceSpecModified(desired, fetched *corev1.Service) bool {
