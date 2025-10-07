@@ -267,17 +267,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue
 	})
 
-	// predicate function for ConfigMaps to include both managed resources and trusted CA bundle ConfigMap
-	configMapPredicate := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		if object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue {
-			return true
-		}
-		return object.GetName() == trustedCABundleConfigMapName
-	})
-
 	withIgnoreStatusUpdatePredicates := builder.WithPredicates(predicate.GenerationChangedPredicate{}, managedResources)
 	managedResourcePredicate := builder.WithPredicates(managedResources)
-	configMapResourcePredicate := builder.WithPredicates(configMapPredicate)
 
 	mgrBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ExternalSecretsConfig{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
@@ -294,7 +285,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		case &corev1.Secret{}:
 			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
 		case &corev1.ConfigMap{}:
-			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), configMapResourcePredicate)
+			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		default:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
@@ -464,6 +455,5 @@ func (r *Reconciler) cleanUp(esc *operatorv1alpha1.ExternalSecretsConfig, req ct
 	}
 	r.log.V(1).Info("removed finalizer, cleanup complete", "request", req.NamespacedName)
 
-	// TODO: Cleanup trusted CA bundle ConfigMap if it exists
 	return false, nil
 }
