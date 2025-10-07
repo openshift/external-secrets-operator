@@ -4,17 +4,11 @@
   path: /spec/template/spec/containers/0/args/-
   value: --metrics-cert-dir=/etc/metrics-certs
 - op: add
-  path: /spec/template/spec/containers/0/volumeMounts
-  value: []
-- op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
     name: metrics-serving-cert
     mountPath: /etc/metrics-certs
     readOnly: true
-- op: add
-  path: /spec/template/spec/volumes
-  value: []
 - op: add
   path: /spec/template/spec/volumes/-
   value:

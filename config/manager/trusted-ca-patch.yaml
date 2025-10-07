@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          volumeMounts:
+            - name: trusted-ca-bundle
+              mountPath: /etc/pki/tls/certs
+              readOnly: true
+      volumes:
+        - name: trusted-ca-bundle
+          configMap:
+            name: trusted-ca-bundle
