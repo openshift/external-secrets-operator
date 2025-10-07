@@ -74,6 +74,7 @@ var (
 		&corev1.Secret{},
 		&corev1.Service{},
 		&corev1.ServiceAccount{},
+		&corev1.ConfigMap{},
 		&webhook.ValidatingWebhookConfiguration{},
 	}
 )
@@ -251,28 +252,32 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mapFunc := func(ctx context.Context, obj client.Object) []reconcile.Request {
 		r.log.V(4).Info("received reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
 
-		objLabels := obj.GetLabels()
-		if objLabels != nil {
-			if objLabels[requestEnqueueLabelKey] == requestEnqueueLabelValue {
-				return []reconcile.Request{
-					{
-						NamespacedName: types.NamespacedName{
-							Name: common.ExternalSecretsConfigObjectName,
-						},
-					},
-				}
-			}
+		// Since predicate already filtered, all objects that reach here should trigger reconciliation
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Name: common.ExternalSecretsConfigObjectName,
+				},
+			},
 		}
-		r.log.V(4).Info("object not of interest, ignoring reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
-		return []reconcile.Request{}
 	}
 
 	// predicate function to ignore events for objects not managed by controller.
 	managedResources := predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue
 	})
+
+	// predicate function for ConfigMaps to include both managed resources and trusted CA bundle ConfigMap
+	configMapPredicate := predicate.NewPredicateFuncs(func(object client.Object) bool {
+		if object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue {
+			return true
+		}
+		return object.GetName() == trustedCABundleConfigMapName
+	})
+
 	withIgnoreStatusUpdatePredicates := builder.WithPredicates(predicate.GenerationChangedPredicate{}, managedResources)
 	managedResourcePredicate := builder.WithPredicates(managedResources)
+	configMapResourcePredicate := builder.WithPredicates(configMapPredicate)
 
 	mgrBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ExternalSecretsConfig{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
@@ -288,6 +293,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 		case &corev1.Secret{}:
 			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
+		case &corev1.ConfigMap{}:
+			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), configMapResourcePredicate)
 		default:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
@@ -457,5 +464,6 @@ func (r *Reconciler) cleanUp(esc *operatorv1alpha1.ExternalSecretsConfig, req ct
 	}
 	r.log.V(1).Info("removed finalizer, cleanup complete", "request", req.NamespacedName)
 
+	// TODO: Cleanup trusted CA bundle ConfigMap if it exists
 	return false, nil
 }

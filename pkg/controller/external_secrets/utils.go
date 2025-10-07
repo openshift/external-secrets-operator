@@ -3,6 +3,7 @@ package external_secrets
 import (
 	"context"
 	"fmt"
+	"os"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
@@ -121,4 +122,34 @@ func getOperatingNamespace(esc *operatorv1alpha1.ExternalSecretsConfig) string {
 func (r *Reconciler) IsCertManagerInstalled() bool {
 	_, ok := r.optionalResourcesList[certificateCRDGKV]
 	return ok
+}
+
+// getProxyConfiguration returns the proxy configuration based on precedence.
+// The precedence order is: ExternalSecretsConfig > ExternalSecretsManager > OLM environment variables.
+func (r *Reconciler) getProxyConfiguration(esc *operatorv1alpha1.ExternalSecretsConfig) *operatorv1alpha1.ProxyConfig {
+	var proxyConfig *operatorv1alpha1.ProxyConfig
+
+	// Check ExternalSecretsConfig first
+	if esc.Spec.ApplicationConfig.Proxy != nil {
+		proxyConfig = esc.Spec.ApplicationConfig.Proxy
+	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Proxy != nil {
+		// Check ExternalSecretsManager second
+		proxyConfig = r.esm.Spec.GlobalConfig.Proxy
+	} else {
+		// Fall back to OLM environment variables
+		olmHTTPProxy := os.Getenv(httpProxyEnvVar)
+		olmHTTPSProxy := os.Getenv(httpsProxyEnvVar)
+		olmNoProxy := os.Getenv(noProxyEnvVar)
+
+		// Only create proxy config if at least one OLM env var is set
+		if olmHTTPProxy != "" || olmHTTPSProxy != "" || olmNoProxy != "" {
+			proxyConfig = &operatorv1alpha1.ProxyConfig{
+				HTTPProxy:  olmHTTPProxy,
+				HTTPSProxy: olmHTTPSProxy,
+				NoProxy:    olmNoProxy,
+			}
+		}
+	}
+
+	return proxyConfig
 }

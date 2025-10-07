@@ -48,6 +48,25 @@ const (
 	// externalsecretsDefaultNamespace is the namespace where the `external-secrets` operand required resources
 	// will be created, when ExternalSecretsConfig.Spec.Namespace is not set.
 	externalsecretsDefaultNamespace = "external-secrets"
+
+	// trustedCABundleConfigMapName is the name of the ConfigMap containing the trusted CA bundle
+	trustedCABundleConfigMapName = externalsecretsCommonName + "-trusted-ca-bundle"
+
+	// trustedCABundleInjectLabel is the label that triggers OpenShift CNO to inject cluster-wide CA certificates
+	trustedCABundleInjectLabel = "config.openshift.io/inject-trusted-cabundle"
+
+	// trustedCABundleVolumeName is the name of the volume for mounting the CA bundle
+	trustedCABundleVolumeName = "trusted-ca-bundle"
+
+	// trustedCABundleMountPath is the path where the CA bundle should be mounted in containers
+	// Default certificate path is taken from the golang source:
+	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/crypto/x509/root_linux.go;l=22
+	trustedCABundleMountPath = "/etc/pki/tls/certs"
+
+	// Proxy environment variable names
+	httpProxyEnvVar  = "HTTP_PROXY"
+	httpsProxyEnvVar = "HTTPS_PROXY"
+	noProxyEnvVar    = "NO_PROXY"
 )
 
 var (
