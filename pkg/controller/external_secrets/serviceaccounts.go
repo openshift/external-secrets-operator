@@ -37,9 +37,6 @@ func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.External
 
 	for _, serviceAccount := range serviceAccountsToCreate {
 		if !serviceAccount.condition {
-			if err := common.DeleteObject(r.ctx, r.CtrlClient, &corev1.ServiceAccount{}, serviceAccount.assetName); err != nil {
-				return fmt.Errorf("failed to delete cert-controller serviceaccount: %w", err)
-			}
 			continue
 		}
 
