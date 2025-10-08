@@ -24,6 +24,7 @@ import (
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -69,6 +70,7 @@ var (
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&appsv1.Deployment{},
+		&networkingv1.NetworkPolicy{},
 		&rbacv1.Role{},
 		&rbacv1.RoleBinding{},
 		&corev1.Secret{},
@@ -101,6 +103,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups="",resources=events;secrets;services;serviceaccounts,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates;clusterissuers;issuers,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create
 
 // +kubebuilder:rbac:groups="",resources=endpoints,verbs=get;list;watch;create

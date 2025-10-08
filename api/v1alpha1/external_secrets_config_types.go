@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +68,19 @@ type ExternalSecretsConfigSpec struct {
 	// controllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins.
 	// +kubebuilder:validation:Optional
 	ControllerConfig ControllerConfig `json:"controllerConfig,omitempty"`
+
+	// networkPolicies specifies the list of network policy configurations
+	// to be applied to external-secrets pods.
+	//
+	// Each entry allows specifying a name for the generated NetworkPolicy object,
+	// along with its full Kubernetes NetworkPolicy definition.
+	//
+	// If this field is not provided, external-secrets components will be isolated
+	// with deny-all network policies, which will prevent proper operation.
+	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
 }
 
 // ExternalSecretsConfigStatus is the most recently observed status of the ExternalSecretsConfig.
@@ -200,4 +214,41 @@ type CertProvidersConfig struct {
 	// certManager is for configuring cert-manager provider specifics.
 	// +kubebuilder:validation:Optional
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
+}
+
+// ComponentName represents the different external-secrets components that can have network policies applied.
+type ComponentName string
+
+const (
+	// CoreController represents the external-secrets component
+	CoreController ComponentName = "ExternalSecretsCoreController"
+
+	// BitwardenSDKServer represents the bitwarden-sdk-server component
+	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
+)
+
+// NetworkPolicy represents a custom network policy configuration for operator-managed components.
+// It includes a name for identification and the network policy rules to be enforced.
+type NetworkPolicy struct {
+	// name is a unique identifier for this network policy configuration.
+	// This name will be used as part of the generated NetworkPolicy resource name.
+	// +kubebuilder:validation:Required
+	// +required
+	Name string `json:"name"`
+
+	// componentName specifies which external-secrets component this network policy applies to.
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;BitwardenSDKServer
+	// +kubebuilder:validation:Required
+	ComponentName ComponentName `json:"componentName"`
+
+	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
+	// is allowed if there are no NetworkPolicies selecting the pod (and cluster policy
+	// otherwise allows the traffic), OR if the traffic matches at least one egress rule
+	// across all of the NetworkPolicy objects whose podSelector matches the pod. If
+	// this field is empty then this NetworkPolicy limits all outgoing traffic (and serves
+	// solely to ensure that the pods it selects are isolated by default).
+	// The operator will automatically handle ingress rules based on the current running ports.
+	// +optional
+	// +listType=atomic
+	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
 }

@@ -2,6 +2,11 @@
 // sources:
 // bindata/external-secrets/certificate_bitwarden-tls-certs.yml
 // bindata/external-secrets/external-secrets-namespace.yaml
+// bindata/external-secrets/networkpolicy-allow-bitwarden-server-traffic.yaml
+// bindata/external-secrets/networkpolicy-allow-cert-controller-traffic.yaml
+// bindata/external-secrets/networkpolicy-allow-main-controller-traffic.yaml
+// bindata/external-secrets/networkpolicy-allow-webhook-traffic.yaml
+// bindata/external-secrets/networkpolicy-deny-all.yaml
 // bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-controller.yml
@@ -141,6 +146,194 @@ func externalSecretsExternalSecretsNamespaceYaml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "external-secrets/external-secrets-namespace.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicyAllowBitwardenServerTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-server-egress-for-bitwarden-sever
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: bitwarden-sdk-server
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-bitwarden-server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow External Secrets Controller to communicate with Bitwarden SDK Server
+    - ports:
+        - protocol: TCP
+          port: 9998
+  # Allow access to Kubernetes API server
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443`)
+
+func externalSecretsNetworkpolicyAllowBitwardenServerTrafficYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicyAllowBitwardenServerTrafficYaml, nil
+}
+
+func externalSecretsNetworkpolicyAllowBitwardenServerTrafficYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicyAllowBitwardenServerTrafficYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy-allow-bitwarden-server-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicyAllowCertControllerTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-server-egress-for-cert-controller
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets-cert-controller
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-cert-controller
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443`)
+
+func externalSecretsNetworkpolicyAllowCertControllerTrafficYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicyAllowCertControllerTrafficYaml, nil
+}
+
+func externalSecretsNetworkpolicyAllowCertControllerTrafficYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicyAllowCertControllerTrafficYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy-allow-cert-controller-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicyAllowMainControllerTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-server-egress
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443`)
+
+func externalSecretsNetworkpolicyAllowMainControllerTrafficYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicyAllowMainControllerTrafficYaml, nil
+}
+
+func externalSecretsNetworkpolicyAllowMainControllerTrafficYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicyAllowMainControllerTrafficYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy-allow-main-controller-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicyAllowWebhookTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-server-egress-for-webhook
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets-webhook
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+    external-secrets.io/component: webhook
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-webhook
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 10250`)
+
+func externalSecretsNetworkpolicyAllowWebhookTrafficYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicyAllowWebhookTrafficYaml, nil
+}
+
+func externalSecretsNetworkpolicyAllowWebhookTrafficYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicyAllowWebhookTrafficYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy-allow-webhook-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicyDenyAllYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-traffic
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress`)
+
+func externalSecretsNetworkpolicyDenyAllYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicyDenyAllYaml, nil
+}
+
+func externalSecretsNetworkpolicyDenyAllYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicyDenyAllYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy-deny-all.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -1544,6 +1737,11 @@ func AssetNames() []string {
 var _bindata = map[string]func() (*asset, error){
 	"external-secrets/certificate_bitwarden-tls-certs.yml":                                  externalSecretsCertificate_bitwardenTlsCertsYml,
 	"external-secrets/external-secrets-namespace.yaml":                                      externalSecretsExternalSecretsNamespaceYaml,
+	"external-secrets/networkpolicy-allow-bitwarden-server-traffic.yaml":                    externalSecretsNetworkpolicyAllowBitwardenServerTrafficYaml,
+	"external-secrets/networkpolicy-allow-cert-controller-traffic.yaml":                     externalSecretsNetworkpolicyAllowCertControllerTrafficYaml,
+	"external-secrets/networkpolicy-allow-main-controller-traffic.yaml":                     externalSecretsNetworkpolicyAllowMainControllerTrafficYaml,
+	"external-secrets/networkpolicy-allow-webhook-traffic.yaml":                             externalSecretsNetworkpolicyAllowWebhookTrafficYaml,
+	"external-secrets/networkpolicy-deny-all.yaml":                                          externalSecretsNetworkpolicyDenyAllYaml,
 	"external-secrets/resources/certificate_external-secrets-webhook.yml":                   externalSecretsResourcesCertificate_externalSecretsWebhookYml,
 	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":           externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
 	"external-secrets/resources/clusterrole_external-secrets-controller.yml":                externalSecretsResourcesClusterrole_externalSecretsControllerYml,
@@ -1615,8 +1813,13 @@ type bintree struct {
 
 var _bintree = &bintree{nil, map[string]*bintree{
 	"external-secrets": {nil, map[string]*bintree{
-		"certificate_bitwarden-tls-certs.yml": {externalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
-		"external-secrets-namespace.yaml":     {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
+		"certificate_bitwarden-tls-certs.yml":               {externalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
+		"external-secrets-namespace.yaml":                   {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
+		"networkpolicy-allow-bitwarden-server-traffic.yaml": {externalSecretsNetworkpolicyAllowBitwardenServerTrafficYaml, map[string]*bintree{}},
+		"networkpolicy-allow-cert-controller-traffic.yaml":  {externalSecretsNetworkpolicyAllowCertControllerTrafficYaml, map[string]*bintree{}},
+		"networkpolicy-allow-main-controller-traffic.yaml":  {externalSecretsNetworkpolicyAllowMainControllerTrafficYaml, map[string]*bintree{}},
+		"networkpolicy-allow-webhook-traffic.yaml":          {externalSecretsNetworkpolicyAllowWebhookTrafficYaml, map[string]*bintree{}},
+		"networkpolicy-deny-all.yaml":                       {externalSecretsNetworkpolicyDenyAllYaml, map[string]*bintree{}},
 		"resources": {nil, map[string]*bintree{
 			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
 			"clusterrole_external-secrets-cert-controller.yml":           {externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},
