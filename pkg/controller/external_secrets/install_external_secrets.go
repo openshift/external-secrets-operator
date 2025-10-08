@@ -87,6 +87,11 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 		return err
 	}
 
+	if err := r.createOrApplyNetworkPolicies(esc, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile network policy resource")
+		return err
+	}
+
 	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err
