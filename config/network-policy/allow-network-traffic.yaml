@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-operator-traffic
-  namespace: external-secrets-operator
+  name: allow-egress-api
+  namespace: system
 spec:
   podSelector:
     matchLabels:
