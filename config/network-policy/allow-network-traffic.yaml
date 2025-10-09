@@ -16,9 +16,12 @@ spec:
           port: 6443 # Required: Kubernetes API server
   ingress:
     # Optional: expose metrics (8443 and 8080 based on user configuration)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
     - ports:
         - protocol: TCP
           port: 8443
-    - ports:
         - protocol: TCP
           port: 8080
