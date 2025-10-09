@@ -82,6 +82,11 @@ func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecr
 func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, fileName string) (*certmanagerv1.Certificate, error) {
 	certificate := common.DecodeCertificateObjBytes(assets.MustAsset(fileName))
 
+	// update the secret name in the Certificate resource of the webhook component.
+	if fileName == webhookCertificateAssetName {
+		certificate.Spec.SecretName = certmanagerTLSSecretWebhook
+	}
+
 	updateNamespace(certificate, esc)
 	common.UpdateResourceLabels(certificate, resourceLabels)
 

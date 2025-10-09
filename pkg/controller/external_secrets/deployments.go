@@ -123,6 +123,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
 		}
 		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval)
+		updateWebhookVolumeConfig(deployment, esc)
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
 	case bitwardenDeploymentAssetName:
@@ -407,6 +408,12 @@ func updateBitwardenVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1a
 		esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name != "" {
 		secretName := esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name
 		updateSecretVolumeConfig(deployment, "bitwarden-tls-certs", secretName)
+	}
+}
+
+func updateWebhookVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if isCertManagerConfigEnabled(esc) {
+		updateSecretVolumeConfig(deployment, "certs", certmanagerTLSSecretWebhook)
 	}
 }
 
