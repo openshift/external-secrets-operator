@@ -128,6 +128,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	case bitwardenDeploymentAssetName:
 		deployment.Labels["app.kubernetes.io/version"] = os.Getenv(bitwardenImageVersionEnvVarName)
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
+		updateBitwardenVolumeConfig(deployment, esc)
 	}
 
 	if err := r.updateResourceRequirement(deployment, esc); err != nil {
@@ -387,5 +388,38 @@ func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image str
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
 		}
+	}
+}
+
+func updateBitwardenVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef != nil &&
+		esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name != "" {
+		secretName := esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name
+		updateSecretVolumeConfig(deployment, "bitwarden-tls-certs", secretName)
+	}
+}
+
+func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretName string) {
+	volumeExists := false
+	for i := range deployment.Spec.Template.Spec.Volumes {
+		if deployment.Spec.Template.Spec.Volumes[i].Name == volumeName {
+			volumeExists = true
+		}
+		if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
+			deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
+		}
+		deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
+		break
+	}
+
+	if !volumeExists {
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: secretName,
+				},
+			},
+		})
 	}
 }
