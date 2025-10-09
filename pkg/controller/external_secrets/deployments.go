@@ -123,6 +123,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
 		}
 		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval)
+		updateWebhookVolumeConfig(deployment, esc)
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
 	case bitwardenDeploymentAssetName:
@@ -398,5 +399,36 @@ func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image str
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
 		}
+	}
+}
+
+func updateWebhookVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if isCertManagerConfigEnabled(esc) {
+		updateSecretVolumeConfig(deployment, "certs", certmanagerTLSSecretWebhook)
+	}
+}
+
+func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretName string) {
+	volumeExists := false
+	for i := range deployment.Spec.Template.Spec.Volumes {
+		if deployment.Spec.Template.Spec.Volumes[i].Name == volumeName {
+			volumeExists = true
+		}
+		if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
+			deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
+		}
+		deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
+		break
+	}
+
+	if !volumeExists {
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: secretName,
+				},
+			},
+		})
 	}
 }
