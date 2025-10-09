@@ -302,20 +302,31 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 
 // argument list for external-secrets deployment resource
 func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
-	namespace := getOperatingNamespace(esc)
+	var (
+		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
+		enableClusterExternalSecretsArgFmt = "--enable-cluster-external-secret-reconciler=%s"
+	)
+
 	args := []string{
 		"--concurrent=1",
 		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 		"--enable-leader-election=true",
-		"--enable-cluster-store-reconciler=true",
-		"--enable-cluster-external-secret-reconciler=true",
 		"--enable-push-secret-reconciler=true",
 	}
 
+	// when spec.appConfig.operatingNamespace is configured, which is for restricting the
+	// external-secrets custom resource reconcile scope to specified namespace, the reconciliation
+	// of cluster scoped custom resources must also be disabled.
+	namespace := getOperatingNamespace(esc)
 	if namespace != "" {
-		args = append(args, fmt.Sprintf("--namespace=%s", namespace))
+		args = append(args, fmt.Sprintf("--namespace=%s", namespace),
+			fmt.Sprintf(enableClusterStoreArgFmt, "false"),
+			fmt.Sprintf(enableClusterExternalSecretsArgFmt, "false"))
+	} else {
+		args = append(args, fmt.Sprintf(enableClusterStoreArgFmt, "true"),
+			fmt.Sprintf(enableClusterExternalSecretsArgFmt, "true"))
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
