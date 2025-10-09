@@ -22,6 +22,8 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 
 	// Only create ConfigMap if proxy is configured
 	if proxyConfig == nil {
+		// TODO: ConfigMap removal when proxy configuration is removed
+		// will be revisited in a follow-up implementation.
 		r.log.V(4).Info("no proxy configuration found, skipping trusted CA bundle ConfigMap creation")
 		return nil
 	}

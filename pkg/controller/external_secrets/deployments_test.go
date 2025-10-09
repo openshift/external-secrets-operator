@@ -630,6 +630,9 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 				Spec: appsv1.DeploymentSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{Name: "init-migration"},
+							},
 							Containers: []corev1.Container{
 								{Name: "external-secrets"},
 								{Name: "webhook"},
@@ -670,6 +673,14 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 				"NO_PROXY":    "olm.local",
 			},
 			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"init-migration": {
+					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
+					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
+					{Name: "NO_PROXY", Value: "esc.local"},
+					{Name: "http_proxy", Value: "http://esc-proxy:8080"},
+					{Name: "https_proxy", Value: "https://esc-proxy:8443"},
+					{Name: "no_proxy", Value: "esc.local"},
+				},
 				"external-secrets": {
 					{Name: "HTTP_PROXY", Value: "http://esc-proxy:8080"},
 					{Name: "HTTPS_PROXY", Value: "https://esc-proxy:8443"},
@@ -689,6 +700,9 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			expectedVolumes: []corev1.Volume{expectedTrustedCAVolume},
 			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"init-migration": {
+					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				},
 				"external-secrets": {
 					{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
 				},
@@ -983,6 +997,98 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Proxy configuration removal cleans up environment variables and volumes",
+			deployment: &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name: "init-setup",
+									Env: []corev1.EnvVar{
+										{Name: "HTTP_PROXY", Value: "http://old-proxy:8080"},
+										{Name: "HTTPS_PROXY", Value: "https://old-proxy:8443"},
+										{Name: "NO_PROXY", Value: "old.local"},
+										{Name: "http_proxy", Value: "http://old-proxy:8080"},
+										{Name: "https_proxy", Value: "https://old-proxy:8443"},
+										{Name: "no_proxy", Value: "old.local"},
+										{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+										{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+									},
+								},
+							},
+							Containers: []corev1.Container{
+								{
+									Name: "external-secrets",
+									Env: []corev1.EnvVar{
+										{Name: "HTTP_PROXY", Value: "http://old-proxy:8080"},
+										{Name: "HTTPS_PROXY", Value: "https://old-proxy:8443"},
+										{Name: "NO_PROXY", Value: "old.local"},
+										{Name: "http_proxy", Value: "http://old-proxy:8080"},
+										{Name: "https_proxy", Value: "https://old-proxy:8443"},
+										{Name: "no_proxy", Value: "old.local"},
+										{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: "trusted-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+										{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+									},
+								},
+							},
+							Volumes: []corev1.Volume{
+								{
+									Name: "trusted-ca-bundle",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "external-secrets-trusted-ca-bundle",
+											},
+										},
+									},
+								},
+								{
+									Name: "other-volume",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			externalSecretsConfig:  &v1alpha1.ExternalSecretsConfig{}, // No proxy configuration
+			externalSecretsManager: &v1alpha1.ExternalSecretsManager{},
+			olmEnvVars:             map[string]string{},
+			expectedContainerEnvVars: map[string][]corev1.EnvVar{
+				"init-setup": {
+					{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+				},
+				"external-secrets": {
+					{Name: "KEEP_THIS_VAR", Value: "keep-value"},
+				},
+			},
+			expectedVolumes: []corev1.Volume{
+				{
+					Name: "other-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			expectedVolumeMounts: map[string][]corev1.VolumeMount{
+				"init-setup": {
+					{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+				},
+				"external-secrets": {
+					{Name: "other-volume", MountPath: "/other", ReadOnly: true},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1065,7 +1171,16 @@ func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedV
 			continue
 		}
 
-		actualMounts := filterTrustedCAMounts(container.VolumeMounts)
+		// Determine if we're testing for trusted CA mounts or non-trusted CA mounts
+		var actualMounts []corev1.VolumeMount
+		if len(expectedMounts) > 0 && expectedMounts[0].Name == trustedCABundleVolumeName {
+			// Testing for trusted CA mounts
+			actualMounts = filterTrustedCAMounts(container.VolumeMounts)
+		} else {
+			// Testing for non-trusted CA mounts (e.g., in removal scenarios)
+			actualMounts = filterNonTrustedCAMounts(container.VolumeMounts)
+		}
+
 		if !reflect.DeepEqual(actualMounts, expectedMounts) {
 			t.Errorf("Container %s volume mounts mismatch.\nExpected: %+v\nActual: %+v",
 				containerName, expectedMounts, actualMounts)
@@ -1099,4 +1214,15 @@ func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMou
 		}
 	}
 	return trustedCAMounts
+}
+
+// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts
+func filterNonTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
+	var nonTrustedCAMounts []corev1.VolumeMount
+	for _, mount := range volumeMounts {
+		if mount.Name != trustedCABundleVolumeName {
+			nonTrustedCAMounts = append(nonTrustedCAMounts, mount)
+		}
+	}
+	return nonTrustedCAMounts
 }
