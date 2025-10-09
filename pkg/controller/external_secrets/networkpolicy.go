@@ -73,12 +73,12 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 
 // createOrApplyCustomNetworkPolicies applies custom network policies defined in the ExternalSecretsConfig spec.
 func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
-	if esc.Spec.NetworkPolicies == nil || len(esc.Spec.NetworkPolicies) == 0 {
-		r.log.V(4).Info("No custom network policies configured in ExternalSecretsConfig")
+	if esc.Spec.ControllerConfig.NetworkPolicies == nil {
+		r.log.V(4).Info("No custom network policies configured in ControllerConfig")
 		return nil
 	}
 
-	for _, npConfig := range esc.Spec.NetworkPolicies {
+	for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
 		if err := r.createOrApplyCustomNetworkPolicy(esc, npConfig, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
@@ -90,7 +90,10 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.Ex
 // createOrApplyCustomNetworkPolicy creates or updates a custom network policy based on API configuration.
 func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
 	// Build the NetworkPolicy object from the API spec
-	networkPolicy := r.buildNetworkPolicyFromConfig(esc, npConfig, resourceLabels)
+	networkPolicy, err := r.buildNetworkPolicyFromConfig(esc, npConfig, resourceLabels)
+	if err != nil {
+		return err
+	}
 
 	networkPolicyName := fmt.Sprintf("%s/%s", networkPolicy.GetNamespace(), networkPolicy.GetName())
 	r.log.V(4).Info("Reconciling custom network policy", "name", networkPolicyName, "component", npConfig.ComponentName)
@@ -163,14 +166,14 @@ func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.E
 }
 
 // buildNetworkPolicyFromConfig constructs a NetworkPolicy object from the API configuration.
-func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceLabels map[string]string) *networkingv1.NetworkPolicy {
-	namespace := externalsecretsDefaultNamespace
-	if esc.Spec.ApplicationConfig.OperatingNamespace != "" {
-		namespace = esc.Spec.ApplicationConfig.OperatingNamespace
-	}
+func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceLabels map[string]string) (*networkingv1.NetworkPolicy, error) {
+	namespace := getNamespace(esc)
 
 	// Determine pod selector based on component name
-	podSelector := r.getPodSelectorForComponent(npConfig.ComponentName)
+	podSelector, err := r.getPodSelectorForComponent(npConfig.ComponentName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine pod selector for network policy %s: %w", npConfig.Name, err)
+	}
 
 	// Build the NetworkPolicy object
 	networkPolicy := &networkingv1.NetworkPolicy{
@@ -188,30 +191,25 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 		},
 	}
 
-	return networkPolicy
+	return networkPolicy, nil
 }
 
 // getPodSelectorForComponent returns the appropriate pod selector for the given component.
-func (r *Reconciler) getPodSelectorForComponent(componentName operatorv1alpha1.ComponentName) metav1.LabelSelector {
+func (r *Reconciler) getPodSelectorForComponent(componentName operatorv1alpha1.ComponentName) (metav1.LabelSelector, error) {
 	switch componentName {
 	case operatorv1alpha1.CoreController:
 		return metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"app.kubernetes.io/name": "external-secrets",
 			},
-		}
+		}, nil
 	case operatorv1alpha1.BitwardenSDKServer:
 		return metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"app.kubernetes.io/name": "bitwarden-sdk-server",
 			},
-		}
+		}, nil
 	default:
-		// Default to external-secrets if component is unknown
-		return metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"app.kubernetes.io/name": "external-secrets",
-			},
-		}
+		return metav1.LabelSelector{}, fmt.Errorf("unknown component name: %s", componentName)
 	}
 }

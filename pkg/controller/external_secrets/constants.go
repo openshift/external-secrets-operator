@@ -96,11 +96,11 @@ const (
 	webhookServiceAccountAssetName                = "external-secrets/resources/serviceaccount_external-secrets-webhook.yml"
 	validatingWebhookExternalSecretCRDAssetName   = "external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml"
 	validatingWebhookSecretStoreCRDAssetName      = "external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml"
-	denyAllNetworkPolicyAssetName                 = "external-secrets/networkpolicy-deny-all.yaml"
-	allowMainControllerTrafficAssetName           = "external-secrets/networkpolicy-allow-main-controller-traffic.yaml"
-	allowWebhookTrafficAssetName                  = "external-secrets/networkpolicy-allow-webhook-traffic.yaml"
-	allowCertControllerTrafficAssetName           = "external-secrets/networkpolicy-allow-cert-controller-traffic.yaml"
-	allowBitwardenServerTrafficAssetName          = "external-secrets/networkpolicy-allow-bitwarden-server-traffic.yaml"
+	denyAllNetworkPolicyAssetName                 = "external-secrets/networkpolicy_deny-all.yaml"
+	allowMainControllerTrafficAssetName           = "external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml"
+	allowWebhookTrafficAssetName                  = "external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml"
+	allowCertControllerTrafficAssetName           = "external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml"
+	allowBitwardenServerTrafficAssetName          = "external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml"
 )
 
 var (

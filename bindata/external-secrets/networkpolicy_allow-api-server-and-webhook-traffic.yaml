@@ -24,3 +24,14 @@ spec:
     - ports:
         - protocol: TCP
           port: 10250
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            openshift.io/cluster-monitoring: "true"
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080

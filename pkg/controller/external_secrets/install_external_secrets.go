@@ -57,6 +57,11 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 		return err
 	}
 
+	if err := r.createOrApplyNetworkPolicies(esc, resourceLabels, recon); err != nil {
+		r.log.Error(err, "failed to reconcile network policy resource")
+		return err
+	}
+
 	if err := r.createOrApplyServiceAccounts(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile serviceaccount resource")
 		return err
@@ -84,11 +89,6 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 
 	if err := r.createOrApplyDeployments(esc, resourceLabels, recon); err != nil {
 		r.log.Error(err, "failed to reconcile deployment resource")
-		return err
-	}
-
-	if err := r.createOrApplyNetworkPolicies(esc, resourceLabels, recon); err != nil {
-		r.log.Error(err, "failed to reconcile network policy resource")
 		return err
 	}
 
