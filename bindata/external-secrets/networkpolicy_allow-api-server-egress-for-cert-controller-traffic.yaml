@@ -14,7 +14,20 @@ spec:
       app.kubernetes.io/name: external-secrets-cert-controller
   policyTypes:
     - Egress
+    - Ingress
   egress:
     - ports:
         - protocol: TCP
           port: 6443
+  ingress:
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            openshift.io/cluster-monitoring: "true"
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080

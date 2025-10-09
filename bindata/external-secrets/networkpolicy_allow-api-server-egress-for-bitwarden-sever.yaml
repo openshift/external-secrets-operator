@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-server-egress-for-bitwarden-sever
+  name: allow-api-server-egress-for-bitwarden-server
   namespace: external-secrets
   labels:
     app.kubernetes.io/name: bitwarden-sdk-server
@@ -11,7 +11,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: external-secrets-bitwarden-server
+      app.kubernetes.io/name: bitwarden-sdk-server
   policyTypes:
     - Ingress
     - Egress
