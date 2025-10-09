@@ -48,6 +48,10 @@ const (
 	// externalsecretsDefaultNamespace is the namespace where the `external-secrets` operand required resources
 	// will be created, when ExternalSecretsConfig.Spec.Namespace is not set.
 	externalsecretsDefaultNamespace = "external-secrets"
+
+	// certmanagerTLSSecretWebhook is the TLS secret created by cert-manager for the webhook component. A different
+	// name is used to avoiding clash with the secret created by the inbuilt cert-controller component.
+	certmanagerTLSSecretWebhook = "external-secrets-webhook-cm"
 )
 
 var (

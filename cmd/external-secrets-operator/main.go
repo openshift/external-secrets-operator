@@ -154,7 +154,11 @@ func main() {
 			metricsServerOptions.KeyName = metricsKeyFileName
 		}
 		metricsTLSOpts = append(metricsTLSOpts, func(c *tls.Config) {
-			certPool := x509.NewCertPool()
+			certPool, err := x509.SystemCertPool()
+			if err != nil {
+				setupLog.Info("unable to load system certificate pool", "error", err)
+				certPool = x509.NewCertPool()
+			}
 			openshiftCACert, err := os.ReadFile(openshiftCACertificateFile)
 			if err != nil {
 				setupLog.Error(err, "failed to read OpenShift CA certificate")
