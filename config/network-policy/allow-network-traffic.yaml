@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-api
+  namespace: system
+spec:
+  podSelector:
+    matchLabels:
+      app: external-secrets-operator
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443 # Required: Kubernetes API server
+  ingress:
+    # Optional: expose metrics (8443 and 8080 based on user configuration)
+    - ports:
+        - protocol: TCP
+          port: 8443
+    - ports:
+        - protocol: TCP
+          port: 8080
