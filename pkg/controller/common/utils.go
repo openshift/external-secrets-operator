@@ -10,6 +10,7 @@ import (
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,6 +41,9 @@ func init() {
 		panic(err)
 	}
 	if err := corev1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := networkingv1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 	if err := rbacv1.AddToScheme(scheme); err != nil {
@@ -147,6 +151,14 @@ func DecodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.Vali
 	return obj.(*webhook.ValidatingWebhookConfiguration)
 }
 
+func DecodeNetworkPolicyObjBytes(objBytes []byte) *networkingv1.NetworkPolicy {
+	obj, err := runtime.Decode(codecs.UniversalDecoder(networkingv1.SchemeGroupVersion), objBytes)
+	if err != nil {
+		panic(err)
+	}
+	return obj.(*networkingv1.NetworkPolicy)
+}
+
 func HasObjectChanged(desired, fetched client.Object) bool {
 	if reflect.TypeOf(desired) != reflect.TypeOf(fetched) {
 		panic("both objects to be compared must be of same type")
@@ -170,6 +182,8 @@ func HasObjectChanged(desired, fetched client.Object) bool {
 			rbacRoleBindingSubjectsModified[*rbacv1.RoleBinding](desired.(*rbacv1.RoleBinding), fetched.(*rbacv1.RoleBinding))
 	case *corev1.Service:
 		objectModified = serviceSpecModified(desired.(*corev1.Service), fetched.(*corev1.Service))
+	case *networkingv1.NetworkPolicy:
+		objectModified = networkPolicySpecModified(desired.(*networkingv1.NetworkPolicy), fetched.(*networkingv1.NetworkPolicy))
 	case *webhook.ValidatingWebhookConfiguration:
 		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
 	default:
@@ -301,6 +315,17 @@ func serviceSpecModified(desired, fetched *corev1.Service) bool {
 	if desired.Spec.Type != fetched.Spec.Type ||
 		!reflect.DeepEqual(desired.Spec.Ports, fetched.Spec.Ports) ||
 		!reflect.DeepEqual(desired.Spec.Selector, fetched.Spec.Selector) {
+		return true
+	}
+
+	return false
+}
+
+func networkPolicySpecModified(desired, fetched *networkingv1.NetworkPolicy) bool {
+	if !reflect.DeepEqual(desired.Spec.PodSelector, fetched.Spec.PodSelector) ||
+		!reflect.DeepEqual(desired.Spec.PolicyTypes, fetched.Spec.PolicyTypes) ||
+		!reflect.DeepEqual(desired.Spec.Ingress, fetched.Spec.Ingress) ||
+		!reflect.DeepEqual(desired.Spec.Egress, fetched.Spec.Egress) {
 		return true
 	}
 
