@@ -282,10 +282,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
 				mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 			}
-		case &corev1.Secret{}:
-			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
-		case &corev1.ConfigMap{}:
-			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
+		case &corev1.Secret{}, &corev1.ConfigMap{}:
+			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}, managedResources))
 		default:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
