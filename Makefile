@@ -179,15 +179,15 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+.PHONY: image-build
+image-build: ## Build operator image.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+.PHONY: image-push
+image-push: ## Push operator image.
 	$(CONTAINER_TOOL) push ${IMG}
 
-# PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
+# PLATFORMS defines the target platforms for the operator image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
@@ -198,10 +198,10 @@ PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name external-secrets-operator-builder
-	$(CONTAINER_TOOL) buildx use external-secrets-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm external-secrets-operator-builder
+	- docker buildx create --name external-secrets-operator-builder
+	docker buildx use external-secrets-operator-builder
+	- docker buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- docker buildx rm external-secrets-operator-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
@@ -240,7 +240,7 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
-## Location to story temp outputs
+## Location to store temp outputs
 OUTPUTS_PATH ?= $(shell pwd)/_output
 $(OUTPUTS_PATH):
 	mkdir -p $(OUTPUTS_PATH)
@@ -293,16 +293,16 @@ govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
 ginkgo: $(LOCALBIN) ## Download ginkgo locally if necessary.
 	$(call go-install-tool,$(GINKGO),github.com/onsi/ginkgo/v2/ginkgo)
 
-# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# go-install-tool will 'go install' any package with custom target and name of the binary.
 # $1 - target path with name of binary
 # $2 - package url which can be installed
 define go-install-tool
 @{ \
 set -e; \
 package=$(2) ;\
-echo "Downloading $${package}" ;\
+echo "Installing $${package}" ;\
 rm -f $(1) || true ;\
-GOBIN=$(LOCALBIN) go install $${package} ;\
+GOBIN=$(LOCALBIN) GOFLAGS="-mod=vendor" go install $${package} ;\
 }
 endef
 
@@ -352,11 +352,11 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
-	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
+	$(CONTAINER_TOOL) push $(BUNDLE_IMG)
 
 .PHONY: opm
 OPM = $(LOCALBIN)/opm
@@ -392,12 +392,12 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool $(CONTAINER_TOOL) --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+	$(CONTAINER_TOOL) push $(CATALOG_IMG)
 
 ## verify the changes are working as expected.
 .PHONY: verify
@@ -419,15 +419,30 @@ docs: crd-ref-docs
 
 ## perform vulnerabilities scan using govulncheck.
 .PHONY: govulnscan
-#The ignored vulnerabilities are not in the operator code, but in the vendored packages.
+# The ignored vulnerabilities are not in the operator code, but in the vendored packages.
+# Each vulnerability ID corresponds to a specific issue that has been reviewed and deemed
+# acceptable for the current vendored dependencies.
 # - https://pkg.go.dev/vuln/GO-2025-3956
 # - https://pkg.go.dev/vuln/GO-2025-3547
 # - https://pkg.go.dev/vuln/GO-2025-3521
-KNOWN_VULNERABILITIES:="GO-2025-3547|GO-2025-3521|GO-2025-3956|GO-2025-3915"
+KNOWN_VULNERABILITIES=GO-2025-3956|GO-2025-3547|GO-2025-3521
 govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
-	- $(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1
-	$(eval reported_vulnerabilities = $(strip $(shell grep "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results | ([ -n $KNOWN_VULNERABILITIES ] && grep -Ev $(KNOWN_VULNERABILITIES) || cat) | wc -l)))
-	@(if [ $(reported_vulnerabilities) -ne 0 ]; then echo -e "\n-- ERROR -- $(reported_vulnerabilities) new vulnerabilities reported, please check\n"; exit 1; fi)
+	@echo "Running govulncheck vulnerability scan..."
+	@$(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1 || true
+	@grep -q "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results || { \
+		echo "-- ERROR -- govulncheck may have failed to run; see $(OUTPUTS_PATH)/govulcheck.results"; exit 1; }
+	@echo "Filtering known vulnerabilities and counting new ones..."
+	$(eval reported_vulnerabilities = $(strip $(shell grep "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results | grep -Ev "$(KNOWN_VULNERABILITIES)" | wc -l)))
+	@echo "Found $(reported_vulnerabilities) new vulnerabilities (excluding known issues)"
+	@(if [ $(reported_vulnerabilities) -ne 0 ]; then \
+		echo ""; \
+		echo "-- ERROR -- $(reported_vulnerabilities) new vulnerabilities reported"; \
+		echo "Please review $(OUTPUTS_PATH)/govulcheck.results for details"; \
+		echo ""; \
+		exit 1; \
+	else \
+		echo "✓ Vulnerability scan passed - no new issues found"; \
+	fi)
 
 # Utilize controller-runtime provided envtest for API integration test
 .PHONY: test-apis  ## Run only the api integration tests.
