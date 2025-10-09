@@ -392,23 +392,34 @@ func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image str
 }
 
 func updateBitwardenVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
-	const certsVolumeName = "bitwarden-tls-certs"
-
 	if esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef != nil &&
 		esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name != "" {
-		if deployment.Spec.Template.Spec.Volumes == nil {
-			deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
-				Name: certsVolumeName,
-			})
-		}
+		secretName := esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name
+		updateSecretVolumeConfig(deployment, "bitwarden-tls-certs", secretName)
+	}
+}
 
-		for i := range deployment.Spec.Template.Spec.Volumes {
-			if deployment.Spec.Template.Spec.Volumes[i].Name == certsVolumeName {
-				if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
-					deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
-				}
-				deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = esc.Spec.Plugins.BitwardenSecretManagerProvider.SecretRef.Name
-			}
+func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretName string) {
+	volumeExists := false
+	for i := range deployment.Spec.Template.Spec.Volumes {
+		if deployment.Spec.Template.Spec.Volumes[i].Name == volumeName {
+			volumeExists = true
 		}
+		if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
+			deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
+		}
+		deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
+		break
+	}
+
+	if !volumeExists {
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: secretName,
+				},
+			},
+		})
 	}
 }
