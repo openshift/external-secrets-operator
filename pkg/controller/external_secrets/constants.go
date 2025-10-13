@@ -101,6 +101,7 @@ const (
 	allowWebhookTrafficAssetName                  = "external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml"
 	allowCertControllerTrafficAssetName           = "external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml"
 	allowBitwardenServerTrafficAssetName          = "external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml"
+	allowDnsTrafficAsserName                      = "external-secrets/networkpolicy_allow-dns.yaml"
 )
 
 var (
