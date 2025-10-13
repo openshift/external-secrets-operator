@@ -6,6 +6,7 @@
 // bindata/external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml
 // bindata/external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml
 // bindata/external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml
+// bindata/external-secrets/networkpolicy_allow-dns.yaml
 // bindata/external-secrets/networkpolicy_deny-all.yaml
 // bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
 // bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
@@ -340,6 +341,51 @@ func externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYa
 	}
 
 	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _externalSecretsNetworkpolicy_allowDnsYaml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v0.19.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+  name: allow-to-dns
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+          podSelector:
+            matchLabels:
+              dns.operator.openshift.io/daemonset-dns: default
+      ports:
+        - protocol: TCP
+          port: 5353
+        - protocol: UDP
+          port: 5353
+  policyTypes:
+      - Egress
+`)
+
+func externalSecretsNetworkpolicy_allowDnsYamlBytes() ([]byte, error) {
+	return _externalSecretsNetworkpolicy_allowDnsYaml, nil
+}
+
+func externalSecretsNetworkpolicy_allowDnsYaml() (*asset, error) {
+	bytes, err := externalSecretsNetworkpolicy_allowDnsYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-dns.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -1778,6 +1824,7 @@ var _bindata = map[string]func() (*asset, error){
 	"external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml":         externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml,
 	"external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml": externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml,
 	"external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml": externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml,
+	"external-secrets/networkpolicy_allow-dns.yaml":                                           externalSecretsNetworkpolicy_allowDnsYaml,
 	"external-secrets/networkpolicy_deny-all.yaml":                                            externalSecretsNetworkpolicy_denyAllYaml,
 	"external-secrets/resources/certificate_external-secrets-webhook.yml":                     externalSecretsResourcesCertificate_externalSecretsWebhookYml,
 	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":             externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
@@ -1856,6 +1903,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml":         {externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml, map[string]*bintree{}},
 		"networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml": {externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml, map[string]*bintree{}},
 		"networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml": {externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml, map[string]*bintree{}},
+		"networkpolicy_allow-dns.yaml":                                           {externalSecretsNetworkpolicy_allowDnsYaml, map[string]*bintree{}},
 		"networkpolicy_deny-all.yaml":                                            {externalSecretsNetworkpolicy_denyAllYaml, map[string]*bintree{}},
 		"resources": {nil, map[string]*bintree{
 			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},

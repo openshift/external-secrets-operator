@@ -56,6 +56,10 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 			assetName: allowBitwardenServerTrafficAssetName,
 			condition: isBitwardenConfigEnabled(esc), // Only if bitwarden is enabled
 		},
+		{
+			assetName: allowDnsTrafficAsserName,
+			condition: true,
+		},
 	}
 
 	// Apply static network policies based on conditions
