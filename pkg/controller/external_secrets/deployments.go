@@ -418,26 +418,22 @@ func updateWebhookVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alp
 }
 
 func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretName string) {
-	volumeExists := false
 	for i := range deployment.Spec.Template.Spec.Volumes {
 		if deployment.Spec.Template.Spec.Volumes[i].Name == volumeName {
-			volumeExists = true
+			if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
+				deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
+			}
+			deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
+			return
 		}
-		if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
-			deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
-		}
-		deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
-		break
 	}
 
-	if !volumeExists {
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
-			Name: volumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: secretName,
-				},
+	deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
 			},
-		})
-	}
+		},
+	})
 }
