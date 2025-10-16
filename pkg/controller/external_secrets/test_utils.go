@@ -7,6 +7,7 @@ import (
 	webhook "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -118,4 +119,11 @@ func testSecret(assetName string) *corev1.Secret {
 	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(assetName))
 	validateSecret.SetLabels(controllerDefaultResourceLabels)
 	return validateSecret
+}
+
+// testNetworkPolicy returns NetworkPolicy object read from provided static asset of same kind.
+func testNetworkPolicy(assetName string) *networkingv1.NetworkPolicy {
+	networkPolicy := common.DecodeNetworkPolicyObjBytes(assets.MustAsset(assetName))
+	networkPolicy.SetLabels(controllerDefaultResourceLabels)
+	return networkPolicy
 }
