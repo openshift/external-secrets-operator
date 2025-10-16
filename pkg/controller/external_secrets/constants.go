@@ -63,10 +63,15 @@ const (
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/crypto/x509/root_linux.go;l=22
 	trustedCABundleMountPath = "/etc/pki/tls/certs"
 
-	// Proxy environment variable names
+	// Proxy environment variable names (uppercase)
 	httpProxyEnvVar  = "HTTP_PROXY"
 	httpsProxyEnvVar = "HTTPS_PROXY"
 	noProxyEnvVar    = "NO_PROXY"
+
+	// Proxy environment variable names (lowercase) - required for compatibility with some applications
+	httpProxyEnvVarLowercase  = "http_proxy"
+	httpsProxyEnvVarLowercase = "https_proxy"
+	noProxyEnvVarLowercase    = "no_proxy"
 )
 
 var (

@@ -3,13 +3,11 @@ package external_secrets
 import (
 	"fmt"
 	"os"
-	"strings"
 	"unsafe"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
 	corevalidation "k8s.io/kubernetes/pkg/apis/core/validation"
@@ -431,10 +429,12 @@ func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretN
 
 // updateProxyConfiguration applies all proxy-related configuration to the deployment.
 func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
-	if err := r.updateProxyEnvironmentVariables(deployment, esc); err != nil {
+	proxyConfig := r.getProxyConfiguration(esc)
+
+	if err := r.updateProxyEnvironmentVariables(deployment, proxyConfig); err != nil {
 		return fmt.Errorf("failed to update proxy environment variables: %w", err)
 	}
-	if err := r.updateTrustedCABundleVolumes(deployment, esc); err != nil {
+	if err := r.updateTrustedCABundleVolumes(deployment, proxyConfig); err != nil {
 		return fmt.Errorf("failed to update trusted CA bundle volumes: %w", err)
 	}
 
@@ -442,9 +442,7 @@ func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc
 }
 
 // updateProxyEnvironmentVariables sets or removes proxy environment variables on all containers and init containers in the deployment.
-func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
-	proxyConfig := r.getProxyConfiguration(esc)
-
+func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
 	// Apply proxy environment variables to all containers
 	for i := range deployment.Spec.Template.Spec.Containers {
 		container := &deployment.Spec.Template.Spec.Containers[i]
@@ -502,9 +500,9 @@ func (r *Reconciler) setProxyEnvVars(container *corev1.Container, proxyConfig *o
 	setEnvVar(httpsProxyEnvVar, proxyConfig.HTTPSProxy)
 	setEnvVar(noProxyEnvVar, proxyConfig.NoProxy)
 
-	setEnvVar(strings.ToLower(httpProxyEnvVar), proxyConfig.HTTPProxy)
-	setEnvVar(strings.ToLower(httpsProxyEnvVar), proxyConfig.HTTPSProxy)
-	setEnvVar(strings.ToLower(noProxyEnvVar), proxyConfig.NoProxy)
+	setEnvVar(httpProxyEnvVarLowercase, proxyConfig.HTTPProxy)
+	setEnvVar(httpsProxyEnvVarLowercase, proxyConfig.HTTPSProxy)
+	setEnvVar(noProxyEnvVarLowercase, proxyConfig.NoProxy)
 }
 
 // removeProxyEnvVars removes proxy environment variables from a container.
@@ -513,20 +511,21 @@ func (r *Reconciler) removeProxyEnvVars(container *corev1.Container) {
 		return
 	}
 
-	// Set of proxy environment variable names to remove
-	proxyEnvVars := sets.New(
-		httpProxyEnvVar,
-		httpsProxyEnvVar,
-		noProxyEnvVar,
-		strings.ToLower(httpProxyEnvVar),
-		strings.ToLower(httpsProxyEnvVar),
-		strings.ToLower(noProxyEnvVar),
-	)
+	// Helper function to check if an env var name is a proxy variable
+	isProxyEnvVar := func(name string) bool {
+		switch name {
+		case httpProxyEnvVar, httpsProxyEnvVar, noProxyEnvVar,
+			httpProxyEnvVarLowercase, httpsProxyEnvVarLowercase, noProxyEnvVarLowercase:
+			return true
+		default:
+			return false
+		}
+	}
 
-	// Remove proxy environment variables
-	var filteredEnv []corev1.EnvVar
+	// Filter out proxy environment variables
+	filteredEnv := make([]corev1.EnvVar, 0, len(container.Env))
 	for _, env := range container.Env {
-		if !proxyEnvVars.Has(env.Name) {
+		if !isProxyEnvVar(env.Name) {
 			filteredEnv = append(filteredEnv, env)
 		}
 	}
@@ -535,8 +534,7 @@ func (r *Reconciler) removeProxyEnvVars(container *corev1.Container) {
 
 // updateTrustedCABundleVolumes adds or removes trusted CA bundle volume and volume mounts to/from the deployment
 // based on proxy configuration presence.
-func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
-	proxyConfig := r.getProxyConfiguration(esc)
+func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
 
 	if proxyConfig != nil {
 		// Add trusted CA bundle volume and volume mounts
