@@ -20,8 +20,10 @@ spec:
     - ports:
         - protocol: TCP
           port: 9998
-  # Allow access to Kubernetes API server
+  # Allow access to Kubernetes API server and bitwarden sdk external server
   egress:
     - ports:
         - protocol: TCP
           port: 6443
+        - protocol: TCP
+          port: 443

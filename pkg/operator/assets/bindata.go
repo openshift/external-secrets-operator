@@ -226,11 +226,13 @@ spec:
     - ports:
         - protocol: TCP
           port: 9998
-  # Allow access to Kubernetes API server
+  # Allow access to Kubernetes API server and bitwarden sdk external server
   egress:
     - ports:
         - protocol: TCP
-          port: 6443`)
+          port: 6443
+        - protocol: TCP
+          port: 443`)
 
 func externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYamlBytes() ([]byte, error) {
 	return _externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml, nil
@@ -356,8 +358,12 @@ metadata:
   name: allow-to-dns
 spec:
   podSelector:
-    matchLabels:
-      app.kubernetes.io/name: external-secrets
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - external-secrets
+          - bitwarden-sdk-server
   egress:
     - to:
         - namespaceSelector:
@@ -371,6 +377,10 @@ spec:
           port: 5353
         - protocol: UDP
           port: 5353
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
   policyTypes:
       - Egress
 `)

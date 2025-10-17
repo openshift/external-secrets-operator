@@ -131,8 +131,13 @@ type ControllerConfig struct {
 	// If this field is not provided, external-secrets components will be isolated
 	// with deny-all network policies, which will prevent proper operation.
 	//
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(op, self.exists(p, p.name == op.name && p.componentName == op.componentName))",message="name and componentName fields in networkPolicies are immutable"
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=50
 	// +kubebuilder:validation:Optional
-	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=componentName
 	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
 }
 
@@ -245,7 +250,7 @@ type NetworkPolicy struct {
 	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
 	// is allowed if there are no NetworkPolicies selecting the pod (and cluster policy
 	// otherwise allows the traffic), OR if the traffic matches at least one egress rule
-	// across all of the NetworkPolicy objects whose podSelector matches the pod. If
+	// across all the NetworkPolicy objects whose podSelector matches the pod. If
 	// this field is empty then this NetworkPolicy limits all outgoing traffic (and serves
 	// solely to ensure that the pods it selects are isolated by default).
 	// The operator will automatically handle ingress rules based on the current running ports.
