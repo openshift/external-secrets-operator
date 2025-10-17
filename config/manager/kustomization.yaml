@@ -6,3 +6,18 @@ images:
 - name: controller
   newName: openshift.io/external-secrets-operator
   newTag: latest
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: trusted-ca-bundle
+  options:
+    labels:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/name: external-secrets-operator
+      config.openshift.io/inject-trusted-cabundle: "true"
+      control-plane: controller-manager
+patches:
+- path: trusted-ca-patch.yaml
+  target:
+    kind: Deployment
+    name: controller-manager

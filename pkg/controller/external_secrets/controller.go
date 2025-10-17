@@ -74,6 +74,7 @@ var (
 		&corev1.Secret{},
 		&corev1.Service{},
 		&corev1.ServiceAccount{},
+		&corev1.ConfigMap{},
 		&webhook.ValidatingWebhookConfiguration{},
 	}
 )
@@ -251,26 +252,21 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mapFunc := func(ctx context.Context, obj client.Object) []reconcile.Request {
 		r.log.V(4).Info("received reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
 
-		objLabels := obj.GetLabels()
-		if objLabels != nil {
-			if objLabels[requestEnqueueLabelKey] == requestEnqueueLabelValue {
-				return []reconcile.Request{
-					{
-						NamespacedName: types.NamespacedName{
-							Name: common.ExternalSecretsConfigObjectName,
-						},
-					},
-				}
-			}
+		// Since predicate already filtered, all objects that reach here should trigger reconciliation
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Name: common.ExternalSecretsConfigObjectName,
+				},
+			},
 		}
-		r.log.V(4).Info("object not of interest, ignoring reconcile event", "object", fmt.Sprintf("%T", obj), "name", obj.GetName(), "namespace", obj.GetNamespace())
-		return []reconcile.Request{}
 	}
 
 	// predicate function to ignore events for objects not managed by controller.
 	managedResources := predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue
 	})
+
 	withIgnoreStatusUpdatePredicates := builder.WithPredicates(predicate.GenerationChangedPredicate{}, managedResources)
 	managedResourcePredicate := builder.WithPredicates(managedResources)
 
@@ -286,8 +282,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
 				mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 			}
-		case &corev1.Secret{}:
-			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
+		case &corev1.Secret{}, &corev1.ConfigMap{}:
+			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}, managedResources))
 		default:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
