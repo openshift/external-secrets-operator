@@ -224,16 +224,17 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 	for _, desiredVolume := range desired.Spec.Template.Spec.Volumes {
-		if desiredVolume.Secret != nil && desiredVolume.Secret.Items != nil {
+		if desiredVolume.Secret != nil {
 			for _, fetchedVolume := range fetched.Spec.Template.Spec.Volumes {
-				if !reflect.DeepEqual(desiredVolume.Secret.Items, fetchedVolume.Secret.Items) {
-					return true
-				}
-				if desiredVolume.Secret.SecretName != fetchedVolume.Secret.SecretName {
-					return true
+				if desiredVolume.Name == fetchedVolume.Name {
+					if !reflect.DeepEqual(desiredVolume.Secret.Items, fetchedVolume.Secret.Items) {
+						return true
+					}
+					if !reflect.DeepEqual(desiredVolume.Secret.SecretName, fetchedVolume.Secret.SecretName) {
+						return true
+					}
 				}
 			}
-
 		}
 	}
 
