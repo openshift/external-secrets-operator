@@ -127,7 +127,15 @@ func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 		optionalResourcesList: make(map[string]struct{}),
 	}
 
-	// create a cached client for all the managed objects.
+	// Check if cert-manager is installed and register Certificate informer if present
+	certManagerInstalled, err := checkAndRegisterCertificates(mgr, r)
+	if err != nil {
+		return nil, err
+	}
+	r.log.V(1).Info("Cert-manager check complete", "installed", certManagerInstalled)
+
+	// Use the manager's client - it reads from the manager's cache
+	// which is configured with label selectors via NewCacheBuilder()
 	c, err := NewClient(mgr, r)
 	if err != nil {
 		return nil, err
@@ -145,15 +153,13 @@ func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 	return r, nil
 }
 
-// NewClient is for creating a cached client, where the required objects are cached and informer are set to
-// update the cache.
+// NewClient returns a client that uses the manager's cache.
+// The manager's cache is already configured with proper label selectors via NewCacheBuilder().
 func NewClient(m manager.Manager, r *Reconciler) (operatorclient.CtrlClient, error) {
-	c, err := BuildCustomClient(m, r)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build custom client: %w", err)
-	}
+	// Use the manager's client directly - it reads from the manager's cache
+	// which is now configured with the same label selectors we previously had in custom cache
 	return &operatorclient.CtrlClientImpl{
-		Client: c,
+		Client: m.GetClient(),
 	}, nil
 }
 
@@ -169,84 +175,66 @@ func NewUncachedClient(m manager.Manager) (operatorclient.CtrlClient, error) {
 	}, nil
 }
 
-// BuildCustomClient creates a custom client with a custom cache of required objects.
-// The corresponding informers receive events for objects matching label criteria.
-func BuildCustomClient(mgr ctrl.Manager, r *Reconciler) (client.Client, error) {
+// NewCacheBuilder returns a cache builder function that configures the manager's cache
+// with label selectors for managed resources. This eliminates the need for a separate custom cache.
+func NewCacheBuilder() cache.NewCacheFunc {
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		// Build the object list with label selectors
+		objectList := buildCacheObjectList()
+
+		// Configure cache options with our label-filtered resources
+		opts.ByObject = objectList
+
+		// Create and return the cache using the standard cache constructor
+		return cache.New(config, opts)
+	}
+}
+
+// buildCacheObjectList creates the cache configuration with label selectors
+// for managed resources.
+func buildCacheObjectList() map[client.Object]cache.ByObject {
 	managedResourceLabelReq, _ := labels.NewRequirement(requestEnqueueLabelKey, selection.Equals, []string{requestEnqueueLabelValue})
 	managedResourceLabelReqSelector := labels.NewSelector().Add(*managedResourceLabelReq)
 
 	objectList := make(map[client.Object]cache.ByObject)
+
+	// Resources created by the controller - filter by app=external-secrets label
 	for _, res := range controllerManagedResources {
 		objectList[res] = cache.ByObject{
 			Label: managedResourceLabelReqSelector,
 		}
 	}
-	ownObject := &operatorv1alpha1.ExternalSecretsConfig{}
-	objectList[ownObject] = cache.ByObject{}
-	esmObject := &operatorv1alpha1.ExternalSecretsManager{}
-	objectList[esmObject] = cache.ByObject{}
 
+	// Own CRs - no label filter needed (controller always needs to read these)
+	objectList[&operatorv1alpha1.ExternalSecretsConfig{}] = cache.ByObject{}
+	objectList[&operatorv1alpha1.ExternalSecretsManager{}] = cache.ByObject{}
+
+	// Note: Certificate resources are added dynamically via AddCertificateToCache if cert-manager is installed
+
+	return objectList
+}
+
+// checkAndRegisterCertificates checks if cert-manager CRD exists and registers Certificate informer if present.
+// Returns true if Certificate CRD is installed.
+func checkAndRegisterCertificates(mgr ctrl.Manager, r *Reconciler) (bool, error) {
 	exist, err := isCRDInstalled(mgr.GetConfig(), certificateCRDName, certificateCRDGroupVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check %s/%s CRD is installed: %w", certificateCRDGroupVersion, certificateCRDName, err)
+		return false, fmt.Errorf("failed to check %s/%s CRD is installed: %w", certificateCRDGroupVersion, certificateCRDName, err)
 	}
+
 	if exist {
 		r.optionalResourcesList[certificateCRDGKV] = struct{}{}
-		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
-			Label: managedResourceLabelReqSelector,
-		}
-	}
 
-	customCacheOpts := cache.Options{
-		HTTPClient:                  mgr.GetHTTPClient(),
-		Scheme:                      mgr.GetScheme(),
-		Mapper:                      mgr.GetRESTMapper(),
-		ByObject:                    objectList,
-		ReaderFailOnMissingInformer: true,
-	}
-	customCache, err := cache.New(mgr.GetConfig(), customCacheOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build custom cache: %w", err)
-	}
-
-	for _, res := range controllerManagedResources {
-		if _, err = customCache.GetInformer(context.Background(), res); err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", res.GetObjectKind().GroupVersionKind().String(), err)
-		}
-	}
-	if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
-		_, err = customCache.GetInformer(context.Background(), &certmanagerv1.Certificate{})
+		// Get informer for Certificate - this registers it with the manager's cache
+		_, err = mgr.GetCache().GetInformer(context.Background(), &certmanagerv1.Certificate{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add informer for %s resource: %w", (&certmanagerv1.Certificate{}).GetObjectKind().GroupVersionKind().String(), err)
+			return false, fmt.Errorf("failed to add Certificate informer: %w", err)
 		}
-	}
-	_, err = customCache.GetInformer(context.Background(), ownObject)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
-	}
-	_, err = customCache.GetInformer(context.Background(), esmObject)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add informer for %s resource: %w", ownObject.GetObjectKind().GroupVersionKind().String(), err)
+
+		ctrl.Log.V(1).WithName("cache-setup").Info("Registered Certificate resource with manager cache")
 	}
 
-	err = mgr.Add(customCache)
-	if err != nil {
-		return nil, err
-	}
-
-	customClient, err := client.New(mgr.GetConfig(), client.Options{
-		HTTPClient: mgr.GetHTTPClient(),
-		Scheme:     mgr.GetScheme(),
-		Mapper:     mgr.GetRESTMapper(),
-		Cache: &client.CacheOptions{
-			Reader: customCache,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return customClient, nil
+	return exist, nil
 }
 
 // SetupWithManager is for creating a controller instance with predicates and event filters.

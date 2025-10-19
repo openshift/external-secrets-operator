@@ -42,6 +42,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
+	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
 	"github.com/openshift/external-secrets-operator/pkg/operator"
 	// +kubebuilder:scaffold:imports
 )
@@ -181,6 +182,9 @@ func main() {
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "de6a4747.externalsecretsoperator.operator.openshift.io",
 		Logger:                 ctrl.Log.WithName("operator-manager"),
+		// Configure manager's cache with custom label selectors
+		// This replaces the need for a separate custom cache
+		NewCache: escontroller.NewCacheBuilder(),
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create controller manager")
