@@ -113,15 +113,6 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// periodicReconcileInterval specifies the time interval in seconds for periodic reconciliation by the operator.
-	// This controls how often the operator checks resources created for external-secrets operand to ensure they remain in desired state.
-	// Interval can have value between 120-18000 seconds (2 minutes to 5 hours). Defaults to 300 seconds (5 minutes) if not specified.
-	// +kubebuilder:default:=300
-	// +kubebuilder:validation:Minimum:=120
-	// +kubebuilder:validation:Maximum:=18000
-	// +kubebuilder:validation:Optional
-	PeriodicReconcileInterval uint32 `json:"periodicReconcileInterval,omitempty"`
-
 	// networkPolicies specifies the list of network policy configurations
 	// to be applied to external-secrets pods.
 	//
