@@ -123,6 +123,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
 		}
 		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval)
+		updateWebhookVolumeConfig(deployment, esc)
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
 	case bitwardenDeploymentAssetName:
@@ -302,20 +303,31 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 
 // argument list for external-secrets deployment resource
 func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
-	namespace := getOperatingNamespace(esc)
+	var (
+		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
+		enableClusterExternalSecretsArgFmt = "--enable-cluster-external-secret-reconciler=%s"
+	)
+
 	args := []string{
 		"--concurrent=1",
 		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 		"--enable-leader-election=true",
-		"--enable-cluster-store-reconciler=true",
-		"--enable-cluster-external-secret-reconciler=true",
 		"--enable-push-secret-reconciler=true",
 	}
 
+	// when spec.appConfig.operatingNamespace is configured, which is for restricting the
+	// external-secrets custom resource reconcile scope to specified namespace, the reconciliation
+	// of cluster scoped custom resources must also be disabled.
+	namespace := getOperatingNamespace(esc)
 	if namespace != "" {
-		args = append(args, fmt.Sprintf("--namespace=%s", namespace))
+		args = append(args, fmt.Sprintf("--namespace=%s", namespace),
+			fmt.Sprintf(enableClusterStoreArgFmt, "false"),
+			fmt.Sprintf(enableClusterExternalSecretsArgFmt, "false"))
+	} else {
+		args = append(args, fmt.Sprintf(enableClusterStoreArgFmt, "true"),
+			fmt.Sprintf(enableClusterExternalSecretsArgFmt, "true"))
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
@@ -399,27 +411,29 @@ func updateBitwardenVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1a
 	}
 }
 
+func updateWebhookVolumeConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if isCertManagerConfigEnabled(esc) {
+		updateSecretVolumeConfig(deployment, "certs", certmanagerTLSSecretWebhook)
+	}
+}
+
 func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretName string) {
-	volumeExists := false
 	for i := range deployment.Spec.Template.Spec.Volumes {
 		if deployment.Spec.Template.Spec.Volumes[i].Name == volumeName {
-			volumeExists = true
+			if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
+				deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
+			}
+			deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
+			return
 		}
-		if deployment.Spec.Template.Spec.Volumes[i].Secret == nil {
-			deployment.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{}
-		}
-		deployment.Spec.Template.Spec.Volumes[i].Secret.SecretName = secretName
-		break
 	}
 
-	if !volumeExists {
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
-			Name: volumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: secretName,
-				},
+	deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
 			},
-		})
-	}
+		},
+	})
 }
