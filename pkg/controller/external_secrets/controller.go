@@ -209,7 +209,11 @@ func buildCacheObjectList() map[client.Object]cache.ByObject {
 	objectList[&operatorv1alpha1.ExternalSecretsConfig{}] = cache.ByObject{}
 	objectList[&operatorv1alpha1.ExternalSecretsManager{}] = cache.ByObject{}
 
-	// Note: Certificate resources are added dynamically via AddCertificateToCache if cert-manager is installed
+	// Certificate resources - permit in cache; informer is registered only if cert-manager CRD exists
+	// This must be in ByObject map even if registered conditionally, otherwise GetInformer will fail
+	objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
+		Label: managedResourceLabelReqSelector,
+	}
 
 	return objectList
 }
@@ -273,17 +277,21 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		switch res {
 		case &appsv1.Deployment{}:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
-		case &certmanagerv1.Certificate{}:
-			if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
-				mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
-			}
 		case &corev1.Secret{}:
 			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
 		default:
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
 	}
+
+	// Watch ExternalSecretsManager
 	mgrBuilder.Watches(&operatorv1alpha1.ExternalSecretsManager{}, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
+
+	// Conditionally watch Certificate if cert-manager is installed
+	// Note: Certificate is already declared in buildCacheObjectList(), this just sets up the watch
+	if _, ok := r.optionalResourcesList[certificateCRDGKV]; ok {
+		mgrBuilder.Watches(&certmanagerv1.Certificate{}, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
+	}
 
 	return mgrBuilder.Complete(r)
 }
