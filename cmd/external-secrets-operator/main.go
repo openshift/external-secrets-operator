@@ -170,7 +170,11 @@ func main() {
 		metricsServerOptions.TLSOpts = metricsTLSOpts
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	// Create the cache builder with CRD checks
+	restConfig := ctrl.GetConfigOrDie()
+	cacheBuilder := escontroller.NewCacheBuilder(restConfig)
+
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
@@ -180,7 +184,7 @@ func main() {
 		Logger:                 ctrl.Log.WithName("operator-manager"),
 		// Configure manager's cache with custom label selectors
 		// This replaces the need for a separate custom cache
-		NewCache: escontroller.NewCacheBuilder(),
+		NewCache: cacheBuilder,
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create controller manager")

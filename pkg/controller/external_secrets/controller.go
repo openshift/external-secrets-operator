@@ -177,10 +177,18 @@ func NewUncachedClient(m manager.Manager) (operatorclient.CtrlClient, error) {
 
 // NewCacheBuilder returns a cache builder function that configures the manager's cache
 // with label selectors for managed resources. This eliminates the need for a separate custom cache.
-func NewCacheBuilder() cache.NewCacheFunc {
+func NewCacheBuilder(config *rest.Config) cache.NewCacheFunc {
+	// Check if cert-manager CRD exists BEFORE creating the cache
+	// This prevents cache creation failure if we try to watch a non-existent CRD
+	certManagerExists, err := isCRDInstalled(config, certificateCRDName, certificateCRDGroupVersion)
+	if err != nil {
+		ctrl.Log.V(1).WithName("cache-setup").Error(err, "Failed to check cert-manager CRD, assuming not installed")
+		certManagerExists = false
+	}
+
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 		// Build the object list with label selectors
-		objectList := buildCacheObjectList()
+		objectList := buildCacheObjectList(certManagerExists)
 
 		// Configure cache options with our label-filtered resources
 		opts.ByObject = objectList
@@ -192,7 +200,7 @@ func NewCacheBuilder() cache.NewCacheFunc {
 
 // buildCacheObjectList creates the cache configuration with label selectors
 // for managed resources.
-func buildCacheObjectList() map[client.Object]cache.ByObject {
+func buildCacheObjectList(includeCertManager bool) map[client.Object]cache.ByObject {
 	managedResourceLabelReq, _ := labels.NewRequirement(requestEnqueueLabelKey, selection.Equals, []string{requestEnqueueLabelValue})
 	managedResourceLabelReqSelector := labels.NewSelector().Add(*managedResourceLabelReq)
 
@@ -209,10 +217,11 @@ func buildCacheObjectList() map[client.Object]cache.ByObject {
 	objectList[&operatorv1alpha1.ExternalSecretsConfig{}] = cache.ByObject{}
 	objectList[&operatorv1alpha1.ExternalSecretsManager{}] = cache.ByObject{}
 
-	// Certificate resources - permit in cache; informer is registered only if cert-manager CRD exists
-	// This must be in ByObject map even if registered conditionally, otherwise GetInformer will fail
-	objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
-		Label: managedResourceLabelReqSelector,
+	// Certificate objects - only include if cert-manager CRD exists
+	if includeCertManager {
+		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
+			Label: managedResourceLabelReqSelector,
+		}
 	}
 
 	return objectList
