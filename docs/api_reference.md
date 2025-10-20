@@ -180,7 +180,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
-| `periodicReconcileInterval` _integer_ | periodicReconcileInterval specifies the time interval in seconds for periodic reconciliation by the operator.<br />This controls how often the operator checks resources created for external-secrets operand to ensure they remain in desired state.<br />Interval can have value between 120-18000 seconds (2 minutes to 5 hours). Defaults to 300 seconds (5 minutes) if not specified. | 300 | Maximum: 18000 <br />Minimum: 120 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
