@@ -15,10 +15,13 @@ spec:
         - protocol: TCP
           port: 6443 # Required: Kubernetes API server
   ingress:
-    # Optional: expose metrics (8443 and 8080 based on user configuration)
-    - ports:
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-user-workload-monitoring
+      ports:
         - protocol: TCP
           port: 8443
-    - ports:
         - protocol: TCP
           port: 8080
