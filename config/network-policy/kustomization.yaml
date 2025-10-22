@@ -1,4 +1,3 @@
 resources:
-- allow-metrics-traffic.yaml
 - allow-network-traffic.yaml
 - deny-all.yaml
