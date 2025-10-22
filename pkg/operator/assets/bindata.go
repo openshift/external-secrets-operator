@@ -181,10 +181,7 @@ spec:
     - from:
       - namespaceSelector:
           matchLabels:
-            openshift.io/cluster-monitoring: "true"
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-monitoring
+            name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
           port: 8080`)
@@ -275,10 +272,7 @@ spec:
     - from:
       - namespaceSelector:
           matchLabels:
-            openshift.io/cluster-monitoring: "true"
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-monitoring
+            name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
           port: 8080`)
@@ -324,10 +318,7 @@ spec:
     - from:
       - namespaceSelector:
           matchLabels:
-            openshift.io/cluster-monitoring: "true"
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-monitoring
+            name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
           port: 8080`)
