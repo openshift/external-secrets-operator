@@ -76,6 +76,7 @@ var (
 		&corev1.Secret{},
 		&corev1.Service{},
 		&corev1.ServiceAccount{},
+		&corev1.ConfigMap{},
 		&webhook.ValidatingWebhookConfiguration{},
 	}
 )
@@ -275,6 +276,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	managedResources := predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetLabels() != nil && object.GetLabels()[requestEnqueueLabelKey] == requestEnqueueLabelValue
 	})
+
 	withIgnoreStatusUpdatePredicates := builder.WithPredicates(predicate.GenerationChangedPredicate{}, managedResources)
 	managedResourcePredicate := builder.WithPredicates(managedResources)
 
@@ -288,7 +290,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), withIgnoreStatusUpdatePredicates)
 		case &corev1.Secret{}:
 			mgrBuilder.WatchesMetadata(res, handler.EnqueueRequestsFromMapFunc(mapFunc), builder.WithPredicates(predicate.LabelChangedPredicate{}))
-		default:
+		default: // Trusted CA ConfigMap depends on this case
 			mgrBuilder.Watches(res, handler.EnqueueRequestsFromMapFunc(mapFunc), managedResourcePredicate)
 		}
 	}

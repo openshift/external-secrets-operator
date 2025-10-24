@@ -144,6 +144,9 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	if err := r.updateNodeSelector(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update node selector: %w", err)
 	}
+	if err := r.updateProxyConfiguration(deployment, esc); err != nil {
+		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
+	}
 
 	return deployment, nil
 }
@@ -436,4 +439,224 @@ func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretN
 			},
 		},
 	})
+}
+
+// updateProxyConfiguration applies all proxy-related configuration to the deployment.
+func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
+	proxyConfig := r.getProxyConfiguration(esc)
+
+	if err := r.updateProxyEnvironmentVariables(deployment, proxyConfig); err != nil {
+		return fmt.Errorf("failed to update proxy environment variables: %w", err)
+	}
+	if err := r.updateTrustedCABundleVolumes(deployment, proxyConfig); err != nil {
+		return fmt.Errorf("failed to update trusted CA bundle volumes: %w", err)
+	}
+
+	return nil
+}
+
+// updateProxyEnvironmentVariables sets or removes proxy environment variables on all containers and init containers in the deployment.
+func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
+	// Apply proxy environment variables to all containers
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		if proxyConfig != nil {
+			r.setProxyEnvVars(container, proxyConfig)
+		} else {
+			r.removeProxyEnvVars(container)
+		}
+	}
+
+	// Apply proxy environment variables to all init containers
+	for i := range deployment.Spec.Template.Spec.InitContainers {
+		initContainer := &deployment.Spec.Template.Spec.InitContainers[i]
+		if proxyConfig != nil {
+			r.setProxyEnvVars(initContainer, proxyConfig)
+		} else {
+			r.removeProxyEnvVars(initContainer)
+		}
+	}
+
+	return nil
+}
+
+// setProxyEnvVars sets proxy environment variables on a container.
+func (r *Reconciler) setProxyEnvVars(container *corev1.Container, proxyConfig *operatorv1alpha1.ProxyConfig) {
+	if proxyConfig == nil {
+		return
+	}
+	if container.Env == nil {
+		container.Env = []corev1.EnvVar{}
+	}
+
+	setEnvVar := func(name, value string) {
+		if value == "" {
+			return
+		}
+
+		// Check if the environment variable already exists
+		for i, env := range container.Env {
+			if env.Name == name {
+				container.Env[i].Value = value
+				return
+			}
+		}
+
+		// Add new environment variable if it doesn't exist
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  name,
+			Value: value,
+		})
+	}
+
+	// Set proxy environment variables
+	setEnvVar(httpProxyEnvVar, proxyConfig.HTTPProxy)
+	setEnvVar(httpsProxyEnvVar, proxyConfig.HTTPSProxy)
+	setEnvVar(noProxyEnvVar, proxyConfig.NoProxy)
+
+	setEnvVar(httpProxyEnvVarLowercase, proxyConfig.HTTPProxy)
+	setEnvVar(httpsProxyEnvVarLowercase, proxyConfig.HTTPSProxy)
+	setEnvVar(noProxyEnvVarLowercase, proxyConfig.NoProxy)
+}
+
+// removeProxyEnvVars removes proxy environment variables from a container.
+func (r *Reconciler) removeProxyEnvVars(container *corev1.Container) {
+	if len(container.Env) == 0 {
+		return
+	}
+
+	// Helper function to check if an env var name is a proxy variable
+	isProxyEnvVar := func(name string) bool {
+		switch name {
+		case httpProxyEnvVar, httpsProxyEnvVar, noProxyEnvVar,
+			httpProxyEnvVarLowercase, httpsProxyEnvVarLowercase, noProxyEnvVarLowercase:
+			return true
+		default:
+			return false
+		}
+	}
+
+	// Filter out proxy environment variables
+	filteredEnv := make([]corev1.EnvVar, 0, len(container.Env))
+	for _, env := range container.Env {
+		if !isProxyEnvVar(env.Name) {
+			filteredEnv = append(filteredEnv, env)
+		}
+	}
+	container.Env = filteredEnv
+}
+
+// updateTrustedCABundleVolumes adds or removes trusted CA bundle volume and volume mounts to/from the deployment
+// based on proxy configuration presence.
+func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
+
+	if proxyConfig != nil {
+		// Add trusted CA bundle volume and volume mounts
+		return r.addTrustedCABundleVolumes(deployment)
+	} else {
+		// Remove trusted CA bundle volume and volume mounts
+		return r.removeTrustedCABundleVolumes(deployment)
+	}
+}
+
+// addTrustedCABundleVolumes adds trusted CA bundle volume and volume mounts to the deployment.
+func (r *Reconciler) addTrustedCABundleVolumes(deployment *appsv1.Deployment) error {
+	// Add the trusted CA bundle volume to the pod spec
+	trustedCAVolume := corev1.Volume{
+		Name: trustedCABundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: trustedCABundleConfigMapName,
+				},
+			},
+		},
+	}
+
+	// Check if the volume already exists, if not add it
+	volumeExists := false
+	for i, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Name == trustedCABundleVolumeName {
+			deployment.Spec.Template.Spec.Volumes[i] = trustedCAVolume
+			volumeExists = true
+			break
+		}
+	}
+	if !volumeExists {
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, trustedCAVolume)
+	}
+
+	// Add volume mounts to all containers and init containers
+	trustedCAVolumeMount := corev1.VolumeMount{
+		Name:      trustedCABundleVolumeName,
+		MountPath: trustedCABundleMountPath,
+		ReadOnly:  true,
+	}
+
+	// Add volume mount to all containers
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		r.addTrustedCAVolumeMount(container, trustedCAVolumeMount)
+	}
+
+	// Add volume mount to all init containers
+	for i := range deployment.Spec.Template.Spec.InitContainers {
+		initContainer := &deployment.Spec.Template.Spec.InitContainers[i]
+		r.addTrustedCAVolumeMount(initContainer, trustedCAVolumeMount)
+	}
+
+	return nil
+}
+
+// removeTrustedCABundleVolumes removes trusted CA bundle volume and volume mounts from the deployment.
+func (r *Reconciler) removeTrustedCABundleVolumes(deployment *appsv1.Deployment) error {
+	// Remove the trusted CA bundle volume from the pod spec
+	var filteredVolumes []corev1.Volume
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Name != trustedCABundleVolumeName {
+			filteredVolumes = append(filteredVolumes, volume)
+		}
+	}
+	deployment.Spec.Template.Spec.Volumes = filteredVolumes
+
+	// Remove volume mounts from all containers
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		r.removeTrustedCAVolumeMount(container)
+	}
+
+	// Remove volume mounts from all init containers
+	for i := range deployment.Spec.Template.Spec.InitContainers {
+		initContainer := &deployment.Spec.Template.Spec.InitContainers[i]
+		r.removeTrustedCAVolumeMount(initContainer)
+	}
+
+	return nil
+}
+
+// addTrustedCAVolumeMount adds the trusted CA bundle volume mount to a container if it doesn't already exist.
+func (r *Reconciler) addTrustedCAVolumeMount(container *corev1.Container, trustedCAVolumeMount corev1.VolumeMount) {
+	// Check if the volume mount already exists, if not add it
+	volumeMountExists := false
+	for j, volumeMount := range container.VolumeMounts {
+		if volumeMount.Name == trustedCABundleVolumeName {
+			container.VolumeMounts[j] = trustedCAVolumeMount
+			volumeMountExists = true
+			break
+		}
+	}
+	if !volumeMountExists {
+		container.VolumeMounts = append(container.VolumeMounts, trustedCAVolumeMount)
+	}
+}
+
+// removeTrustedCAVolumeMount removes the trusted CA bundle volume mount from a container.
+func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
+	var filteredVolumeMounts []corev1.VolumeMount
+	for _, volumeMount := range container.VolumeMounts {
+		if volumeMount.Name != trustedCABundleVolumeName {
+			filteredVolumeMounts = append(filteredVolumeMounts, volumeMount)
+		}
+	}
+	container.VolumeMounts = filteredVolumeMounts
 }
