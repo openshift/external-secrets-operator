@@ -1086,7 +1086,7 @@ github.com/stretchr/testify/require
 # github.com/subosito/gotenv v1.4.1
 ## explicit; go 1.18
 github.com/subosito/gotenv
-# github.com/tdakkota/asciicheck v0.4.1
+# github.com/tdakkota/asciicheck v0.4.1 => github.com/golangci/asciicheck v0.4.1
 ## explicit; go 1.22.0
 github.com/tdakkota/asciicheck
 # github.com/tetafro/godot v1.5.0
@@ -2804,3 +2804,4 @@ sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
 sigs.k8s.io/yaml/goyaml.v3
 # github.com/external-secrets/external-secrets => github.com/openshift/external-secrets v0.19.0
+# github.com/tdakkota/asciicheck => github.com/golangci/asciicheck v0.4.1
