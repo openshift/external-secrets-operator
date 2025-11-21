@@ -321,3 +321,5 @@ require (
 )
 
 replace github.com/external-secrets/external-secrets => github.com/openshift/external-secrets v0.19.0
+
+replace github.com/tdakkota/asciicheck => github.com/golangci/asciicheck v0.4.1
