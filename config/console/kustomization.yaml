@@ -1,0 +1,5 @@
+resources:
+- eso-example-quickstart.yaml
+- eso-external-secret-sample.yaml
+- eso-vault-secret-store-provider-sample.yaml
+
