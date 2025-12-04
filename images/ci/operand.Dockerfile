@@ -12,8 +12,7 @@ RUN git clone --depth 1 --branch $RELEASE_BRANCH https://github.com/openshift/ex
 RUN go mod vendor
 RUN go build -mod=vendor -tags $GO_BUILD_TAGS -o _output/external-secrets main.go
 
-FROM registry.access.redhat.com/ubi9-minimal:9.4
-
+FROM registry.ci.openshift.org/rhcos-devel/ocp-4.21-10.1:4.21.0-ec.3-x86_64
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets
 COPY --from=builder $SRC_DIR/_output/external-secrets /bin/external-secrets
 
