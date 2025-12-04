@@ -28,6 +28,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.20.5-0.20250517180713-32e5e9e948a5
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250308055145-5fe7bb3edc86
 	sigs.k8s.io/controller-tools v0.17.3
+	sigs.k8s.io/kube-api-linter v0.0.0-20251203203220-2d0643557c8d
 	sigs.k8s.io/kustomize/kustomize/v5 v5.5.0
 )
 
@@ -323,6 +324,7 @@ require (
 	k8s.io/component-base v0.32.3 // indirect
 	k8s.io/component-helpers v0.32.1 // indirect
 	k8s.io/controller-manager v0.32.1 // indirect
+	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b // indirect
 	k8s.io/kms v0.33.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911 // indirect
 	k8s.io/kubelet v0.32.1 //indirect
