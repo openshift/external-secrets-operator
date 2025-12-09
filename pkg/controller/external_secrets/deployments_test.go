@@ -469,7 +469,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					},
 				}
 			},
-			wantErr: `failed to update resource requirements: invalid resource requirements: [spec.resources.requests[test]: Invalid value: test: must be a standard resource type or fully qualified, spec.resources.requests[test]: Invalid value: test: must be a standard resource for containers]`,
+			wantErr: `failed to update resource requirements: invalid resource requirements: [spec.resources.requests[test]: Invalid value: "test": must be a standard resource type or fully qualified, spec.resources.requests[test]: Invalid value: "test": must be a standard resource for containers]`,
 		},
 		{
 			name: "bitwarden is enabled with secretRef for certificates",
