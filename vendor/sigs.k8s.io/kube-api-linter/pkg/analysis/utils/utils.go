@@ -29,11 +29,37 @@ import (
 	"sigs.k8s.io/kube-api-linter/pkg/markers"
 )
 
+const stringTypeName = "string"
+
 // IsBasicType checks if the type of the given identifier is a basic type.
 // Basic types are types like int, string, bool, etc.
-func IsBasicType(pass *analysis.Pass, ident *ast.Ident) bool {
-	_, ok := pass.TypesInfo.TypeOf(ident).(*types.Basic)
+func IsBasicType(pass *analysis.Pass, expr ast.Expr) bool {
+	_, ok := pass.TypesInfo.TypeOf(expr).(*types.Basic)
 	return ok
+}
+
+// IsStringType checks if the type of the given expression is a string type..
+func IsStringType(pass *analysis.Pass, expr ast.Expr) bool {
+	// In case the expr is a pointer.
+	underlying := getUnderlyingType(expr)
+
+	ident, ok := underlying.(*ast.Ident)
+	if !ok {
+		return false
+	}
+
+	if ident.Name == stringTypeName {
+		return true
+	}
+
+	// Is either an alias or another basic type, try to look up the alias.
+	tSpec, ok := LookupTypeSpec(pass, ident)
+	if !ok {
+		// Basic type and not a string.
+		return false
+	}
+
+	return IsStringType(pass, tSpec.Type)
 }
 
 // IsStructType checks if the given expression is a struct type.
