@@ -16,6 +16,24 @@ Package v1alpha1 contains API Schema definitions for the operator v1alpha1 API g
 
 
 
+#### Annotation
+
+
+
+Annotation represents a custom annotation key-value pair.
+Embeds KVPair inline for reusability.
+
+
+
+_Appears in:_
+- [ControllerConfig](#controllerconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `key` _string_ |  |  |  |
+| `value` _string_ |  |  |  |
+
+
 #### ApplicationConfig
 
 
@@ -114,6 +132,24 @@ _Appears in:_
 | `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
 
 
+#### ComponentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ControllerConfig](#controllerconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: Controller, Webhook, CertController, Bitwarden |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows specifying deployment-level configuration overrides. |  | Optional: \{\} <br /> |
+| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv allows setting custom environment variables for the component's container.<br />These environment variables are merged with the default environment variables set by<br />the operator. User-specified variables take precedence in case of conflicts.<br />Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved<br />and cannot be overridden. |  | Optional: \{\} <br /> |
+
+
 #### ComponentName
 
 _Underlying type:_ _string_
@@ -123,6 +159,7 @@ ComponentName represents the different external-secrets components that can have
 
 
 _Appears in:_
+- [ComponentConfig](#componentconfig)
 - [NetworkPolicy](#networkpolicy)
 
 | Field | Description |
@@ -180,7 +217,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `annotations` _[Annotation](#annotation) array_ | annotations allows adding custom annotations to all external-secrets component<br />Deployments and Pod templates. These annotations are applied globally to all<br />operand components (Controller, Webhook, CertController, BitwardenSDKServer).<br />These annotations are merged with any default annotations set by the operator.<br />User-specified annotations take precedence over defaults in case of conflicts.<br />Annotations with keys starting with kubernetes.io, app.kubernetes, openshift.io, or k8s.io<br />are reserved and cannot be overridden. |  | Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfig` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying component-specific (Controller, Webhook, CertController, Bitwarden) configuration overrides. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ControllerStatus
@@ -199,6 +238,22 @@ _Appears in:_
 | `name` _string_ | name of the controller for which the observed condition is recorded. |  | Required: \{\} <br /> |
 | `conditions` _[Condition](#condition) array_ | conditions holds information of the current state of the external-secrets-operator controllers. |  |  |
 | `observedGeneration` _integer_ | observedGeneration represents the .metadata.generation on the observed resource. |  | Minimum: 0 <br /> |
+
+
+#### DeploymentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ComponentConfig](#componentconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.<br />Minimum value of 1 is enforced to ensure rollback capability. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
@@ -373,6 +428,23 @@ _Appears in:_
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
 | `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
+
+
+#### KVPair
+
+
+
+KVPair represents a generic key-value pair for configuration.
+
+
+
+_Appears in:_
+- [Annotation](#annotation)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `key` _string_ |  |  |  |
+| `value` _string_ |  |  |  |
 
 
 #### Mode
