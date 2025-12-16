@@ -30,7 +30,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `key` _string_ |  |  |  |
+| `key` _string_ |  |  | Required: \{\} <br /> |
 | `value` _string_ |  |  |  |
 
 
@@ -147,7 +147,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: Controller, Webhook, CertController, Bitwarden |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
 | `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows specifying deployment-level configuration overrides. |  | Optional: \{\} <br /> |
-| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv allows setting custom environment variables for the component's container.<br />These environment variables are merged with the default environment variables set by<br />the operator. User-specified variables take precedence in case of conflicts.<br />Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved<br />and cannot be overridden. |  | Optional: \{\} <br /> |
+| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv allows setting custom environment variables for the component's container.<br />These environment variables are merged with the default environment variables set by<br />the operator. User-specified variables take precedence in case of conflicts.<br />Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved<br />and cannot be overridden. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### ComponentName
@@ -443,7 +443,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `key` _string_ |  |  |  |
+| `key` _string_ |  |  | Required: \{\} <br /> |
 | `value` _string_ |  |  |  |
 
 

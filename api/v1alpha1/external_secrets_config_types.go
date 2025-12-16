@@ -176,6 +176,7 @@ type ComponentConfig struct {
 	// and cannot be overridden.
 	//
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems:=50
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !e.name.startsWith('HOSTNAME') && !e.name.startsWith('KUBERNETES_') && !e.name.startsWith('EXTERNAL_SECRETS_'))",message="Environment variable names cannot start with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' as these are reserved"
 	// +optional
 	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
@@ -192,7 +193,8 @@ type DeploymentConfig struct {
 
 // KVPair represents a generic key-value pair for configuration.
 type KVPair struct {
-	Key   string `json:"key,omitempty"`
+	// +kubebuilder:validation:Required
+	Key   string `json:"key"`
 	Value string `json:"value,omitempty"`
 }
 
