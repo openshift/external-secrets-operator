@@ -114,16 +114,10 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// annotations allows adding custom annotations to all external-secrets component
-	// Deployments and Pod templates. These annotations are applied globally to all
-	// operand components (Controller, Webhook, CertController, BitwardenSDKServer).
-	// These annotations are merged with any default annotations set by the operator.
-	// User-specified annotations take precedence over defaults in case of conflicts.
-	// Annotations with keys starting with kubernetes.io, app.kubernetes, openshift.io, or k8s.io
-	// are reserved and cannot be overridden.
-	//
+	// annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io`, `app.kubernetes`, `openshift.io`, or `k8s.io` are not allowed
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:XValidation:rule="self.all(a, !a.key.startsWith('kubernetes.io/') && !a.key.startsWith('app.kubernetes.io/') && !a.key.startsWith('openshift.io/') && !a.key.startsWith('k8s.io/'))",message="Annotation keys cannot start with 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', or 'k8s.io/' as these are reserved"
+	// +kubebuilder:validation:MaxItems:=20
+	// +kubebuilder:validation:XValidation:rule="self.all(a, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, a.key.startsWith(p)))",message="annotations with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/' are not allowed"
 	// +listType=map
 	// +listMapKey=key
 	// +optional
@@ -147,8 +141,6 @@ type ControllerConfig struct {
 	// +listMapKey=componentName
 	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
 
-	// componentConfigs allows specifying component-specific (Controller, Webhook, CertController, Bitwarden) configuration overrides.
-	// +kubebuilder:validation:XValidation:rule="self.all(x, self.exists_one(y, x.componentName == y.componentName))",message="componentName must be unique across all componentConfig entries"
 	// +kubebuilder:validation:MinItems:=0
 	// +kubebuilder:validation:MaxItems:=4
 	// +kubebuilder:validation:Optional
@@ -159,7 +151,7 @@ type ControllerConfig struct {
 
 type ComponentConfig struct {
 	// componentName specifies which deployment component this configuration applies to.
-	// Allowed values: Controller, Webhook, CertController, Bitwarden
+	// Allowed values: ExternalSecretsCoreController, Webhook, CertController, Bitwarden
 	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
 	// +kubebuilder:validation:Required
 	ComponentName ComponentName `json:"componentName"`
@@ -177,7 +169,7 @@ type ComponentConfig struct {
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxItems:=50
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !e.name.startsWith('HOSTNAME') && !e.name.startsWith('KUBERNETES_') && !e.name.startsWith('EXTERNAL_SECRETS_'))",message="Environment variable names cannot start with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' as these are reserved"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="Environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
 	// +optional
 	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
 }

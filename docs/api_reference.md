@@ -145,7 +145,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: Controller, Webhook, CertController, Bitwarden |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: ExternalSecretsCoreController, Webhook, CertController, Bitwarden |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
 | `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows specifying deployment-level configuration overrides. |  | Optional: \{\} <br /> |
 | `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv allows setting custom environment variables for the component's container.<br />These environment variables are merged with the default environment variables set by<br />the operator. User-specified variables take precedence in case of conflicts.<br />Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved<br />and cannot be overridden. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
@@ -217,9 +217,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
-| `annotations` _[Annotation](#annotation) array_ | annotations allows adding custom annotations to all external-secrets component<br />Deployments and Pod templates. These annotations are applied globally to all<br />operand components (Controller, Webhook, CertController, BitwardenSDKServer).<br />These annotations are merged with any default annotations set by the operator.<br />User-specified annotations take precedence over defaults in case of conflicts.<br />Annotations with keys starting with kubernetes.io, app.kubernetes, openshift.io, or k8s.io<br />are reserved and cannot be overridden. |  | Optional: \{\} <br /> |
+| `annotations` _[Annotation](#annotation) array_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io`, `app.kubernetes`, `openshift.io`, or `k8s.io` are not allowed |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
-| `componentConfig` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying component-specific (Controller, Webhook, CertController, Bitwarden) configuration overrides. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfig` _[ComponentConfig](#componentconfig) array_ |  |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ControllerStatus
