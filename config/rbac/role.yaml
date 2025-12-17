@@ -133,6 +133,7 @@ rules:
   - generators.external-secrets.io
   resources:
   - acraccesstokens
+  - cloudsmithaccesstokens
   - clustergenerators
   - ecrauthorizationtokens
   - fakes
