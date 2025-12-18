@@ -202,3 +202,7 @@ func ReplacePatternInAsset(replacePatternString ...string) AssetFunc {
 		return []byte(replacedFileContent), nil
 	}
 }
+
+func DeleteVaultSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, region string) error {
+	return nil
+}
