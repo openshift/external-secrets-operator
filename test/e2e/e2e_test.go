@@ -227,4 +227,109 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			}, time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
+
+	// TODO: Update vault.yaml
+	Context("Vault Secret Manager", Label("SecretProvider:Vault"), func() {
+		const (
+			clusterSecretStoreFile        = "testdata/vault/secret_store.yaml"
+			externalSecretFile            = "testdata/vault/external_secret.yaml"
+			pushSecretFile                = "testdata/vault/push_secret.yaml"
+			secretToPushFile              = "testdata/vault/_push_secret.yaml"
+			secretNamePattern             = "${SECRET_KEY_NAME}"
+			secretValuePattern            = "${SECRET_VALUE}"
+			clusterSecretStoreNamePattern = "${CLUSTERSECRETSTORE_NAME}"
+		)
+
+		AfterAll(func() {
+			By("Deleting the Vault secret")
+			// TODO: make a similar method/approach that checks to see that the secret is deleted.
+			Expect(utils.DeleteVaultSecret(ctx, clientset, secretName, secretRegionName)).
+				NotTo(HaveOccurred(), "failed to delete Vault secret test/e2e")
+		})
+
+		It("should create secrets mentioned in ExternalSecret using the referenced ClusterSecretStore", func() {
+			var (
+				// test bindata for Vault
+				vaultExternalSecretConfigFile  = "testdata/vault/external_secret_config.yaml"
+				vaultClusterSecretStoreFile    = "testdata/vault/cluster_secret_store.yaml"
+				vaultExternalSecretFile        = "testdata/vault/external_secret.yaml"
+				vaultPushSecretFile            = "testdata/vault/push_secret.yaml"
+				clusterSecretStoreResourceName = fmt.Sprintf("vault-secret-store-%s", utils.GetRandomString(5))
+				pushSecretResourceName         = "vault-push-secret"
+				externalSecretResourceName     = "vault-external-secret"
+				secretResourceName             = "vault-secret"
+				keyNameInSecret                = "vault_secret_access_key"
+			)
+
+			defer func() {
+				// TODO: make a similar method/approach that checks to see that the secret is deleted.
+				Expect(utils.DeleteVaultSecret(ctx, clientset, secretName, secretRegionName)).
+					NotTo(HaveOccurred(), "failed to delete Vault secret test/e2e")
+			}()
+
+			expectedSecretValue, err := utils.ReadExpectedSecretValue(expectedSecretValueFile)
+			Expect(err).To(Succeed())
+
+			By("Creating kubernetes secret to be used in PushSecret")
+			secretsAssetFunc := utils.ReplacePatternInAsset(secretValuePattern, base64.StdEncoding.EncodeToString(expectedSecretValue))
+			loader.CreateFromFile(secretsAssetFunc, vaultPushSecretFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, vaultPushSecretFile, testNamespace)
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(clusterSecretStoreNamePattern, clusterSecretStoreResourceName)
+			loader.CreateFromFile(cssAssetFunc, vaultClusterSecretStoreFile, testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, vaultClusterSecretStoreFile, testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", clusterSecretStoreResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating PushSecret")
+			assetFunc := utils.ReplacePatternInAsset(secretNamePattern, secretName,
+				clusterSecretStoreNamePattern, clusterSecretStoreResourceName)
+			loader.CreateFromFile(assetFunc, vaultPushSecretFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, vaultPushSecretFile, testNamespace)
+
+			By("Waiting for PushSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1alpha1APIVersion,
+					Resource: PushSecretsKind,
+				},
+				testNamespace, pushSecretResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret")
+			loader.CreateFromFile(assetFunc, vaultExternalSecretFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, vaultExternalSecretFile, testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, externalSecretResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Waiting for target secret to be created with expected data")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, secretResourceName, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "should get %s from namespace %s", secretResourceName, testNamespace)
+
+				val, ok := secret.Data[keyNameInSecret]
+				g.Expect(ok).To(BeTrue(), "%s should be present in secret %s", keyNameInSecret, secret.Name)
+
+				g.Expect(val).To(Equal(expectedSecretValue), "%s does not match expected value", keyNameInSecret)
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
 })
