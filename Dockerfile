@@ -1,5 +1,5 @@
 # Build the external-secrets-operator binary
-FROM docker.io/golang:1.25.3 AS builder
+FROM docker.io/golang:1.25 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
