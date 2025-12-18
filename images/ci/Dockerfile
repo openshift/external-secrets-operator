@@ -1,5 +1,5 @@
 # Build the external-secrets-operator binary
-FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.24-openshift-4.20 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.25.3-openshift-4.20 AS builder
 
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets-operator
 ENV GO_BUILD_TAGS=strictfipsruntime,openssl
