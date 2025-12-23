@@ -29,8 +29,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -187,21 +189,58 @@ func NewCacheBuilder(config *rest.Config) cache.NewCacheFunc {
 		certManagerExists = false
 	}
 
+	// Check if external-secrets CRDs exist for webhook caching
+	// SecretStore and ClusterSecretStore are cached for webhook validation performance
+	// Note: Resource name is "secretstores" not "secretstores.external-secrets.io"
+	secretStoreExists, err := isCRDInstalled(config, "secretstores", "external-secrets.io/v1")
+	if err != nil {
+		ctrl.Log.V(1).WithName("cache-setup").Error(err, "Failed to check SecretStore CRD, assuming not installed")
+		secretStoreExists = false
+	}
+
+	clusterSecretStoreExists, err := isCRDInstalled(config, "clustersecretstores", "external-secrets.io/v1")
+	if err != nil {
+		ctrl.Log.V(1).WithName("cache-setup").Error(err, "Failed to check ClusterSecretStore CRD, assuming not installed")
+		clusterSecretStoreExists = false
+	}
+
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 		// Build the object list with label selectors
-		objectList := buildCacheObjectList(certManagerExists)
+		objectList := buildCacheObjectList(certManagerExists, secretStoreExists, clusterSecretStoreExists)
 
 		// Configure cache options with our label-filtered resources
 		opts.ByObject = objectList
 
-		// Create and return the cache using the standard cache constructor
-		return cache.New(config, opts)
+		// Create the cache using the standard cache constructor
+		c, err := cache.New(config, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		// Setup indexes for webhook performance optimization
+		// This must be done BEFORE the cache starts
+		logger := ctrl.Log.WithName("cache-builder")
+		logger.Info("cache builder executing", "secretStoreExists", secretStoreExists, "clusterSecretStoreExists", clusterSecretStoreExists)
+
+		if secretStoreExists || clusterSecretStoreExists {
+			logger.Info("setting up cache indexes for webhook performance optimization")
+			if err := setupWebhookIndexes(c, secretStoreExists, clusterSecretStoreExists); err != nil {
+				logger.Error(err, "FAILED to setup webhook indexes - webhook will use slower fallback")
+				// Don't fail - cache will still work, just slower
+			} else {
+				logger.Info("✅ Cache indexes configured successfully - webhook will use optimized queries")
+			}
+		} else {
+			logger.Info("SecretStore/ClusterSecretStore CRDs not found, skipping index setup")
+		}
+
+		return c, nil
 	}
 }
 
 // buildCacheObjectList creates the cache configuration with label selectors
 // for managed resources.
-func buildCacheObjectList(includeCertManager bool) map[client.Object]cache.ByObject {
+func buildCacheObjectList(includeCertManager, includeSecretStore, includeClusterSecretStore bool) map[client.Object]cache.ByObject {
 	managedResourceLabelReq, _ := labels.NewRequirement(requestEnqueueLabelKey, selection.Equals, []string{requestEnqueueLabelValue})
 	managedResourceLabelReqSelector := labels.NewSelector().Add(*managedResourceLabelReq)
 
@@ -222,6 +261,64 @@ func buildCacheObjectList(includeCertManager bool) map[client.Object]cache.ByObj
 	if includeCertManager {
 		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
 			Label: managedResourceLabelReqSelector,
+		}
+	}
+
+	// External-secrets resources for webhook validation - cached for performance
+	// These are read by the webhook to check if Bitwarden provider is in use
+	// Transform filter - only cache Bitwarden stores
+	bitwardenOnlyTransform := func(obj interface{}) (interface{}, error) {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return obj, nil
+		}
+
+		// Extract spec.provider map
+		provider, found, _ := unstructured.NestedMap(u.Object, "spec", "provider")
+		if !found {
+			return nil, nil // No provider field, don't cache
+		}
+
+		// Check for Bitwarden provider (handle different naming variations)
+		if _, found := provider["bitwardensecretsmanager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardenSecretsManager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardensecretmanager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardenSecretManager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+
+		// Not a Bitwarden store - don't cache it
+		return nil, nil
+	}
+
+	if includeSecretStore {
+		// Use unstructured to avoid importing external-secrets APIs
+		secretStore := &unstructured.Unstructured{}
+		secretStore.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "external-secrets.io",
+			Version: "v1",
+			Kind:    "SecretStore",
+		})
+		objectList[secretStore] = cache.ByObject{
+			Transform: bitwardenOnlyTransform,
+		}
+	}
+
+	if includeClusterSecretStore {
+		clusterSecretStore := &unstructured.Unstructured{}
+		clusterSecretStore.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "external-secrets.io",
+			Version: "v1",
+			Kind:    "ClusterSecretStore",
+		})
+		objectList[clusterSecretStore] = cache.ByObject{
+			Transform: bitwardenOnlyTransform,
 		}
 	}
 
@@ -305,6 +402,69 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return mgrBuilder.Complete(r)
+}
+
+// setupWebhookIndexes sets up field indexes for webhook performance optimization
+func setupWebhookIndexes(c cache.Cache, includeSecretStore, includeClusterSecretStore bool) error {
+	// Setup indexes for provider type field
+	// This allows the webhook to query for BitWarden stores directly instead of loading all stores
+	providerIndexFunc := func(obj client.Object) []string {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return nil
+		}
+
+		// Extract spec.provider map
+		provider, found, _ := unstructured.NestedMap(u.Object, "spec", "provider")
+		if !found {
+			return nil
+		}
+
+		// Check for BitWarden provider (handle different naming variations)
+		// The actual field name in external-secrets v1 is "bitwardensecretsmanager" (all lowercase)
+		if _, found := provider["bitwardensecretsmanager"]; found {
+			return []string{"bitwarden"}
+		}
+		if _, found := provider["bitwardenSecretsManager"]; found {
+			return []string{"bitwarden"}
+		}
+		if _, found := provider["bitwardensecretmanager"]; found {
+			return []string{"bitwarden"}
+		}
+		if _, found := provider["bitwardenSecretManager"]; found {
+			return []string{"bitwarden"}
+		}
+
+		return nil
+	}
+
+	if includeSecretStore {
+		secretStore := &unstructured.Unstructured{}
+		secretStore.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "external-secrets.io",
+			Version: "v1",
+			Kind:    "SecretStore",
+		})
+
+		if err := c.IndexField(context.Background(), secretStore, "spec.provider.type", providerIndexFunc); err != nil {
+			return fmt.Errorf("failed to setup SecretStore provider index: %w", err)
+		}
+	}
+
+	if includeClusterSecretStore {
+		clusterSecretStore := &unstructured.Unstructured{}
+		clusterSecretStore.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "external-secrets.io",
+			Version: "v1",
+			Kind:    "ClusterSecretStore",
+		})
+
+		if err := c.IndexField(context.Background(), clusterSecretStore, "spec.provider.type", providerIndexFunc); err != nil {
+			return fmt.Errorf("failed to setup ClusterSecretStore provider index: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // isCRDInstalled is for checking whether a CRD with given `group/version` and `name` exists.

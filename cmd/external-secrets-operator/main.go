@@ -87,6 +87,7 @@ func main() {
 		secureMetrics        bool
 		metricsAddr          string
 		metricsCerts         string
+		webhookCertDir       string
 		metricsTLSOpts       []func(*tls.Config)
 		webhookTLSOpts       []func(*tls.Config)
 	)
@@ -105,6 +106,9 @@ func main() {
 	flag.StringVar(&metricsCerts, "metrics-cert-dir", "",
 		"Secret name containing the certificates for the metrics server which should be present in operator namespace. "+
 			"If not provided self-signed certificates will be used")
+	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "",
+		"Directory containing the webhook server certificate (tls.crt) and key (tls.key). "+
+			"If not provided, defaults to /tmp/k8s-webhook-server/serving-certs")
 	flag.Parse()
 
 	logConfig := textlogger.NewConfig(textlogger.Verbosity(logLevel))
@@ -121,9 +125,18 @@ func main() {
 		webhookTLSOpts = append(webhookTLSOpts, disableHTTP2)
 	}
 
-	webhookServer := webhook.NewServer(webhook.Options{
+	webhookServerOptions := webhook.Options{
 		TLSOpts: webhookTLSOpts,
-	})
+	}
+
+	// If webhook cert dir is specified (e.g., for OpenShift service-ca),
+	// use that directory for certificates
+	if webhookCertDir != "" {
+		setupLog.Info("using webhook certificates from specified directory", "dir", webhookCertDir)
+		webhookServerOptions.CertDir = webhookCertDir
+	}
+
+	webhookServer := webhook.NewServer(webhookServerOptions)
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
