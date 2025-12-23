@@ -5,7 +5,7 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/rh-ee-mykastur/eso
-  newTag: webhook-test-weho
+  newTag: webhook-test-weo
 generatorOptions:
   disableNameSuffixHash: true
 configMapGenerator:

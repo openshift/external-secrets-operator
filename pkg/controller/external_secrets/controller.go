@@ -266,7 +266,37 @@ func buildCacheObjectList(includeCertManager, includeSecretStore, includeCluster
 
 	// External-secrets resources for webhook validation - cached for performance
 	// These are read by the webhook to check if Bitwarden provider is in use
-	// No label filter - we need to see all stores to validate provider usage
+	// Transform filter - only cache Bitwarden stores
+	bitwardenOnlyTransform := func(obj interface{}) (interface{}, error) {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return obj, nil
+		}
+
+		// Extract spec.provider map
+		provider, found, _ := unstructured.NestedMap(u.Object, "spec", "provider")
+		if !found {
+			return nil, nil // No provider field, don't cache
+		}
+
+		// Check for Bitwarden provider (handle different naming variations)
+		if _, found := provider["bitwardensecretsmanager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardenSecretsManager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardensecretmanager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+		if _, found := provider["bitwardenSecretManager"]; found {
+			return obj, nil // Bitwarden store - cache it
+		}
+
+		// Not a Bitwarden store - don't cache it
+		return nil, nil
+	}
+
 	if includeSecretStore {
 		// Use unstructured to avoid importing external-secrets APIs
 		secretStore := &unstructured.Unstructured{}
@@ -275,7 +305,9 @@ func buildCacheObjectList(includeCertManager, includeSecretStore, includeCluster
 			Version: "v1",
 			Kind:    "SecretStore",
 		})
-		objectList[secretStore] = cache.ByObject{}
+		objectList[secretStore] = cache.ByObject{
+			Transform: bitwardenOnlyTransform,
+		}
 	}
 
 	if includeClusterSecretStore {
@@ -285,7 +317,9 @@ func buildCacheObjectList(includeCertManager, includeSecretStore, includeCluster
 			Version: "v1",
 			Kind:    "ClusterSecretStore",
 		})
-		objectList[clusterSecretStore] = cache.ByObject{}
+		objectList[clusterSecretStore] = cache.ByObject{
+			Transform: bitwardenOnlyTransform,
+		}
 	}
 
 	return objectList

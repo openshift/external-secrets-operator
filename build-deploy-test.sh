@@ -7,7 +7,7 @@ set -e
 # Configuration
 KUBECONFIG="${KUBECONFIG:-/home/mykastur/gcp_n/install-dir/auth/kubeconfig}"
 export KUBECONFIG
-IMG="${IMG:-quay.io/rh-ee-mykastur/eso:webhook-test-weho}"
+IMG="${IMG:-quay.io/rh-ee-mykastur/eso:webhook-test-weo}"
 NAMESPACE="external-secrets-operator"
 EXTERNAL_SECRETS_NS="external-secrets"
 
