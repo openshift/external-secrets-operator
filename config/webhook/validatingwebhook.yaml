@@ -1,0 +1,37 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  labels:
+    app.kubernetes.io/name: external-secrets-operator
+    app.kubernetes.io/component: webhook
+  annotations:
+    # OpenShift service-ca-operator will inject the CA bundle automatically
+    service.beta.openshift.io/inject-cabundle: "true"
+webhooks:
+- name: validate.externalsecretsconfig.operator.openshift.io
+  admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: external-secrets-operator-webhook-service
+      namespace: external-secrets-operator
+      path: /validate-operator-openshift-io-v1alpha1-externalsecretsconfig
+      port: 443
+    # caBundle will be injected by service-ca-operator
+    caBundle: ""
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  rules:
+  - apiGroups:
+    - operator.openshift.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - UPDATE
+    resources:
+    - externalsecretsconfigs
+    scope: Cluster
+  sideEffects: None
+  timeoutSeconds: 10
