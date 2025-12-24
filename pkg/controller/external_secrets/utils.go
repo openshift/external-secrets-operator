@@ -7,6 +7,7 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"go.uber.org/zap/zapcore"
@@ -88,23 +89,23 @@ func (r *Reconciler) validateExternalSecretsConfig(esc *operatorv1alpha1.Externa
 
 // isCertManagerConfigEnabled returns whether CertManagerConfig is enabled in ExternalSecretsConfig CR Spec.
 func isCertManagerConfigEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
-	return esc.Spec.ControllerConfig.CertProvider != nil &&
+	return esc.Spec.ControllerConfig != nil && esc.Spec.ControllerConfig.CertProvider != nil &&
 		esc.Spec.ControllerConfig.CertProvider.CertManager != nil &&
 		common.EvalMode(esc.Spec.ControllerConfig.CertProvider.CertManager.Mode)
 }
 
 // isBitwardenConfigEnabled returns whether BitwardenSecretManagerProvider is enabled in ExternalSecretsConfig CR Spec.
 func isBitwardenConfigEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
-	return esc.Spec.Plugins.BitwardenSecretManagerProvider != nil &&
-		common.EvalMode(esc.Spec.Plugins.BitwardenSecretManagerProvider.Mode)
+	return esc.Spec.Plugins != nil && esc.Spec.Plugins.BitwardenSecretManagerProvider != nil &&
+		common.EvalMode(ptr.Deref(esc.Spec.Plugins.BitwardenSecretManagerProvider.Mode, operatorv1alpha1.Disabled))
 }
 
 func getLogLevel(esc *operatorv1alpha1.ExternalSecretsConfig, esm *operatorv1alpha1.ExternalSecretsManager) string {
 	var logLevel int32 = 1
-	if esc.Spec.ApplicationConfig.LogLevel != 0 {
-		logLevel = esc.Spec.ApplicationConfig.LogLevel
-	} else if esm.Spec.GlobalConfig != nil && esm.Spec.GlobalConfig.LogLevel != 0 {
-		logLevel = esm.Spec.GlobalConfig.LogLevel
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.LogLevel != nil {
+		logLevel = *esc.Spec.ApplicationConfig.LogLevel
+	} else if esm.Spec.GlobalConfig != nil && esm.Spec.GlobalConfig.LogLevel != nil {
+		logLevel = *esm.Spec.GlobalConfig.LogLevel
 	}
 	switch logLevel {
 	case 0, 1, 2:
@@ -116,7 +117,10 @@ func getLogLevel(esc *operatorv1alpha1.ExternalSecretsConfig, esm *operatorv1alp
 }
 
 func getOperatingNamespace(esc *operatorv1alpha1.ExternalSecretsConfig) string {
-	return esc.Spec.ApplicationConfig.OperatingNamespace
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.OperatingNamespace != nil {
+		return *esc.Spec.ApplicationConfig.OperatingNamespace
+	}
+	return ""
 }
 
 func (r *Reconciler) IsCertManagerInstalled() bool {
@@ -130,7 +134,7 @@ func (r *Reconciler) getProxyConfiguration(esc *operatorv1alpha1.ExternalSecrets
 	var proxyConfig *operatorv1alpha1.ProxyConfig
 
 	// Check ExternalSecretsConfig first
-	if esc.Spec.ApplicationConfig.Proxy != nil {
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.Proxy != nil {
 		proxyConfig = esc.Spec.ApplicationConfig.Proxy
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Proxy != nil {
 		// Check ExternalSecretsManager second
@@ -144,9 +148,9 @@ func (r *Reconciler) getProxyConfiguration(esc *operatorv1alpha1.ExternalSecrets
 		// Only create proxy config if at least one OLM env var is set
 		if olmHTTPProxy != "" || olmHTTPSProxy != "" || olmNoProxy != "" {
 			proxyConfig = &operatorv1alpha1.ProxyConfig{
-				HTTPProxy:  olmHTTPProxy,
-				HTTPSProxy: olmHTTPSProxy,
-				NoProxy:    olmNoProxy,
+				HTTPProxy:  &olmHTTPProxy,
+				HTTPSProxy: &olmHTTPSProxy,
+				NoProxy:    &olmNoProxy,
 			}
 		}
 	}

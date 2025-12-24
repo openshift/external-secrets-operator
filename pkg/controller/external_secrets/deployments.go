@@ -118,7 +118,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		updateContainerSpec(deployment, esc, image, logLevel)
 	case webhookDeploymentAssetName:
 		checkInterval := "5m"
-		if esc.Spec.ApplicationConfig.WebhookConfig != nil &&
+		if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.WebhookConfig != nil &&
 			esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval != nil {
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
 		}
@@ -178,7 +178,7 @@ func updateContainerSecurityContext(container *corev1.Container) {
 // updateResourceRequirement sets validated resource requirements to all containers.
 func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	rscReqs := corev1.ResourceRequirements{}
-	if esc.Spec.ApplicationConfig.Resources != nil {
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.Resources != nil {
 		esc.Spec.ApplicationConfig.Resources.DeepCopyInto(&rscReqs)
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil {
 		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
@@ -210,10 +210,10 @@ func validateResourceRequirements(requirements corev1.ResourceRequirements, fldP
 func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var nodeSelector map[string]string
 
-	if esc.Spec.ApplicationConfig.NodeSelector != nil {
-		nodeSelector = esc.Spec.ApplicationConfig.NodeSelector
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.NodeSelector != nil {
+		nodeSelector = *esc.Spec.ApplicationConfig.NodeSelector
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.NodeSelector != nil {
-		nodeSelector = r.esm.Spec.GlobalConfig.NodeSelector
+		nodeSelector = *r.esm.Spec.GlobalConfig.NodeSelector
 	}
 
 	if len(nodeSelector) == 0 {
@@ -232,7 +232,7 @@ func (r *Reconciler) updateNodeSelector(deployment *appsv1.Deployment, esc *oper
 func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var affinity *corev1.Affinity
 
-	if esc.Spec.ApplicationConfig.Affinity != nil {
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.Affinity != nil {
 		affinity = esc.Spec.ApplicationConfig.Affinity
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Affinity != nil {
 		affinity = r.esm.Spec.GlobalConfig.Affinity
@@ -254,10 +254,10 @@ func (r *Reconciler) updateAffinityRules(deployment *appsv1.Deployment, esc *ope
 func (r *Reconciler) updatePodTolerations(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	var tolerations []corev1.Toleration
 
-	if esc.Spec.ApplicationConfig.Tolerations != nil {
-		tolerations = esc.Spec.ApplicationConfig.Tolerations
+	if esc.Spec.ApplicationConfig != nil && esc.Spec.ApplicationConfig.Tolerations != nil {
+		tolerations = *esc.Spec.ApplicationConfig.Tolerations
 	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Tolerations != nil {
-		tolerations = r.esm.Spec.GlobalConfig.Tolerations
+		tolerations = *r.esm.Spec.GlobalConfig.Tolerations
 	}
 
 	if len(tolerations) == 0 {
@@ -480,7 +480,7 @@ func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployme
 
 // setProxyEnvVars sets proxy environment variables on a container.
 func (r *Reconciler) setProxyEnvVars(container *corev1.Container, proxyConfig *operatorv1alpha1.ProxyConfig) {
-	if proxyConfig == nil {
+	if proxyConfig == nil || (proxyConfig.HTTPSProxy == nil && proxyConfig.HTTPProxy == nil && proxyConfig.NoProxy == nil) {
 		return
 	}
 	if container.Env == nil {
@@ -508,13 +508,13 @@ func (r *Reconciler) setProxyEnvVars(container *corev1.Container, proxyConfig *o
 	}
 
 	// Set proxy environment variables
-	setEnvVar(httpProxyEnvVar, proxyConfig.HTTPProxy)
-	setEnvVar(httpsProxyEnvVar, proxyConfig.HTTPSProxy)
-	setEnvVar(noProxyEnvVar, proxyConfig.NoProxy)
+	setEnvVar(httpProxyEnvVar, ptr.Deref(proxyConfig.HTTPProxy, ""))
+	setEnvVar(httpsProxyEnvVar, ptr.Deref(proxyConfig.HTTPSProxy, ""))
+	setEnvVar(noProxyEnvVar, ptr.Deref(proxyConfig.NoProxy, ""))
 
-	setEnvVar(httpProxyEnvVarLowercase, proxyConfig.HTTPProxy)
-	setEnvVar(httpsProxyEnvVarLowercase, proxyConfig.HTTPSProxy)
-	setEnvVar(noProxyEnvVarLowercase, proxyConfig.NoProxy)
+	setEnvVar(httpProxyEnvVarLowercase, ptr.Deref(proxyConfig.HTTPProxy, ""))
+	setEnvVar(httpsProxyEnvVarLowercase, ptr.Deref(proxyConfig.HTTPSProxy, ""))
+	setEnvVar(noProxyEnvVarLowercase, ptr.Deref(proxyConfig.NoProxy, ""))
 }
 
 // removeProxyEnvVars removes proxy environment variables from a container.
@@ -550,10 +550,10 @@ func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment,
 	if proxyConfig != nil {
 		// Add trusted CA bundle volume and volume mounts
 		return r.addTrustedCABundleVolumes(deployment)
-	} else {
-		// Remove trusted CA bundle volume and volume mounts
-		return r.removeTrustedCABundleVolumes(deployment)
 	}
+
+	// Remove trusted CA bundle volume and volume mounts
+	return r.removeTrustedCABundleVolumes(deployment)
 }
 
 // addTrustedCABundleVolumes adds trusted CA bundle volume and volume mounts to the deployment.

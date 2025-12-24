@@ -77,12 +77,12 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 
 // createOrApplyCustomNetworkPolicies applies custom network policies defined in the ExternalSecretsConfig spec.
 func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
-	if esc.Spec.ControllerConfig.NetworkPolicies == nil {
+	if esc.Spec.ControllerConfig == nil || esc.Spec.ControllerConfig.NetworkPolicies == nil {
 		r.log.V(4).Info("No custom network policies configured in ControllerConfig")
 		return nil
 	}
 
-	for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
+	for _, npConfig := range *esc.Spec.ControllerConfig.NetworkPolicies {
 		if err := r.createOrApplyCustomNetworkPolicy(esc, npConfig, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}

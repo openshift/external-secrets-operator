@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -80,9 +81,9 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					Plugins: operatorv1alpha1.PluginsConfig{
+					Plugins: &operatorv1alpha1.PluginsConfig{
 						BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
-							Mode: operatorv1alpha1.Enabled,
+							Mode: ptr.To(operatorv1alpha1.Enabled),
 						},
 					},
 				}
@@ -105,7 +106,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: operatorv1alpha1.ControllerConfig{
+					ControllerConfig: &operatorv1alpha1.ControllerConfig{
 						CertProvider: &operatorv1alpha1.CertProvidersConfig{
 							CertManager: &operatorv1alpha1.CertManagerConfig{
 								Mode: operatorv1alpha1.Enabled,
@@ -219,7 +220,9 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 		{
 			name: "no custom network policies configured",
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.NetworkPolicies = nil
+				esc.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+					NetworkPolicies: nil,
+				}
 			},
 		},
 		{
@@ -238,16 +241,18 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
-					{
-						Name:          "test-custom-policy",
-						ComponentName: operatorv1alpha1.CoreController,
-						Egress: []networkingv1.NetworkPolicyEgressRule{
-							{
-								Ports: []networkingv1.NetworkPolicyPort{
-									{
-										Protocol: &[]corev1.Protocol{corev1.ProtocolTCP}[0],
-										Port:     &[]intstr.IntOrString{intstr.FromInt(443)}[0],
+				esc.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+					NetworkPolicies: &[]operatorv1alpha1.NetworkPolicy{
+						{
+							Name:          "test-custom-policy",
+							ComponentName: operatorv1alpha1.CoreController,
+							Egress: []networkingv1.NetworkPolicyEgressRule{
+								{
+									Ports: []networkingv1.NetworkPolicyPort{
+										{
+											Protocol: &[]corev1.Protocol{corev1.ProtocolTCP}[0],
+											Port:     &[]intstr.IntOrString{intstr.FromInt32(443)}[0],
+										},
 									},
 								},
 							},
@@ -264,11 +269,13 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
-					{
-						Name:          "test-invalid-policy",
-						ComponentName: "InvalidComponent",
-						Egress:        []networkingv1.NetworkPolicyEgressRule{},
+				esc.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+					NetworkPolicies: &[]operatorv1alpha1.NetworkPolicy{
+						{
+							Name:          "test-invalid-policy",
+							ComponentName: "InvalidComponent",
+							Egress:        []networkingv1.NetworkPolicyEgressRule{},
+						},
 					},
 				}
 			},
@@ -288,11 +295,13 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
-					{
-						Name:          "test-fail-policy",
-						ComponentName: operatorv1alpha1.CoreController,
-						Egress:        []networkingv1.NetworkPolicyEgressRule{},
+				esc.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+					NetworkPolicies: &[]operatorv1alpha1.NetworkPolicy{
+						{
+							Name:          "test-fail-policy",
+							ComponentName: operatorv1alpha1.CoreController,
+							Egress:        []networkingv1.NetworkPolicyEgressRule{},
+						},
 					},
 				}
 			},
@@ -319,16 +328,18 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
-					{
-						Name:          "test-update-policy",
-						ComponentName: operatorv1alpha1.CoreController,
-						Egress: []networkingv1.NetworkPolicyEgressRule{
-							{
-								Ports: []networkingv1.NetworkPolicyPort{
-									{
-										Protocol: &[]corev1.Protocol{corev1.ProtocolTCP}[0],
-										Port:     &[]intstr.IntOrString{intstr.FromInt(443)}[0],
+				esc.Spec.ControllerConfig = &operatorv1alpha1.ControllerConfig{
+					NetworkPolicies: &[]operatorv1alpha1.NetworkPolicy{
+						{
+							Name:          "test-update-policy",
+							ComponentName: operatorv1alpha1.CoreController,
+							Egress: []networkingv1.NetworkPolicyEgressRule{
+								{
+									Ports: []networkingv1.NetworkPolicyPort{
+										{
+											Protocol: &[]corev1.Protocol{corev1.ProtocolTCP}[0],
+											Port:     &[]intstr.IntOrString{intstr.FromInt32(443)}[0],
+										},
 									},
 								},
 							},
@@ -438,7 +449,7 @@ func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 						Ports: []networkingv1.NetworkPolicyPort{
 							{
 								Protocol: &[]corev1.Protocol{corev1.ProtocolTCP}[0],
-								Port:     &[]intstr.IntOrString{intstr.FromInt(443)}[0],
+								Port:     &[]intstr.IntOrString{intstr.FromInt32(443)}[0],
 							},
 						},
 					},

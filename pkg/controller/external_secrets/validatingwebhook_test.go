@@ -7,6 +7,7 @@ import (
 
 	webhook "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -119,10 +120,10 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 func testExternalSecretsForValidateWebhookConfiguration() *v1alpha1.ExternalSecretsConfig {
 	esc := commontest.TestExternalSecretsConfig()
 	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-		ControllerConfig: v1alpha1.ControllerConfig{
+		ControllerConfig: &v1alpha1.ControllerConfig{
 			CertProvider: &v1alpha1.CertProvidersConfig{
 				CertManager: &v1alpha1.CertManagerConfig{
-					InjectAnnotations: "true",
+					InjectAnnotations: ptr.To("true"),
 				},
 			},
 		},

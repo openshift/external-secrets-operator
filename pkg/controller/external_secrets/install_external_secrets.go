@@ -6,8 +6,8 @@ import (
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -31,8 +31,8 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 	// Spec will have the lowest priority, followed by the labels in `ExternalSecretsConfig` Spec and
 	// controllerDefaultResourceLabels will have the highest priority.
 	resourceLabels := make(map[string]string)
-	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
-		for k, v := range r.esm.Spec.GlobalConfig.Labels {
+	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Labels != nil {
+		for k, v := range *r.esm.Spec.GlobalConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
 				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
 				continue
@@ -40,8 +40,8 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 			resourceLabels[k] = v
 		}
 	}
-	if len(esc.Spec.ControllerConfig.Labels) != 0 {
-		for k, v := range esc.Spec.ControllerConfig.Labels {
+	if esc.Spec.ControllerConfig != nil && esc.Spec.ControllerConfig.Labels != nil {
+		for k, v := range *esc.Spec.ControllerConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
 				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
 				continue
@@ -115,18 +115,34 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 // resources will be created.
 func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
 	namespace := getNamespace(esc)
-	obj := &corev1.Namespace{
+	desired := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
+			Name:   namespace,
+			Labels: resourceLabels,
 		},
 	}
 
-	if err := r.Create(r.ctx, obj); err != nil {
-		if errors.IsAlreadyExists(err) {
-			r.log.V(4).Info("namespace already exists", "namespace", namespace)
-			return nil
+	fetched := &corev1.Namespace{}
+	exist, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
+	if err != nil {
+		return common.FromClientError(err, "failed to check if namespace %s exists", namespace)
+	}
+
+	if exist {
+		// Merge labels: preserve existing, overlay with desired resourceLabels
+		desired.Labels = make(map[string]string)
+		maps.Copy(desired.Labels, fetched.Labels)
+		maps.Copy(desired.Labels, resourceLabels)
+
+		if common.ObjectMetadataModified(desired, fetched) {
+			if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
+				return common.FromClientError(err, "failed to update namespace %s", namespace)
+			}
 		}
-		return fmt.Errorf("failed to create %s namespace: %w", namespace, err)
+	} else {
+		if err := r.Create(r.ctx, desired); err != nil {
+			return common.FromClientError(err, "failed to create namespace %s", namespace)
+		}
 	}
 	return nil
 }

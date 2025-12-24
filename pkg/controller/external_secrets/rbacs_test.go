@@ -33,7 +33,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: operatorv1alpha1.ControllerConfig{},
+					ControllerConfig: &operatorv1alpha1.ControllerConfig{},
 				}
 			},
 			wantErr: `failed to check external-secrets-controller clusterrole resource already exists: test client error`,
@@ -267,7 +267,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			name: "clusterroles creation successful",
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: operatorv1alpha1.ControllerConfig{
+					ControllerConfig: &operatorv1alpha1.ControllerConfig{
 						CertProvider: &operatorv1alpha1.CertProvidersConfig{
 							CertManager: &operatorv1alpha1.CertManagerConfig{
 								Mode: operatorv1alpha1.Enabled,
@@ -281,7 +281,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 			name: "clusterrolebindings creation successful",
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: operatorv1alpha1.ControllerConfig{
+					ControllerConfig: &operatorv1alpha1.ControllerConfig{
 						CertProvider: &operatorv1alpha1.CertProvidersConfig{
 							CertManager: &operatorv1alpha1.CertManagerConfig{
 								Mode: operatorv1alpha1.Enabled,

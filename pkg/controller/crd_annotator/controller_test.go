@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,10 +32,10 @@ func testReconciler(t *testing.T) *Reconciler {
 // testExtendExternalSecretsConfig enables CRD annotation specific configs on existing externalsecretsconfig object.
 func testExtendExternalSecretsConfig(esc *operatorv1alpha1.ExternalSecretsConfig) {
 	esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-		ControllerConfig: operatorv1alpha1.ControllerConfig{
+		ControllerConfig: &operatorv1alpha1.ControllerConfig{
 			CertProvider: &operatorv1alpha1.CertProvidersConfig{
 				CertManager: &operatorv1alpha1.CertManagerConfig{
-					InjectAnnotations: "true",
+					InjectAnnotations: ptr.To("true"),
 				},
 			},
 		},

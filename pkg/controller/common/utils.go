@@ -30,7 +30,7 @@ var (
 	codecs = serializer.NewCodecFactory(scheme)
 )
 
-// Now is a rip-off of golang's sync.Once functionality but extended to
+// Now is a rip-off of golang sync.Once functionality but extended to
 // support reset.
 type Now struct {
 	sync.Mutex
@@ -241,9 +241,16 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 	if len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
 		return true
 	}
+	// Check init containers
+	if len(desired.Spec.Template.Spec.InitContainers) != len(fetched.Spec.Template.Spec.InitContainers) {
+		return true
+	}
 	fetchedContainers := make(map[string]*corev1.Container)
 	for i := range fetched.Spec.Template.Spec.Containers {
 		fetchedContainers[fetched.Spec.Template.Spec.Containers[i].Name] = &fetched.Spec.Template.Spec.Containers[i]
+	}
+	for i := range fetched.Spec.Template.Spec.InitContainers {
+		fetchedContainers[fetched.Spec.Template.Spec.InitContainers[i].Name] = &fetched.Spec.Template.Spec.InitContainers[i]
 	}
 	for i := range desired.Spec.Template.Spec.Containers {
 		desiredContainer := &desired.Spec.Template.Spec.Containers[i]
@@ -252,25 +259,6 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 			return true
 		}
 		if containerSpecModified(desiredContainer, fetchedContainer) {
-			return true
-		}
-	}
-
-	// Check init containers
-	if len(desired.Spec.Template.Spec.InitContainers) != len(fetched.Spec.Template.Spec.InitContainers) {
-		return true
-	}
-	fetchedInitContainers := make(map[string]*corev1.Container)
-	for i := range fetched.Spec.Template.Spec.InitContainers {
-		fetchedInitContainers[fetched.Spec.Template.Spec.InitContainers[i].Name] = &fetched.Spec.Template.Spec.InitContainers[i]
-	}
-	for i := range desired.Spec.Template.Spec.InitContainers {
-		desiredInitContainer := &desired.Spec.Template.Spec.InitContainers[i]
-		fetchedInitContainer, exists := fetchedInitContainers[desiredInitContainer.Name]
-		if !exists {
-			return true
-		}
-		if containerSpecModified(desiredInitContainer, fetchedInitContainer) {
 			return true
 		}
 	}
@@ -509,9 +497,10 @@ func IsESMSpecEmpty(esm *operatorv1alpha1.ExternalSecretsManager) bool {
 
 // IsInjectCertManagerAnnotationEnabled is for check if add cert-manager annotation is enabled.
 func IsInjectCertManagerAnnotationEnabled(esc *operatorv1alpha1.ExternalSecretsConfig) bool {
-	return esc.Spec.ControllerConfig.CertProvider != nil &&
+	return esc.Spec.ControllerConfig != nil && esc.Spec.ControllerConfig.CertProvider != nil &&
 		esc.Spec.ControllerConfig.CertProvider.CertManager != nil &&
-		ParseBool(esc.Spec.ControllerConfig.CertProvider.CertManager.InjectAnnotations)
+		esc.Spec.ControllerConfig.CertProvider.CertManager.InjectAnnotations != nil &&
+		ParseBool(*esc.Spec.ControllerConfig.CertProvider.CertManager.InjectAnnotations)
 }
 
 // AddFinalizer adds finalizer to the passed resource object.
@@ -563,7 +552,7 @@ func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorcl
 	return nil
 }
 
-// Do is same as sync.Once.Do, which calls the passed func f only once
+// Do is same as sync.Once.Do, which calls the passed func f() only once
 // until Now is reset.
 func (n *Now) Do(f func()) {
 	n.done.Load()
@@ -576,7 +565,7 @@ func (n *Now) Do(f func()) {
 	}
 }
 
-// Reset is for allowing the Do method to call the func f again.
+// Reset is for allowing the Do method to call the func f() again.
 func (n *Now) Reset() {
 	n.Lock()
 	defer n.Unlock()
