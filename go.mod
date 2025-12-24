@@ -335,6 +335,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/external-secrets/external-secrets => github.com/openshift/external-secrets v0.20.1
+replace github.com/external-secrets/external-secrets => github.com/openshift/external-secrets v0.20.4
 
 replace github.com/tdakkota/asciicheck => github.com/golangci/asciicheck v0.4.1
