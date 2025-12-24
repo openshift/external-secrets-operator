@@ -148,6 +148,11 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
 
+	// Apply component-specific configurations (RevisionHistoryLimit)
+	if err := r.applyRevisionHistoryLimit(deployment, esc, assetName); err != nil {
+		return nil, fmt.Errorf("failed to apply revision history limit: %w", err)
+	}
+
 	return deployment, nil
 }
 
@@ -659,4 +664,46 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 		}
 	}
 	container.VolumeMounts = filteredVolumeMounts
+}
+
+// applyRevisionHistoryLimit sets the revisionHistoryLimit from ComponentConfig if specified.
+func (r *Reconciler) applyRevisionHistoryLimit(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
+	if len(esc.Spec.ControllerConfig.ComponentConfigs) == 0 {
+		return nil
+	}
+
+	// Map asset name to component name
+	componentName := getComponentNameFromAsset(assetName)
+	if componentName == "" {
+		return nil
+	}
+
+	// Find matching component config
+	for _, i := range esc.Spec.ControllerConfig.ComponentConfigs {
+		if i.ComponentName == componentName {
+			// Apply RevisionHistoryLimit if set
+			if i.DeploymentConfigs.RevisionHistoryLimit != nil {
+				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
+			}
+			break
+		}
+	}
+
+	return nil
+}
+
+// getComponentNameFromAsset maps asset file names to ComponentName enum values.
+func getComponentNameFromAsset(assetName string) operatorv1alpha1.ComponentName {
+	switch assetName {
+	case controllerDeploymentAssetName:
+		return operatorv1alpha1.CoreController
+	case webhookDeploymentAssetName:
+		return operatorv1alpha1.Webhook
+	case certControllerDeploymentAssetName:
+		return operatorv1alpha1.CertController
+	case bitwardenDeploymentAssetName:
+		return operatorv1alpha1.BitwardenSDKServer
+	default:
+		return ""
+	}
 }
