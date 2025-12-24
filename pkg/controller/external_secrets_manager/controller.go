@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,6 +58,7 @@ var (
 // Reconciler reconciles externalsecretsmanagers.operator.openshift.io CR.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	Scheme        *runtime.Scheme
 	ctx           context.Context
 	eventRecorder record.EventRecorder
@@ -181,12 +183,12 @@ func (r *Reconciler) processReconcileRequest(esm *operatorv1alpha1.ExternalSecre
 // getControllerCondition returns the status condition of a specific controller.
 func getControllerCondition(controllerName string, esm *operatorv1alpha1.ExternalSecretsManager) *operatorv1alpha1.ControllerStatus {
 	for i, s := range esm.Status.ControllerStatuses {
-		if s.Name == controllerName {
+		if ptr.Deref(s.Name, "") == controllerName {
 			return &esm.Status.ControllerStatuses[i]
 		}
 	}
 	status := &operatorv1alpha1.ControllerStatus{
-		Name:       controllerName,
+		Name:       &controllerName,
 		Conditions: make([]operatorv1alpha1.Condition, 0),
 	}
 	esm.Status.ControllerStatuses = append(esm.Status.ControllerStatuses, *status)
@@ -199,7 +201,7 @@ func (r *Reconciler) updateStatusCondition(esm *operatorv1alpha1.ExternalSecrets
 
 	found, condUpdated := false, false
 	for i, c := range status.Conditions {
-		if c.Type == updCondition.Type {
+		if ptr.Deref(c.Type, "") == updCondition.Type {
 			found = true
 			if c.Status != updCondition.Status || c.Message != updCondition.Message {
 				status.Conditions[i].Status = updCondition.Status
@@ -211,7 +213,7 @@ func (r *Reconciler) updateStatusCondition(esm *operatorv1alpha1.ExternalSecrets
 
 	if !found {
 		status.Conditions = append(status.Conditions, operatorv1alpha1.Condition{
-			Type:    updCondition.Type,
+			Type:    &updCondition.Type,
 			Status:  updCondition.Status,
 			Message: updCondition.Message,
 		})

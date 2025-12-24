@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -44,7 +45,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						WebhookConfig: nil,
 					},
 				}
@@ -56,7 +57,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						WebhookConfig: &v1alpha1.WebhookConfig{},
 					},
 				}
@@ -68,7 +69,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: v1alpha1.ControllerConfig{
+					ControllerConfig: &v1alpha1.ControllerConfig{
 						CertProvider: &v1alpha1.CertProvidersConfig{
 							CertManager: nil,
 						},
@@ -83,7 +84,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
 				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = ""
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = "Issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = ptr.To("Issuer")
 			},
 			recon:   false,
 			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: cert-manager.issuerRef.name is not configured", commontest.TestExternalSecretsNamespace, testExternalSecretsConfigForCertificate().GetName()),
@@ -346,7 +347,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
 					},
-					Mode: v1alpha1.Enabled,
+					Mode: ptr.To(v1alpha1.Enabled),
 				}
 			},
 			recon:   false,
@@ -394,7 +395,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
 					},
-					Mode: v1alpha1.Enabled,
+					Mode: ptr.To(v1alpha1.Enabled),
 				}
 			},
 			recon:   false,
@@ -469,24 +470,24 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 func testExternalSecretsConfigForCertificate() *v1alpha1.ExternalSecretsConfig {
 	esc := commontest.TestExternalSecretsConfig()
 	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-		ControllerConfig: v1alpha1.ControllerConfig{
+		ControllerConfig: &v1alpha1.ControllerConfig{
 			CertProvider: &v1alpha1.CertProvidersConfig{
 				CertManager: &v1alpha1.CertManagerConfig{
 					IssuerRef: &v1alpha1.ObjectReference{},
 				},
 			},
 		},
-		ApplicationConfig: v1alpha1.ApplicationConfig{
-			OperatingNamespace: "test-ns",
+		ApplicationConfig: &v1alpha1.ApplicationConfig{
+			OperatingNamespace: ptr.To("test-ns"),
 		},
-		Plugins: v1alpha1.PluginsConfig{
+		Plugins: &v1alpha1.PluginsConfig{
 			BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{},
 		},
 	}
 	return esc
 }
 
-// testIssuer creates a dummy cert-manager Issuer for testing
+// testIssuer creates a dummy cert-manager Issuer for testing.
 func testIssuer() *certmanagerv1.Issuer {
 	return &certmanagerv1.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -501,7 +502,7 @@ func testIssuer() *certmanagerv1.Issuer {
 	}
 }
 
-// testClusterIssuer creates a dummy cert-manager ClusterIssuer for testing
+// testClusterIssuer creates a dummy cert-manager ClusterIssuer for testing.
 func testClusterIssuer() *certmanagerv1.ClusterIssuer {
 	return &certmanagerv1.ClusterIssuer{
 		ObjectMeta: metav1.ObjectMeta{

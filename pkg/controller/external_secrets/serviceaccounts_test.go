@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -47,7 +48,6 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if _, found := expectedSAMap[sa.Name]; found {
-
 							return nil
 						}
 						return fmt.Errorf("unexpected ServiceAccount created: %s", sa.Name)
@@ -74,9 +74,9 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					Plugins: operatorv1alpha1.PluginsConfig{
+					Plugins: &operatorv1alpha1.PluginsConfig{
 						BitwardenSecretManagerProvider: &operatorv1alpha1.BitwardenSecretManagerProvider{
-							Mode: operatorv1alpha1.Enabled,
+							Mode: ptr.To(operatorv1alpha1.Enabled),
 						},
 					},
 				}
@@ -97,7 +97,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			wantErr: "", // <- no error expected
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec = operatorv1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: operatorv1alpha1.ControllerConfig{
+					ControllerConfig: &operatorv1alpha1.ControllerConfig{
 						CertProvider: &operatorv1alpha1.CertProvidersConfig{
 							CertManager: &operatorv1alpha1.CertManagerConfig{
 								Mode: operatorv1alpha1.Enabled,

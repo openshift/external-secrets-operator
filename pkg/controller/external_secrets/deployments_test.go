@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -137,6 +138,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig = &v1alpha1.ApplicationConfig{}
 				i.Spec.ApplicationConfig.Affinity = &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -189,7 +191,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						},
 					},
 				}
-				i.Spec.ApplicationConfig.Tolerations = []corev1.Toleration{
+				i.Spec.ApplicationConfig.Tolerations = &[]corev1.Toleration{
 					{
 						Key:      "type",
 						Operator: corev1.TolerationOpEqual,
@@ -197,7 +199,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						Effect:   corev1.TaintEffectNoSchedule,
 					},
 				}
-				i.Spec.ApplicationConfig.NodeSelector = map[string]string{"type": "test"}
+				i.Spec.ApplicationConfig.NodeSelector = &map[string]string{"type": "test"}
 				i.Spec.ApplicationConfig.Resources = &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -352,11 +354,15 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
-				i.Spec.ApplicationConfig.Tolerations = []corev1.Toleration{
-					{
-						Operator: corev1.TolerationOpExists,
-						Value:    "test",
-						Effect:   corev1.TaintEffectNoSchedule,
+				i.Spec.ApplicationConfig = &v1alpha1.ApplicationConfig{
+					CommonConfigs: v1alpha1.CommonConfigs{
+						Tolerations: &[]corev1.Toleration{
+							{
+								Operator: corev1.TolerationOpExists,
+								Value:    "test",
+								Effect:   corev1.TaintEffectNoSchedule,
+							},
+						},
 					},
 				}
 			},
@@ -375,7 +381,11 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
-				i.Spec.ApplicationConfig.NodeSelector = map[string]string{"node/Label/2": "value2"}
+				i.Spec.ApplicationConfig = &v1alpha1.ApplicationConfig{
+					CommonConfigs: v1alpha1.CommonConfigs{
+						NodeSelector: &map[string]string{"node/Label/2": "value2"},
+					},
+				}
 			},
 			wantErr: `failed to update node selector: spec.nodeSelector: Invalid value: "node/Label/2": a qualified name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')`,
 		},
@@ -392,6 +402,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig = &v1alpha1.ApplicationConfig{}
 				i.Spec.ApplicationConfig.Affinity = &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -457,6 +468,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Spec.ApplicationConfig = &v1alpha1.ApplicationConfig{}
 				i.Spec.ApplicationConfig.Resources = &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -502,18 +514,22 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				})
 			},
 			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
-				if i.Spec.Plugins.BitwardenSecretManagerProvider == nil {
-					i.Spec.Plugins.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
-						Mode: v1alpha1.Enabled,
-						SecretRef: &v1alpha1.SecretReference{
-							Name: "bitwarden-certs",
+				if i.Spec.Plugins == nil || i.Spec.Plugins.BitwardenSecretManagerProvider == nil {
+					i.Spec.Plugins = &v1alpha1.PluginsConfig{
+						BitwardenSecretManagerProvider: &v1alpha1.BitwardenSecretManagerProvider{
+							Mode: ptr.To(v1alpha1.Enabled),
+							SecretRef: &v1alpha1.SecretReference{
+								Name: "bitwarden-certs",
+							},
 						},
 					}
 				}
-				if i.Spec.ControllerConfig.CertProvider == nil {
-					i.Spec.ControllerConfig.CertProvider = &v1alpha1.CertProvidersConfig{
-						CertManager: &v1alpha1.CertManagerConfig{
-							Mode: v1alpha1.Enabled,
+				if i.Spec.ControllerConfig == nil || i.Spec.ControllerConfig.CertProvider == nil {
+					i.Spec.ControllerConfig = &v1alpha1.ControllerConfig{
+						CertProvider: &v1alpha1.CertProvidersConfig{
+							CertManager: &v1alpha1.CertManagerConfig{
+								Mode: v1alpha1.Enabled,
+							},
 						},
 					}
 				}
@@ -643,12 +659,12 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy:  "http://esc-proxy:8080",
-								HTTPSProxy: "https://esc-proxy:8443",
-								NoProxy:    "esc.local",
+								HTTPProxy:  ptr.To("http://esc-proxy:8080"),
+								HTTPSProxy: ptr.To("https://esc-proxy:8443"),
+								NoProxy:    ptr.To("esc.local"),
 							},
 						},
 					},
@@ -659,9 +675,9 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 					GlobalConfig: &v1alpha1.GlobalConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy:  "http://esm-proxy:8080",
-								HTTPSProxy: "https://esm-proxy:8443",
-								NoProxy:    "esm.local",
+								HTTPProxy:  ptr.To("http://esm-proxy:8080"),
+								HTTPSProxy: ptr.To("https://esm-proxy:8443"),
+								NoProxy:    ptr.To("esm.local"),
 							},
 						},
 					},
@@ -727,7 +743,7 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							// No proxy config
 						},
@@ -739,9 +755,9 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 					GlobalConfig: &v1alpha1.GlobalConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy:  "http://esm-proxy:8080",
-								HTTPSProxy: "https://esm-proxy:8443",
-								NoProxy:    "esm.local",
+								HTTPProxy:  ptr.To("http://esm-proxy:8080"),
+								HTTPSProxy: ptr.To("https://esm-proxy:8443"),
+								NoProxy:    ptr.To("esm.local"),
 							},
 						},
 					},
@@ -832,10 +848,10 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy: "http://esc-proxy:8080",
+								HTTPProxy: ptr.To("http://esc-proxy:8080"),
 								// HTTPSProxy and NoProxy are empty
 							},
 						},
@@ -878,12 +894,12 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy:  "http://new-proxy:8080",
-								HTTPSProxy: "https://new-proxy:8443",
-								NoProxy:    "localhost",
+								HTTPProxy:  ptr.To("http://new-proxy:8080"),
+								HTTPSProxy: ptr.To("https://new-proxy:8443"),
+								NoProxy:    ptr.To("localhost"),
 							},
 						},
 					},
@@ -956,12 +972,12 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 			},
 			externalSecretsConfig: &v1alpha1.ExternalSecretsConfig{
 				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						CommonConfigs: v1alpha1.CommonConfigs{
 							Proxy: &v1alpha1.ProxyConfig{
-								HTTPProxy:  "http://esc-proxy:8080",
-								HTTPSProxy: "https://esc-proxy:8443",
-								NoProxy:    "esc.local",
+								HTTPProxy:  ptr.To("http://esc-proxy:8080"),
+								HTTPSProxy: ptr.To("https://esc-proxy:8443"),
+								NoProxy:    ptr.To("esc.local"),
 							},
 						},
 					},
@@ -1115,7 +1131,7 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 	}
 }
 
-// validateEnvironmentVariables validates that containers have expected environment variables
+// validateEnvironmentVariables validates that containers have expected environment variables.
 func validateEnvironmentVariables(t *testing.T, deployment *appsv1.Deployment, expectedContainerEnvVars map[string][]corev1.EnvVar) {
 	for containerName, expectedEnvVars := range expectedContainerEnvVars {
 		container := findContainer(deployment, containerName)
@@ -1130,7 +1146,7 @@ func validateEnvironmentVariables(t *testing.T, deployment *appsv1.Deployment, e
 	}
 }
 
-// validateVolumes validates that deployment has expected volumes
+// validateVolumes validates that deployment has expected volumes.
 func validateVolumes(t *testing.T, deployment *appsv1.Deployment, expectedVolumes []corev1.Volume) {
 	if len(expectedVolumes) == 0 {
 		// Verify no trusted CA bundle volume was added
@@ -1149,7 +1165,7 @@ func validateVolumes(t *testing.T, deployment *appsv1.Deployment, expectedVolume
 	}
 }
 
-// validateVolumeMounts validates that containers have expected volume mounts
+// validateVolumeMounts validates that containers have expected volume mounts.
 func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedVolumeMounts map[string][]corev1.VolumeMount) {
 	if len(expectedVolumeMounts) == 0 {
 		// Verify no trusted CA bundle volume mounts exist in any container
@@ -1188,7 +1204,7 @@ func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedV
 	}
 }
 
-// findContainer finds a container by name in the deployment
+// findContainer finds a container by name in the deployment.
 func findContainer(deployment *appsv1.Deployment, containerName string) *corev1.Container {
 	// Search regular containers first
 	for i, container := range deployment.Spec.Template.Spec.Containers {
@@ -1205,7 +1221,7 @@ func findContainer(deployment *appsv1.Deployment, containerName string) *corev1.
 	return nil
 }
 
-// filterTrustedCAMounts filters volume mounts to only include trusted CA bundle mounts
+// filterTrustedCAMounts filters volume mounts to only include trusted CA bundle mounts.
 func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
 	var trustedCAMounts []corev1.VolumeMount
 	for _, mount := range volumeMounts {
@@ -1216,7 +1232,7 @@ func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMou
 	return trustedCAMounts
 }
 
-// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts
+// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts.
 func filterNonTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
 	var nonTrustedCAMounts []corev1.VolumeMount
 	for _, mount := range volumeMounts {

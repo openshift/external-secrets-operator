@@ -1,0 +1,1 @@
+@coderabbitai When a comment "@coderabbitai /nitpicks" is added on PR, please consolidate all your unresolved nitpick suggestions from this PR into a single comment which is in git diff format, which author can easily apply using `git apply` command in the same PR or in a follow up PR.

@@ -37,7 +37,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						WebhookConfig: nil,
 					},
 				}
@@ -48,7 +48,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ApplicationConfig: v1alpha1.ApplicationConfig{
+					ApplicationConfig: &v1alpha1.ApplicationConfig{
 						WebhookConfig: &v1alpha1.WebhookConfig{},
 					},
 				}
@@ -59,7 +59,7 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: nil,
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: v1alpha1.ControllerConfig{
+					ControllerConfig: &v1alpha1.ControllerConfig{
 						CertProvider: &v1alpha1.CertProvidersConfig{
 							CertManager: nil,
 						},
@@ -211,14 +211,14 @@ func testExternalSecretsConfigForSecrets() *v1alpha1.ExternalSecretsConfig {
 	esc := commontest.TestExternalSecretsConfig()
 
 	esc.Spec = v1alpha1.ExternalSecretsConfigSpec{
-		ControllerConfig: v1alpha1.ControllerConfig{
+		ControllerConfig: &v1alpha1.ControllerConfig{
 			CertProvider: &v1alpha1.CertProvidersConfig{
 				CertManager: &v1alpha1.CertManagerConfig{
 					Mode: v1alpha1.Disabled,
 				},
 			},
 		},
-		ApplicationConfig: v1alpha1.ApplicationConfig{},
+		ApplicationConfig: &v1alpha1.ApplicationConfig{},
 	}
 	return esc
 }

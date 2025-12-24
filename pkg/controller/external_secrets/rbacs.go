@@ -249,7 +249,6 @@ func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecr
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "rolebinding resource %s reconciled back to desired state", roleBindingName)
 	} else {
 		r.log.V(4).Info("rolebinding resource already exists and is in expected state", "name", roleBindingName)
-
 	}
 	if !exist {
 		if err := r.Create(r.ctx, obj); err != nil {

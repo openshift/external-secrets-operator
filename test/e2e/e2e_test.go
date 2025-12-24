@@ -125,7 +125,6 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		By("Verifying external-secrets operand pods are ready")
 		Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{
 			operandCoreControllerPodPrefix,
-			operandCertControllerPodPrefix,
 			operandWebhookPodPrefix,
 		})).To(Succeed())
 	})

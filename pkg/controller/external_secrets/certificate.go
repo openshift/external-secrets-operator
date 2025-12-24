@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -99,7 +100,7 @@ func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsC
 
 func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecretsConfig, certificate *certmanagerv1.Certificate) error {
 	certManageConfig := &operatorv1alpha1.CertManagerConfig{}
-	if esc.Spec.ControllerConfig.CertProvider != nil && esc.Spec.ControllerConfig.CertProvider.CertManager != nil {
+	if esc.Spec.ControllerConfig != nil && esc.Spec.ControllerConfig.CertProvider != nil && esc.Spec.ControllerConfig.CertProvider.CertManager != nil {
 		certManageConfig = esc.Spec.ControllerConfig.CertProvider.CertManager
 	}
 	if certManageConfig.IssuerRef == nil {
@@ -112,8 +113,8 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 
 	certificate.Spec.IssuerRef = v1.ObjectReference{
 		Name:  certManageConfig.IssuerRef.Name,
-		Kind:  certManageConfig.IssuerRef.Kind,
-		Group: certManageConfig.IssuerRef.Group,
+		Kind:  ptr.Deref(certManageConfig.IssuerRef.Kind, ""),
+		Group: ptr.Deref(certManageConfig.IssuerRef.Group, ""),
 	}
 
 	// Since Kind and Group configs are optional. certmanagerv1.IssuerKind will

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr/testr"
+	"k8s.io/utils/ptr"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -106,15 +107,15 @@ func TestReconcile(t *testing.T) {
 			},
 			expectedStatusCondition: []operatorv1alpha1.ControllerStatus{
 				{
-					Name: externalSecretsControllerId,
+					Name: &externalSecretsControllerId,
 					Conditions: []operatorv1alpha1.Condition{
 						{
-							Type:    operatorv1alpha1.Ready,
+							Type:    ptr.To(operatorv1alpha1.Ready),
 							Status:  metav1.ConditionTrue,
 							Message: "test ready",
 						},
 						{
-							Type:    operatorv1alpha1.Degraded,
+							Type:    ptr.To(operatorv1alpha1.Degraded),
 							Status:  metav1.ConditionFalse,
 							Message: "",
 						},
@@ -231,15 +232,15 @@ func TestReconcile(t *testing.T) {
 							Status: operatorv1alpha1.ExternalSecretsManagerStatus{
 								ControllerStatuses: []operatorv1alpha1.ControllerStatus{
 									{
-										Name: externalSecretsControllerId,
+										Name: &externalSecretsControllerId,
 										Conditions: []operatorv1alpha1.Condition{
 											{
-												Type:    operatorv1alpha1.Ready,
+												Type:    ptr.To(operatorv1alpha1.Ready),
 												Status:  metav1.ConditionFalse,
 												Message: "",
 											},
 											{
-												Type:    operatorv1alpha1.Degraded,
+												Type:    ptr.To(operatorv1alpha1.Degraded),
 												Status:  metav1.ConditionFalse,
 												Message: "",
 											},
@@ -255,15 +256,15 @@ func TestReconcile(t *testing.T) {
 			},
 			expectedStatusCondition: []operatorv1alpha1.ControllerStatus{
 				{
-					Name: externalSecretsControllerId,
+					Name: &externalSecretsControllerId,
 					Conditions: []operatorv1alpha1.Condition{
 						{
-							Type:    operatorv1alpha1.Ready,
+							Type:    ptr.To(operatorv1alpha1.Ready),
 							Status:  metav1.ConditionTrue,
 							Message: "test ready",
 						},
 						{
-							Type:    operatorv1alpha1.Degraded,
+							Type:    ptr.To(operatorv1alpha1.Degraded),
 							Status:  metav1.ConditionFalse,
 							Message: "",
 						},
