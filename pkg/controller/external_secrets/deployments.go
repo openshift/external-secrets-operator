@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"unsafe"
 
@@ -64,7 +65,6 @@ func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecr
 func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string,
 	externalSecretsConfigCreateRecon bool,
 ) error {
-
 	deployment, err := r.getDeploymentObject(assetName, esc, resourceLabels)
 	if err != nil {
 		return err
@@ -154,9 +154,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 // updatePodTemplateLabels sets labels on the pod template spec.
 func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]string) {
 	l := deployment.Spec.Template.GetLabels()
-	for k, v := range labels {
-		l[k] = v
-	}
+	maps.Copy(l, labels)
 	deployment.Spec.Template.SetLabels(l)
 }
 
@@ -304,7 +302,7 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-// argument list for external-secrets deployment resource
+// argument list for external-secrets deployment resource.
 func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
 		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
@@ -343,7 +341,7 @@ func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.Ex
 	}
 }
 
-// argument list for webhook deployment resource
+// argument list for webhook deployment resource.
 func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, checkInterval string) {
 	args := []string{
 		"webhook",
@@ -367,7 +365,7 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 	}
 }
 
-// argument list for cert controller deployment resource
+// argument list for cert controller deployment resource.
 func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
 	namespace := deployment.GetNamespace()
 	args := []string{
@@ -549,7 +547,6 @@ func (r *Reconciler) removeProxyEnvVars(container *corev1.Container) {
 // updateTrustedCABundleVolumes adds or removes trusted CA bundle volume and volume mounts to/from the deployment
 // based on proxy configuration presence.
 func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
-
 	if proxyConfig != nil {
 		// Add trusted CA bundle volume and volume mounts
 		return r.addTrustedCABundleVolumes(deployment)

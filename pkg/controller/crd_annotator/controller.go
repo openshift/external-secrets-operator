@@ -64,6 +64,7 @@ const (
 // Reconciler reconciles metadata on the managed CRDs.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	ctx context.Context
 	log logr.Logger
 }
@@ -245,8 +246,8 @@ func (r *Reconciler) updateAnnotations(crd *crdv1.CustomResourceDefinition) erro
 	annotations := crd.GetAnnotations()
 	if val, ok := annotations[common.CertManagerInjectCAFromAnnotation]; !ok || val != common.CertManagerInjectCAFromAnnotationValue {
 		patch := client.RawPatch(types.MergePatchType,
-			[]byte(fmt.Sprintf("{\"metadata\":{\"annotations\":{\"%s\":\"%s\"}}}",
-				common.CertManagerInjectCAFromAnnotation, common.CertManagerInjectCAFromAnnotationValue)),
+			fmt.Appendf(nil, "{\"metadata\":{\"annotations\":{\"%s\":\"%s\"}}}",
+				common.CertManagerInjectCAFromAnnotation, common.CertManagerInjectCAFromAnnotationValue),
 		)
 		if err := r.Patch(r.ctx, crd, patch); err != nil {
 			return err

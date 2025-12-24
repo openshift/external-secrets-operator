@@ -48,14 +48,12 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 		}
 	}
 	return nil
-
 }
 
 func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) ([]*webhook.ValidatingWebhookConfiguration, error) {
 	var webhooks []*webhook.ValidatingWebhookConfiguration
 
 	for _, assetName := range []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName} {
-
 		validatingWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
 		common.UpdateResourceLabels(validatingWebhook, resourceLabels)

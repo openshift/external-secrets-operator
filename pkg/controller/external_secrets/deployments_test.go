@@ -1115,7 +1115,7 @@ func TestUpdateProxyConfiguration(t *testing.T) {
 	}
 }
 
-// validateEnvironmentVariables validates that containers have expected environment variables
+// validateEnvironmentVariables validates that containers have expected environment variables.
 func validateEnvironmentVariables(t *testing.T, deployment *appsv1.Deployment, expectedContainerEnvVars map[string][]corev1.EnvVar) {
 	for containerName, expectedEnvVars := range expectedContainerEnvVars {
 		container := findContainer(deployment, containerName)
@@ -1130,7 +1130,7 @@ func validateEnvironmentVariables(t *testing.T, deployment *appsv1.Deployment, e
 	}
 }
 
-// validateVolumes validates that deployment has expected volumes
+// validateVolumes validates that deployment has expected volumes.
 func validateVolumes(t *testing.T, deployment *appsv1.Deployment, expectedVolumes []corev1.Volume) {
 	if len(expectedVolumes) == 0 {
 		// Verify no trusted CA bundle volume was added
@@ -1149,7 +1149,7 @@ func validateVolumes(t *testing.T, deployment *appsv1.Deployment, expectedVolume
 	}
 }
 
-// validateVolumeMounts validates that containers have expected volume mounts
+// validateVolumeMounts validates that containers have expected volume mounts.
 func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedVolumeMounts map[string][]corev1.VolumeMount) {
 	if len(expectedVolumeMounts) == 0 {
 		// Verify no trusted CA bundle volume mounts exist in any container
@@ -1188,7 +1188,7 @@ func validateVolumeMounts(t *testing.T, deployment *appsv1.Deployment, expectedV
 	}
 }
 
-// findContainer finds a container by name in the deployment
+// findContainer finds a container by name in the deployment.
 func findContainer(deployment *appsv1.Deployment, containerName string) *corev1.Container {
 	// Search regular containers first
 	for i, container := range deployment.Spec.Template.Spec.Containers {
@@ -1205,7 +1205,7 @@ func findContainer(deployment *appsv1.Deployment, containerName string) *corev1.
 	return nil
 }
 
-// filterTrustedCAMounts filters volume mounts to only include trusted CA bundle mounts
+// filterTrustedCAMounts filters volume mounts to only include trusted CA bundle mounts.
 func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
 	var trustedCAMounts []corev1.VolumeMount
 	for _, mount := range volumeMounts {
@@ -1216,7 +1216,7 @@ func filterTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMou
 	return trustedCAMounts
 }
 
-// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts
+// filterNonTrustedCAMounts filters volume mounts to exclude trusted CA bundle mounts.
 func filterNonTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.VolumeMount {
 	var nonTrustedCAMounts []corev1.VolumeMount
 	for _, mount := range volumeMounts {
