@@ -115,10 +115,8 @@ type ControllerConfig struct {
 
 	// networkPolicies specifies the list of network policy configurations
 	// to be applied to external-secrets pods.
-	//
 	// Each entry allows specifying a name for the generated NetworkPolicy object,
 	// along with its full Kubernetes NetworkPolicy definition.
-	//
 	// If this field is not provided, external-secrets components will be isolated
 	// with deny-all network policies, which will prevent proper operation.
 	//
@@ -130,6 +128,35 @@ type ControllerConfig struct {
 	// +listMapKey=name
 	// +listMapKey=componentName
 	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
+
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=4
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=componentName
+	ComponentConfigs []ComponentConfig `json:"componentConfig,omitempty"`
+}
+
+type ComponentConfig struct {
+	// componentName specifies which deployment component this configuration applies to.
+	// Allowed values: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
+	// +kubebuilder:validation:Required
+	ComponentName ComponentName `json:"componentName"`
+
+	// deploymentConfigs allows specifying deployment-level configuration overrides.
+	// +kubebuilder:validation:Optional
+	// +optional
+	DeploymentConfigs DeploymentConfig `json:"deploymentConfigs,omitempty"`
+}
+type DeploymentConfig struct {
+	// revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.
+	// Minimum value of 1 is enforced to ensure rollback capability.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Optional
+	// +optional
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
@@ -216,8 +243,14 @@ type CertProvidersConfig struct {
 type ComponentName string
 
 const (
-	// CoreController represents the external-secrets component
+	// CoreController represents the external-secrets core controller component
 	CoreController ComponentName = "ExternalSecretsCoreController"
+
+	// Webhook represents the external-secrets webhook component
+	Webhook ComponentName = "Webhook"
+
+	// CertController represents the external-secrets cert controller component
+	CertController ComponentName = "CertController"
 
 	// BitwardenSDKServer represents the bitwarden-sdk-server component
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"

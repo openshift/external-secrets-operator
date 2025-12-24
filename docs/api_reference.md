@@ -114,6 +114,23 @@ _Appears in:_
 | `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
 
 
+#### ComponentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ControllerConfig](#controllerconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows specifying deployment-level configuration overrides. |  | Optional: \{\} <br /> |
+
+
 #### ComponentName
 
 _Underlying type:_ _string_
@@ -123,11 +140,14 @@ ComponentName represents the different external-secrets components that can have
 
 
 _Appears in:_
+- [ComponentConfig](#componentconfig)
 - [NetworkPolicy](#networkpolicy)
 
 | Field | Description |
 | --- | --- |
-| `ExternalSecretsCoreController` | CoreController represents the external-secrets component<br /> |
+| `ExternalSecretsCoreController` | CoreController represents the external-secrets core controller component<br /> |
+| `Webhook` | Webhook represents the external-secrets webhook component<br /> |
+| `CertController` | CertController represents the external-secrets cert controller component<br /> |
 | `BitwardenSDKServer` | BitwardenSDKServer represents the bitwarden-sdk-server component<br /> |
 
 
@@ -181,6 +201,7 @@ _Appears in:_
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfig` _[ComponentConfig](#componentconfig) array_ |  |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ControllerStatus
@@ -199,6 +220,22 @@ _Appears in:_
 | `name` _string_ | name of the controller for which the observed condition is recorded. |  | Required: \{\} <br /> |
 | `conditions` _[Condition](#condition) array_ | conditions holds information of the current state of the external-secrets-operator controllers. |  |  |
 | `observedGeneration` _integer_ | observedGeneration represents the .metadata.generation on the observed resource. |  | Minimum: 0 <br /> |
+
+
+#### DeploymentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ComponentConfig](#componentconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.<br />Minimum value of 1 is enforced to ensure rollback capability. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
