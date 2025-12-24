@@ -146,6 +146,62 @@ func fetchAWSCreds(ctx context.Context, k8sClient *kubernetes.Clientset) (string
 	return id, key, nil
 }
 
+func CreateAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, secretValue, region string) error {
+	id, key, err := fetchAWSCreds(ctx, k8sClient)
+	if err != nil {
+		return err
+	}
+
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: awscred.NewCredentials(&awscred.StaticProvider{Value: awscred.Value{
+			AccessKeyID:     id,
+			SecretAccessKey: key,
+		}}),
+		Region: aws.String(region),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create AWS session: %w", err)
+	}
+
+	svc := secretsmanager.New(sess)
+	_, err = svc.CreateSecret(&secretsmanager.CreateSecretInput{
+		Name:         aws.String(secretName),
+		SecretString: aws.String(secretValue),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create AWS secret: %w", err)
+	}
+	return nil
+}
+
+func UpdateAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, secretValue, region string) error {
+	id, key, err := fetchAWSCreds(ctx, k8sClient)
+	if err != nil {
+		return err
+	}
+
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: awscred.NewCredentials(&awscred.StaticProvider{Value: awscred.Value{
+			AccessKeyID:     id,
+			SecretAccessKey: key,
+		}}),
+		Region: aws.String(region),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create AWS session: %w", err)
+	}
+
+	svc := secretsmanager.New(sess)
+	_, err = svc.UpdateSecret(&secretsmanager.UpdateSecretInput{
+		SecretId:     aws.String(secretName),
+		SecretString: aws.String(secretValue),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update AWS secret: %w", err)
+	}
+	return nil
+}
+
 func DeleteAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, region string) error {
 	id, key, err := fetchAWSCreds(ctx, k8sClient)
 	if err != nil {
