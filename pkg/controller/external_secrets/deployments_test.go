@@ -562,6 +562,49 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "deployment with custom revisionHistoryLimit from componentConfig",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						// Only capture the controller deployment to validate our config
+						if o.Name == "external-secrets" {
+							*capturedDeployment = o.DeepCopy()
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+				revisionLimit := int32(5)
+				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
+					{
+						ComponentName: v1alpha1.CoreController,
+						DeploymentConfigs: v1alpha1.DeploymentConfig{
+							RevisionHistoryLimit: &revisionLimit,
+						},
+					},
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+				if deployment.Spec.RevisionHistoryLimit == nil {
+					t.Error("revisionHistoryLimit should be set")
+					return
+				}
+				if *deployment.Spec.RevisionHistoryLimit != 5 {
+					t.Errorf("revisionHistoryLimit = %d, want 5", *deployment.Spec.RevisionHistoryLimit)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
