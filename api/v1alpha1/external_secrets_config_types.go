@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -113,6 +114,15 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
+	// annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io`, `app.kubernetes`, `openshift.io`, or `k8s.io` are not allowed
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems:=20
+	// +kubebuilder:validation:XValidation:rule="self.all(a, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, a.key.startsWith(p)))",message="annotations with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/' are not allowed"
+	// +listType=map
+	// +listMapKey=key
+	// +optional
+	Annotations []Annotation `json:"annotations,omitempty"`
+
 	// networkPolicies specifies the list of network policy configurations
 	// to be applied to external-secrets pods.
 	//
@@ -130,6 +140,61 @@ type ControllerConfig struct {
 	// +listMapKey=name
 	// +listMapKey=componentName
 	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
+
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=4
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=componentName
+	ComponentConfigs []ComponentConfig `json:"componentConfig,omitempty"`
+}
+
+type ComponentConfig struct {
+	// componentName specifies which deployment component this configuration applies to.
+	// Allowed values: ExternalSecretsCoreController, Webhook, CertController, Bitwarden
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
+	// +kubebuilder:validation:Required
+	ComponentName ComponentName `json:"componentName"`
+
+	// deploymentConfigs allows specifying deployment-level configuration overrides.
+	// +kubebuilder:validation:Optional
+	// +optional
+	DeploymentConfigs DeploymentConfig `json:"deploymentConfigs,omitempty"`
+
+	// overrideEnv allows setting custom environment variables for the component's container.
+	// These environment variables are merged with the default environment variables set by
+	// the operator. User-specified variables take precedence in case of conflicts.
+	// Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved
+	// and cannot be overridden.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems:=50
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="Environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
+	// +optional
+	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+}
+type DeploymentConfig struct {
+	// revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.
+	// Minimum value of 1 is enforced to ensure rollback capability.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Optional
+	// +optional
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
+}
+
+// KVPair represents a generic key-value pair for configuration.
+type KVPair struct {
+	// +kubebuilder:validation:Required
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
+}
+
+// Annotation represents a custom annotation key-value pair.
+// Embeds KVPair inline for reusability.
+type Annotation struct {
+	// Embedded KVPair provides key and value fields
+	KVPair `json:",inline"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
