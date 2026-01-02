@@ -149,7 +149,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	}
 
 	// Apply component-specific configurations (RevisionHistoryLimit)
-	if err := r.applyRevisionHistoryLimit(deployment, esc, assetName); err != nil {
+	if err := r.applyUserDeploymentConfigs(deployment, esc, assetName); err != nil {
 		return nil, fmt.Errorf("failed to apply revision history limit: %w", err)
 	}
 
@@ -666,8 +666,8 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 	container.VolumeMounts = filteredVolumeMounts
 }
 
-// applyRevisionHistoryLimit sets the revisionHistoryLimit from ComponentConfig if specified.
-func (r *Reconciler) applyRevisionHistoryLimit(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
+// applyUserDeploymentConfigs sets the revisionHistoryLimit from ComponentConfig if specified.
+func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
 	if len(esc.Spec.ControllerConfig.ComponentConfigs) == 0 {
 		return nil
 	}
@@ -675,7 +675,9 @@ func (r *Reconciler) applyRevisionHistoryLimit(deployment *appsv1.Deployment, es
 	// Map asset name to component name
 	componentName := getComponentNameFromAsset(assetName)
 	if componentName == "" {
-		return nil
+		err := fmt.Errorf("invalid or unknown deployment asset name %q: ensure the asset is mapped to a valid ComponentName enum value (CoreController, Webhook, CertController, or BitwardenSDKServer)", assetName)
+		r.log.Error(err, "failed to apply revision history limit due to unrecognized asset name", "assetName", assetName, "deployment", deployment.GetName())
+		return err
 	}
 
 	// Find matching component config
