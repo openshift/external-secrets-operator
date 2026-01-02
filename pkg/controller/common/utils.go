@@ -237,6 +237,10 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 		return true
 	}
 
+	if desired.Spec.RevisionHistoryLimit != nil && !reflect.DeepEqual(desired.Spec.RevisionHistoryLimit, fetched.Spec.RevisionHistoryLimit) {
+		return true
+	}
+
 	// Check regular containers
 	if len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
 		return true
