@@ -16,6 +16,23 @@ Package v1alpha1 contains API Schema definitions for the operator v1alpha1 API g
 
 
 
+#### Annotation
+
+
+
+Annotation represents a custom annotation key-value pair.
+
+
+
+_Appears in:_
+- [ControllerConfig](#controllerconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `key` _string_ |  |  | MinLength: 1 <br />Required: \{\} <br /> |
+| `value` _string_ |  |  | Optional: \{\} <br /> |
+
+
 #### ApplicationConfig
 
 
@@ -114,6 +131,24 @@ _Appears in:_
 | `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
 
 
+#### ComponentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ControllerConfig](#controllerconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows for component-specific overrides of the Kubernetes Deployment resource properties. |  | Optional: \{\} <br /> |
+| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for a specific component's container. These are merged with operator-defaults, with user-defined keys taking precedence. Keys starting with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' are reserved and will be rejected. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+
+
 #### ComponentName
 
 _Underlying type:_ _string_
@@ -123,12 +158,15 @@ ComponentName represents the different external-secrets components that can have
 
 
 _Appears in:_
+- [ComponentConfig](#componentconfig)
 - [NetworkPolicy](#networkpolicy)
 
 | Field | Description |
 | --- | --- |
 | `ExternalSecretsCoreController` | CoreController represents the external-secrets component<br /> |
 | `BitwardenSDKServer` | BitwardenSDKServer represents the bitwarden-sdk-server component<br /> |
+| `Webhook` | Webhook represents the external-secrets webhook component<br /> |
+| `CertController` | CertController represents the cert-controller component<br /> |
 
 
 #### Condition
@@ -180,7 +218,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `annotations` _[Annotation](#annotation) array_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io/`, `app.kubernetes/`, `openshift.io/`, or `k8s.io/` are not allowed |  | MaxItems: 20 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings such as revisionHistoryLimit for each component independently.Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ControllerStatus
@@ -199,6 +239,22 @@ _Appears in:_
 | `name` _string_ | name of the controller for which the observed condition is recorded. |  | Required: \{\} <br /> |
 | `conditions` _[Condition](#condition) array_ | conditions holds information of the current state of the external-secrets-operator controllers. |  |  |
 | `observedGeneration` _integer_ | observedGeneration represents the .metadata.generation on the observed resource. |  | Minimum: 0 <br /> |
+
+
+#### DeploymentConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [ComponentConfig](#componentconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes. This controls how many previous deployment versions are kept in the cluster, allowing you to rollback to recent versions.<br />Minimum value of 1 is enforced to ensure at least one rollback is possible.using 'kubectl rollout undo'.<br />If not specified, Kubernetes default of 10 is used. | 10 | Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
@@ -373,6 +429,23 @@ _Appears in:_
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
 | `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
+
+
+#### KVPair
+
+
+
+KVPair represents a generic key-value pair for configuration.
+
+
+
+_Appears in:_
+- [Annotation](#annotation)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `key` _string_ |  |  | MinLength: 1 <br />Required: \{\} <br /> |
+| `value` _string_ |  |  | Optional: \{\} <br /> |
 
 
 #### Mode
