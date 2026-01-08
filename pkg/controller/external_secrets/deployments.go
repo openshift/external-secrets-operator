@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"fmt"
+	"github.com/go-logr/logr"
 	"os"
 	"unsafe"
 
@@ -103,6 +104,15 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	common.UpdateResourceLabels(deployment, resourceLabels)
 	updatePodTemplateLabels(deployment, resourceLabels)
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(deployment, annotationsMap)
+			updatePodTemplateAnnotations(deployment, annotationsMap)
+		}
+	}
+
 	image := os.Getenv(externalsecretsImageEnvVarName)
 	if image == "" {
 		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
@@ -158,6 +168,43 @@ func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]st
 		l[k] = v
 	}
 	deployment.Spec.Template.SetLabels(l)
+}
+
+// convertAnnotationsToMap converts []Annotation to map[string]string with reserved prefix filtering.
+func convertAnnotationsToMap(annotations []operatorv1alpha1.Annotation, logger logr.Logger) map[string]string {
+	result := make(map[string]string, len(annotations))
+
+	reservedPrefixes := []string{"kubernetes.io/", "app.kubernetes.io/", "openshift.io/", "k8s.io/"}
+
+	for _, ann := range annotations {
+		isReserved := false
+		for _, prefix := range reservedPrefixes {
+			if hasPrefix := len(ann.Key) >= len(prefix) && ann.Key[:len(prefix)] == prefix; hasPrefix {
+				isReserved = true
+				logger.V(1).Info("skipping annotation with reserved prefix",
+					"key", ann.Key, "prefix", prefix)
+				break
+			}
+		}
+
+		if !isReserved && ann.Key != "" {
+			result[ann.Key] = ann.Value
+		}
+	}
+
+	return result
+}
+
+// updatePodTemplateAnnotations sets annotations on the pod template spec.
+func updatePodTemplateAnnotations(deployment *appsv1.Deployment, annotations map[string]string) {
+	a := deployment.Spec.Template.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string, len(annotations))
+	}
+	for k, v := range annotations {
+		a[k] = v
+	}
+	deployment.Spec.Template.SetAnnotations(a)
 }
 
 func updateContainerSecurityContext(container *corev1.Container) {
