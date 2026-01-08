@@ -71,6 +71,19 @@ func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 	obj.SetLabels(l)
 }
 
+// UpdateResourceAnnotations merges provided annotations into the object's existing annotations.
+// User-provided annotations take precedence over existing ones.
+func UpdateResourceAnnotations(obj client.Object, annotations map[string]string) {
+	a := obj.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string, len(annotations))
+	}
+	for k, v := range annotations {
+		a[k] = v
+	}
+	obj.SetAnnotations(a)
+}
+
 func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
 	obj, err := runtime.Decode(codecs.UniversalDecoder(certmanagerv1.SchemeGroupVersion), objBytes)
 	if err != nil {
@@ -193,7 +206,15 @@ func HasObjectChanged(desired, fetched client.Object) bool {
 }
 
 func ObjectMetadataModified(desired, fetched client.Object) bool {
-	return !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels())
+	// Check if labels have changed
+	if !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels()) {
+		return true
+	}
+	// Check if annotations have changed
+	if !reflect.DeepEqual(desired.GetAnnotations(), fetched.GetAnnotations()) {
+		return true
+	}
+	return false
 }
 
 func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
@@ -217,6 +238,11 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 	}
 
 	if desired.Spec.Template.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) {
+		return true
+	}
+
+	// Check pod template annotations
+	if desired.Spec.Template.Annotations != nil && !reflect.DeepEqual(desired.Spec.Template.Annotations, fetched.Spec.Template.Annotations) {
 		return true
 	}
 

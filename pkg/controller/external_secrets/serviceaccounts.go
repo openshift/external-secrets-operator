@@ -44,6 +44,14 @@ func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.External
 		updateNamespace(desired, esc)
 		common.UpdateResourceLabels(desired, resourceLabels)
 
+		// Apply annotations from ControllerConfig
+		if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+			annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+			if len(annotationsMap) > 0 {
+				common.UpdateResourceAnnotations(desired, annotationsMap)
+			}
+		}
+
 		serviceAccountName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 		r.log.V(4).Info("reconciling serviceaccount resource", "name", serviceAccountName)
 

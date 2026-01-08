@@ -45,7 +45,7 @@ func (r *Reconciler) createOrApplyControllerRBACResources(esc *operatorv1alpha1.
 		controllerClusterRoleServiceBindingsAssetName,
 		controllerClusterRoleViewAssetName,
 	} {
-		clusterRoleObj := r.getClusterRoleObject(asset, resourceLabels)
+		clusterRoleObj := r.getClusterRoleObject(esc, asset, resourceLabels)
 		if err := r.createOrApplyClusterRole(esc, clusterRoleObj, recon); err != nil {
 			r.log.Error(err, "failed to reconcile controller clusterrole resources")
 			return err
@@ -82,7 +82,7 @@ func (r *Reconciler) createOrApplyCertControllerRBACResources(esc *operatorv1alp
 		return nil
 	}
 
-	clusterRoleObj := r.getClusterRoleObject(certControllerClusterRoleAssetName, resourceLabels)
+	clusterRoleObj := r.getClusterRoleObject(esc, certControllerClusterRoleAssetName, resourceLabels)
 	if err := r.createOrApplyClusterRole(esc, clusterRoleObj, recon); err != nil {
 		r.log.Error(err, "failed to reconcile cert-controller clusterrole resources")
 		return err
@@ -135,9 +135,18 @@ func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecr
 
 // getClusterRoleObject is for obtaining the content of given ClusterRole static asset, and
 // then updating it with desired values.
-func (r *Reconciler) getClusterRoleObject(assetName string, resourceLabels map[string]string) *rbacv1.ClusterRole {
+func (r *Reconciler) getClusterRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string) *rbacv1.ClusterRole {
 	clusterRole := common.DecodeClusterRoleObjBytes(assets.MustAsset(assetName))
 	common.UpdateResourceLabels(clusterRole, resourceLabels)
+
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(clusterRole, annotationsMap)
+		}
+	}
+
 	return clusterRole
 }
 
@@ -183,6 +192,15 @@ func (r *Reconciler) getClusterRoleBindingObject(esc *operatorv1alpha1.ExternalS
 	clusterRoleBinding := common.DecodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
 	clusterRoleBinding.RoleRef.Name = clusterRoleName
 	common.UpdateResourceLabels(clusterRoleBinding, resourceLabels)
+
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(clusterRoleBinding, annotationsMap)
+		}
+	}
+
 	updateServiceAccountNamespaceInRBACBindingObject[*rbacv1.ClusterRoleBinding](clusterRoleBinding, serviceAccountName, getNamespace(esc))
 	return clusterRoleBinding
 }
@@ -225,6 +243,15 @@ func (r *Reconciler) getRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, 
 	role := common.DecodeRoleObjBytes(assets.MustAsset(assetName))
 	updateNamespace(role, esc)
 	common.UpdateResourceLabels(role, resourceLabels)
+
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(role, annotationsMap)
+		}
+	}
+
 	return role
 }
 
@@ -268,6 +295,15 @@ func (r *Reconciler) getRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsC
 	roleBinding.RoleRef.Name = roleName
 	updateNamespace(roleBinding, esc)
 	common.UpdateResourceLabels(roleBinding, resourceLabels)
+
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(roleBinding, annotationsMap)
+		}
+	}
+
 	updateServiceAccountNamespaceInRBACBindingObject[*rbacv1.RoleBinding](roleBinding, serviceAccountName, roleBinding.GetNamespace())
 	return roleBinding
 }

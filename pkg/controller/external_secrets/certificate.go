@@ -90,6 +90,14 @@ func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsC
 	updateNamespace(certificate, esc)
 	common.UpdateResourceLabels(certificate, resourceLabels)
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(certificate, annotationsMap)
+		}
+	}
+
 	if err := r.updateCertificateParams(esc, certificate); err != nil {
 		return nil, common.NewIrrecoverableError(err, "failed to update certificate resource for %s/%s deployment", getNamespace(esc), esc.GetName())
 	}
