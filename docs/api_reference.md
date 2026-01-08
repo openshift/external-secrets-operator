@@ -21,7 +21,6 @@ Package v1alpha1 contains API Schema definitions for the operator v1alpha1 API g
 
 
 Annotation represents a custom annotation key-value pair.
-Embeds KVPair inline for reusability.
 
 
 
@@ -30,8 +29,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `key` _string_ |  |  | Required: \{\} <br /> |
-| `value` _string_ |  |  |  |
+| `key` _string_ |  |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `value` _string_ |  |  | Optional: \{\} <br /> |
 
 
 #### ApplicationConfig
@@ -145,9 +144,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: ExternalSecretsCoreController, Webhook, CertController, Bitwarden |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
-| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows specifying deployment-level configuration overrides. |  | Optional: \{\} <br /> |
-| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv allows setting custom environment variables for the component's container.<br />These environment variables are merged with the default environment variables set by<br />the operator. User-specified variables take precedence in case of conflicts.<br />Environment variables starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved<br />and cannot be overridden. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which deployment component this configuration applies to.<br />Allowed values: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs allows for component-specific overrides of the Kubernetes Deployment resource properties. |  | Optional: \{\} <br /> |
+| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for a specific component's container. These are merged with operator-defaults, with user-defined keys taking precedence. Keys starting with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' are reserved and will be rejected. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### ComponentName
@@ -166,6 +165,8 @@ _Appears in:_
 | --- | --- |
 | `ExternalSecretsCoreController` | CoreController represents the external-secrets component<br /> |
 | `BitwardenSDKServer` | BitwardenSDKServer represents the bitwarden-sdk-server component<br /> |
+| `Webhook` | Webhook represents the external-secrets webhook component<br /> |
+| `CertController` | CertController represents the cert-controller component<br /> |
 
 
 #### Condition
@@ -217,9 +218,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
-| `annotations` _[Annotation](#annotation) array_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io`, `app.kubernetes`, `openshift.io`, or `k8s.io` are not allowed |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `annotations` _[Annotation](#annotation) array_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations takes precedence over defaults in case of conflicts. Annotation keys with prefixes `kubernetes.io/`, `app.kubernetes.io/`, `openshift.io/`, or `k8s.io/` are not allowed |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
-| `componentConfig` _[ComponentConfig](#componentconfig) array_ |  |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings such as revisionHistoryLimit for each component independently.Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ControllerStatus
@@ -253,7 +254,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.<br />Minimum value of 1 is enforced to ensure rollback capability. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes. This controls how many previous deployment versions are kept in the cluster, allowing you to rollback to recent versions.<br />Minimum value of 1 is enforced to ensure at least one rollback is possible.using 'kubectl rollout undo'.<br />If not specified, Kubernetes default of 10 is used. | 10 | Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
@@ -443,8 +444,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `key` _string_ |  |  | Required: \{\} <br /> |
-| `value` _string_ |  |  |  |
+| `key` _string_ |  |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `value` _string_ |  |  | Optional: \{\} <br /> |
 
 
 #### Mode
