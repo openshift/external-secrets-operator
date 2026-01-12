@@ -192,6 +192,7 @@ type KVPair struct {
 }
 
 // Annotation represents a custom annotation key-value pair.
+// +kubebuilder:validation:XValidation:rule="self.key.matches('^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\\\/)?([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$')",message="Annotation key must consist of an optional DNS subdomain prefix followed by '/', and a name. The name must begin and end with an alphanumeric character and contain only alphanumeric characters, dots (.), dashes (-), and underscores (_)."
 type Annotation struct {
 	KVPair `json:",inline"`
 }
