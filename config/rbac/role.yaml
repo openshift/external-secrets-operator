@@ -25,7 +25,6 @@ rules:
   resources:
   - endpoints
   verbs:
-  - create
   - get
   - list
   - watch
