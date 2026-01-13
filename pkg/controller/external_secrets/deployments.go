@@ -147,8 +147,6 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	if err := r.updateProxyConfiguration(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
-
-	// Apply component-specific configurations (RevisionHistoryLimit)
 	if err := r.applyUserDeploymentConfigs(deployment, esc, assetName); err != nil {
 		return nil, fmt.Errorf("failed to apply revision history limit: %w", err)
 	}
@@ -672,15 +670,12 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 		return nil
 	}
 
-	// Map asset name to component name
-	componentName := getComponentNameFromAsset(assetName)
-	if componentName == "" {
-		err := fmt.Errorf("invalid or unknown deployment asset name %q: ensure the asset is mapped to a valid ComponentName enum value (CoreController, Webhook, CertController, or BitwardenSDKServer)", assetName)
+	componentName, err := getComponentNameFromAsset(assetName)
+	if err != nil {
 		r.log.Error(err, "failed to apply revision history limit due to unrecognized asset name", "assetName", assetName, "deployment", deployment.GetName())
 		return err
 	}
 
-	// Find matching component config
 	for _, i := range esc.Spec.ControllerConfig.ComponentConfigs {
 		if i.ComponentName == componentName {
 			// Apply RevisionHistoryLimit if set
@@ -695,17 +690,17 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 }
 
 // getComponentNameFromAsset maps asset file names to ComponentName enum values.
-func getComponentNameFromAsset(assetName string) operatorv1alpha1.ComponentName {
+func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName, error) {
 	switch assetName {
 	case controllerDeploymentAssetName:
-		return operatorv1alpha1.CoreController
+		return operatorv1alpha1.CoreController, nil
 	case webhookDeploymentAssetName:
-		return operatorv1alpha1.Webhook
+		return operatorv1alpha1.Webhook, nil
 	case certControllerDeploymentAssetName:
-		return operatorv1alpha1.CertController
+		return operatorv1alpha1.CertController, nil
 	case bitwardenDeploymentAssetName:
-		return operatorv1alpha1.BitwardenSDKServer
+		return operatorv1alpha1.BitwardenSDKServer, nil
 	default:
-		return ""
+		return "", fmt.Errorf("invalid or unknown deployment asset name %q: ensure the asset is mapped to a valid ComponentName enum value (CoreController, Webhook, CertController, or BitwardenSDKServer)", assetName)
 	}
 }

@@ -3,6 +3,7 @@ package external_secrets
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -571,7 +572,6 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
 					switch o := obj.(type) {
 					case *appsv1.Deployment:
-						// Only capture the controller deployment to validate our config
 						if o.Name == "external-secrets" {
 							*capturedDeployment = o.DeepCopy()
 						}
@@ -602,6 +602,108 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				}
 				if *deployment.Spec.RevisionHistoryLimit != 5 {
 					t.Errorf("revisionHistoryLimit = %d, want 5", *deployment.Spec.RevisionHistoryLimit)
+				}
+			},
+		},
+		{
+			name: "deployment without revisionHistoryLimit should use default",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						if o.Name == "external-secrets" {
+							*capturedDeployment = o.DeepCopy()
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+				// ComponentConfigs set but without RevisionHistoryLimit
+				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
+					{
+						ComponentName:     v1alpha1.CoreController,
+						DeploymentConfigs: v1alpha1.DeploymentConfig{},
+					},
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+				// Should have the default value from the asset (10)
+				if deployment.Spec.RevisionHistoryLimit == nil {
+					t.Error("revisionHistoryLimit should have default value from asset")
+					return
+				}
+				if *deployment.Spec.RevisionHistoryLimit != 10 {
+					t.Errorf("revisionHistoryLimit = %d, want 10 (default from asset)", *deployment.Spec.RevisionHistoryLimit)
+				}
+			},
+		},
+		{
+			name: "multiple components with mixed revisionHistoryLimit configurations",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				capturedDeployments := make(map[string]*appsv1.Deployment)
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						capturedDeployments[o.Name] = o.DeepCopy()
+						// Assign the webhook deployment for validation
+						if o.Name == "external-secrets-webhook" {
+							*capturedDeployment = o.DeepCopy()
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+				controllerLimit := int32(3)
+				webhookLimit := int32(7)
+				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
+					{
+						ComponentName: v1alpha1.CoreController,
+						DeploymentConfigs: v1alpha1.DeploymentConfig{
+							RevisionHistoryLimit: &controllerLimit,
+						},
+					},
+					{
+						ComponentName: v1alpha1.Webhook,
+						DeploymentConfigs: v1alpha1.DeploymentConfig{
+							RevisionHistoryLimit: &webhookLimit,
+						},
+					},
+					{
+						// CertController without RevisionHistoryLimit - should use default
+						ComponentName:     v1alpha1.CertController,
+						DeploymentConfigs: v1alpha1.DeploymentConfig{},
+					},
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("webhook deployment should not be nil")
+					return
+				}
+				if deployment.Name != "external-secrets-webhook" {
+					t.Errorf("expected webhook deployment, got %s", deployment.Name)
+					return
+				}
+				if deployment.Spec.RevisionHistoryLimit == nil {
+					t.Error("webhook revisionHistoryLimit should be set")
+					return
+				}
+				if *deployment.Spec.RevisionHistoryLimit != 7 {
+					t.Errorf("webhook revisionHistoryLimit = %d, want 7", *deployment.Spec.RevisionHistoryLimit)
 				}
 			},
 		},
@@ -1268,4 +1370,87 @@ func filterNonTrustedCAMounts(volumeMounts []corev1.VolumeMount) []corev1.Volume
 		}
 	}
 	return nonTrustedCAMounts
+}
+
+func TestGetComponentNameFromAsset(t *testing.T) {
+	tests := []struct {
+		name          string
+		assetName     string
+		wantComponent v1alpha1.ComponentName
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name:          "valid controller deployment asset",
+			assetName:     controllerDeploymentAssetName,
+			wantComponent: v1alpha1.CoreController,
+			wantErr:       false,
+		},
+		{
+			name:          "valid webhook deployment asset",
+			assetName:     webhookDeploymentAssetName,
+			wantComponent: v1alpha1.Webhook,
+			wantErr:       false,
+		},
+		{
+			name:          "valid cert controller deployment asset",
+			assetName:     certControllerDeploymentAssetName,
+			wantComponent: v1alpha1.CertController,
+			wantErr:       false,
+		},
+		{
+			name:          "valid bitwarden deployment asset",
+			assetName:     bitwardenDeploymentAssetName,
+			wantComponent: v1alpha1.BitwardenSDKServer,
+			wantErr:       false,
+		},
+		{
+			name:          "invalid asset name returns error",
+			assetName:     "invalid-asset-name.yml",
+			wantComponent: "",
+			wantErr:       true,
+			errContains:   "invalid or unknown deployment asset name",
+		},
+		{
+			name:          "empty asset name returns error",
+			assetName:     "",
+			wantComponent: "",
+			wantErr:       true,
+			errContains:   "invalid or unknown deployment asset name",
+		},
+		{
+			name:          "random string returns error",
+			assetName:     "some-random-deployment.yml",
+			wantComponent: "",
+			wantErr:       true,
+			errContains:   "ensure the asset is mapped to a valid ComponentName",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotComponent, err := getComponentNameFromAsset(tt.assetName)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("getComponentNameFromAsset() expected error but got none")
+					return
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("getComponentNameFromAsset() error = %v, should contain %q", err, tt.errContains)
+				}
+				if gotComponent != "" {
+					t.Errorf("getComponentNameFromAsset() on error should return empty component, got %v", gotComponent)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("getComponentNameFromAsset() unexpected error = %v", err)
+					return
+				}
+				if gotComponent != tt.wantComponent {
+					t.Errorf("getComponentNameFromAsset() = %v, want %v", gotComponent, tt.wantComponent)
+				}
+			}
+		})
+	}
 }
