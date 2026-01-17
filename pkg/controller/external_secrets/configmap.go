@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,12 +81,10 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 	return nil
 }
 
-// getTrustedCABundleLabels merges resource labels with the injection label
+// getTrustedCABundleLabels merges resource labels with the injection label.
 func getTrustedCABundleLabels(resourceLabels map[string]string) map[string]string {
 	labels := make(map[string]string)
-	for k, v := range resourceLabels {
-		labels[k] = v
-	}
+	maps.Copy(labels, resourceLabels)
 	labels[trustedCABundleInjectLabel] = "true"
 	return labels
 }

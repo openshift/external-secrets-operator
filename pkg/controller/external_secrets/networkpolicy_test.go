@@ -17,7 +17,7 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
-// staticNetworkPolicies returns a map of all static network policy names to their asset paths
+// staticNetworkPolicies returns a map of all static network policy names to their asset paths.
 func staticNetworkPolicies() map[string]string {
 	return map[string]string{
 		"deny-all-traffic": denyAllNetworkPolicyAssetName,

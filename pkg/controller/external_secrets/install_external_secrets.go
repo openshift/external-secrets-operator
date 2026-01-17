@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,9 +49,7 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 			resourceLabels[k] = v
 		}
 	}
-	for k, v := range controllerDefaultResourceLabels {
-		resourceLabels[k] = v
-	}
+	maps.Copy(resourceLabels, controllerDefaultResourceLabels)
 
 	if err := r.createOrApplyNamespace(esc, resourceLabels); err != nil {
 		r.log.Error(err, "failed to create namespace")

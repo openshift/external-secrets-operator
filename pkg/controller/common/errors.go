@@ -46,7 +46,8 @@ func NewRetryRequiredError(err error, message string, args ...any) *ReconcileErr
 }
 
 func IsIrrecoverableError(err error) bool {
-	if rerr, ok := err.(*ReconcileError); ok || errors.As(err, &rerr) {
+	rerr := &ReconcileError{}
+	if errors.As(err, &rerr) {
 		return rerr.Reason == IrrecoverableError
 	}
 	return false

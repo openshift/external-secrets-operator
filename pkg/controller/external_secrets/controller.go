@@ -81,9 +81,10 @@ var (
 	}
 )
 
-// Reconciler reconciles a ExternalSecretsConfig object
+// Reconciler reconciles a ExternalSecretsConfig object.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	UncachedClient        operatorclient.CtrlClient
 	Scheme                *runtime.Scheme
 	ctx                   context.Context

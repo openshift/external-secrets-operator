@@ -57,6 +57,7 @@ var (
 // Reconciler reconciles externalsecretsmanagers.operator.openshift.io CR.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	Scheme        *runtime.Scheme
 	ctx           context.Context
 	eventRecorder record.EventRecorder

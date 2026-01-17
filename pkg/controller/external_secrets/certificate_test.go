@@ -486,7 +486,7 @@ func testExternalSecretsConfigForCertificate() *v1alpha1.ExternalSecretsConfig {
 	return esc
 }
 
-// testIssuer creates a dummy cert-manager Issuer for testing
+// testIssuer creates a dummy cert-manager Issuer for testing.
 func testIssuer() *certmanagerv1.Issuer {
 	return &certmanagerv1.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -501,7 +501,7 @@ func testIssuer() *certmanagerv1.Issuer {
 	}
 }
 
-// testClusterIssuer creates a dummy cert-manager ClusterIssuer for testing
+// testClusterIssuer creates a dummy cert-manager ClusterIssuer for testing.
 func testClusterIssuer() *certmanagerv1.ClusterIssuer {
 	return &certmanagerv1.ClusterIssuer{
 		ObjectMeta: metav1.ObjectMeta{

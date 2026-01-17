@@ -47,7 +47,6 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if _, found := expectedSAMap[sa.Name]; found {
-
 							return nil
 						}
 						return fmt.Errorf("unexpected ServiceAccount created: %s", sa.Name)

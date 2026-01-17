@@ -53,7 +53,6 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "secret resource %s created", secretName)
 	}
 	return nil
-
 }
 
 func (r *Reconciler) getSecretObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) (*corev1.Secret, error) {

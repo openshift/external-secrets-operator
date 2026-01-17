@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,7 @@ var (
 // support reset.
 type Now struct {
 	sync.Mutex
+
 	done atomic.Uint32
 }
 
@@ -65,9 +67,7 @@ func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 	if l == nil {
 		l = make(map[string]string, len(labels))
 	}
-	for k, v := range labels {
-		l[k] = v
-	}
+	maps.Copy(l, labels)
 	obj.SetLabels(l)
 }
 
