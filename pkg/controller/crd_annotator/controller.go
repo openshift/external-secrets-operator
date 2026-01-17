@@ -69,8 +69,8 @@ type Reconciler struct {
 	log logr.Logger
 }
 
-func NewClient(m manager.Manager) (operatorclient.CtrlClient, error) {
-	c, err := BuildCustomClient(m)
+func NewClient(ctx context.Context, m manager.Manager) (operatorclient.CtrlClient, error) {
+	c, err := BuildCustomClient(ctx, m)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build custom client: %w", err)
 	}
@@ -80,12 +80,12 @@ func NewClient(m manager.Manager) (operatorclient.CtrlClient, error) {
 }
 
 // New is for building the reconciler instance consumed by the Reconcile method.
-func New(mgr ctrl.Manager) (*Reconciler, error) {
+func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 	r := &Reconciler{
 		ctx: context.Background(),
 		log: ctrl.Log.WithName(ControllerName),
 	}
-	c, err := NewClient(mgr)
+	c, err := NewClient(ctx, mgr)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func New(mgr ctrl.Manager) (*Reconciler, error) {
 
 // BuildCustomClient creates a custom client with a custom cache of required objects.
 // The corresponding informers receive events for objects matching label criteria.
-func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
+func BuildCustomClient(ctx context.Context, mgr ctrl.Manager) (client.Client, error) {
 	managedResourceLabelReq, _ := labels.NewRequirement(requestEnqueueLabelKey, selection.Equals, []string{requestEnqueueLabelValue})
 	managedResourceLabelReqSelector := labels.NewSelector().Add(*managedResourceLabelReq)
 
@@ -115,10 +115,10 @@ func BuildCustomClient(mgr ctrl.Manager) (client.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to build custom cache: %w", err)
 	}
-	if _, err = customCache.GetInformer(context.Background(), &crdv1.CustomResourceDefinition{}); err != nil {
+	if _, err = customCache.GetInformer(ctx, &crdv1.CustomResourceDefinition{}); err != nil {
 		return nil, err
 	}
-	if _, err = customCache.GetInformer(context.Background(), &operatorv1alpha1.ExternalSecretsConfig{}); err != nil {
+	if _, err = customCache.GetInformer(ctx, &operatorv1alpha1.ExternalSecretsConfig{}); err != nil {
 		return nil, err
 	}
 
@@ -221,12 +221,6 @@ func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecre
 	} else {
 		crd := &crdv1.CustomResourceDefinition{}
 		if err := r.Get(r.ctx, req, crd); err != nil {
-			// NotFound error will be ignored since CRDs are managed by OLM, and OLM will
-			// reconcile it.
-			if errors.IsNotFound(err) {
-				r.log.V(1).Info("crd managed by OLM is not found, skipping reconciliation", "crd", req)
-				return ctrl.Result{}, nil
-			}
 			oErr = fmt.Errorf("failed to fetch customresourcedefinitions.apiextensions.k8s.io %q during reconciliation: %w", req, err)
 		}
 		if err := r.updateAnnotations(crd); err != nil {
@@ -264,7 +258,7 @@ func (r *Reconciler) updateAnnotationsInAllCRDs() error {
 	if err := r.List(r.ctx, managedCRDList, client.MatchingLabels(crdLabelFilter)); err != nil {
 		return fmt.Errorf("failed to list managed CRD resources: %w", err)
 	}
-	if len(managedCRDList.Items) <= 0 {
+	if len(managedCRDList.Items) == 0 {
 		r.log.Info("list query to fetch managed CRD resources returned empty")
 		return nil
 	}

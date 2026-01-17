@@ -79,18 +79,19 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	if exist && externalSecretsConfigCreateRecon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s deployment resource already exists", deploymentName)
 	}
-	if exist && common.HasObjectChanged(deployment, fetched) {
+	switch {
+	case exist && common.HasObjectChanged(deployment, fetched):
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s updated", deploymentName)
-	} else if !exist {
+	case !exist:
 		if err := r.Create(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to create %s deployment resource", deploymentName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s created", deploymentName)
-	} else {
+	default:
 		r.log.V(4).Info("deployment resource already exists and is in expected state", "name", deploymentName)
 	}
 
@@ -178,11 +179,12 @@ func updateContainerSecurityContext(container *corev1.Container) {
 // updateResourceRequirement sets validated resource requirements to all containers.
 func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	rscReqs := corev1.ResourceRequirements{}
-	if esc.Spec.ApplicationConfig.Resources != nil {
+	switch {
+	case esc.Spec.ApplicationConfig.Resources != nil:
 		esc.Spec.ApplicationConfig.Resources.DeepCopyInto(&rscReqs)
-	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil {
+	case r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil:
 		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
-	} else {
+	default:
 		return nil
 	}
 
@@ -443,9 +445,7 @@ func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretN
 func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	proxyConfig := r.getProxyConfiguration(esc)
 
-	if err := r.updateProxyEnvironmentVariables(deployment, proxyConfig); err != nil {
-		return fmt.Errorf("failed to update proxy environment variables: %w", err)
-	}
+	r.updateProxyEnvironmentVariables(deployment, proxyConfig)
 	if err := r.updateTrustedCABundleVolumes(deployment, proxyConfig); err != nil {
 		return fmt.Errorf("failed to update trusted CA bundle volumes: %w", err)
 	}
@@ -454,7 +454,7 @@ func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc
 }
 
 // updateProxyEnvironmentVariables sets or removes proxy environment variables on all containers and init containers in the deployment.
-func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
+func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) {
 	// Apply proxy environment variables to all containers
 	for i := range deployment.Spec.Template.Spec.Containers {
 		container := &deployment.Spec.Template.Spec.Containers[i]
@@ -474,8 +474,6 @@ func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployme
 			r.removeProxyEnvVars(initContainer)
 		}
 	}
-
-	return nil
 }
 
 // setProxyEnvVars sets proxy environment variables on a container.

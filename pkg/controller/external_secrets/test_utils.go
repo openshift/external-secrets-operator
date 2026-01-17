@@ -115,6 +115,8 @@ func testCertificate(assetName string) *certmanagerv1.Certificate {
 }
 
 // testSecret returns Secret object read from provided static asset of same kind.
+//
+//nolint:unparam // assetName kept as parameter for future test scenarios
 func testSecret(assetName string) *corev1.Secret {
 	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(assetName))
 	validateSecret.SetLabels(controllerDefaultResourceLabels)

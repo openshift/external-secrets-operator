@@ -130,12 +130,13 @@ func (r *Reconciler) getProxyConfiguration(esc *operatorv1alpha1.ExternalSecrets
 	var proxyConfig *operatorv1alpha1.ProxyConfig
 
 	// Check ExternalSecretsConfig first
-	if esc.Spec.ApplicationConfig.Proxy != nil {
+	switch {
+	case esc.Spec.ApplicationConfig.Proxy != nil:
 		proxyConfig = esc.Spec.ApplicationConfig.Proxy
-	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Proxy != nil {
+	case r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Proxy != nil:
 		// Check ExternalSecretsManager second
 		proxyConfig = r.esm.Spec.GlobalConfig.Proxy
-	} else {
+	default:
 		// Fall back to OLM environment variables
 		olmHTTPProxy := os.Getenv(httpProxyEnvVar)
 		olmHTTPSProxy := os.Getenv(httpsProxyEnvVar)

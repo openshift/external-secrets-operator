@@ -18,11 +18,7 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 		return nil
 	}
 
-	desired, err := r.getSecretObject(esc, resourceLabels)
-	if err != nil {
-		return fmt.Errorf("failed to generate secret resource for creation: %w", err)
-	}
-
+	desired := r.getSecretObject(esc, resourceLabels)
 	secretName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 	r.log.V(4).Info("reconciling secret resource", "name", secretName)
 	fetched := &corev1.Secret{}
@@ -55,10 +51,10 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-func (r *Reconciler) getSecretObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) (*corev1.Secret, error) {
+func (r *Reconciler) getSecretObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) *corev1.Secret {
 	secret := common.DecodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
 
 	updateNamespace(secret, esc)
 	common.UpdateResourceLabels(secret, resourceLabels)
-	return secret, nil
+	return secret
 }

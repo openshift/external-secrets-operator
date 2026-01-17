@@ -119,8 +119,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			name: "network policy exists and needs update",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *networkingv1.NetworkPolicy:
+					if o, ok := obj.(*networkingv1.NetworkPolicy); ok {
 						np := testNetworkPolicy(denyAllNetworkPolicyAssetName)
 						np.Labels = nil // Simulate outdated policy
 						np.DeepCopyInto(o)
@@ -140,7 +139,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if np, ok := obj.(*networkingv1.NetworkPolicy); ok && np.Name == "deny-all-traffic" {
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
@@ -151,9 +150,8 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			name: "network policy exists check fails",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch obj.(type) {
-					case *networkingv1.NetworkPolicy:
-						return false, commontest.TestClientError
+					if _, ok := obj.(*networkingv1.NetworkPolicy); ok {
+						return false, commontest.ErrTestClient
 					}
 					return true, nil
 				})
@@ -164,8 +162,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			name: "network policy update fails",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *networkingv1.NetworkPolicy:
+					if o, ok := obj.(*networkingv1.NetworkPolicy); ok {
 						np := testNetworkPolicy(denyAllNetworkPolicyAssetName)
 						np.Labels = nil // Force update
 						np.DeepCopyInto(o)
@@ -174,7 +171,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 				})
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					if _, ok := obj.(*networkingv1.NetworkPolicy); ok {
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
@@ -282,7 +279,7 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if _, ok := obj.(*networkingv1.NetworkPolicy); ok {
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
@@ -302,8 +299,7 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 			name: "custom network policy updated successfully",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *networkingv1.NetworkPolicy:
+					if o, ok := obj.(*networkingv1.NetworkPolicy); ok {
 						np := &networkingv1.NetworkPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "test-update-policy",
@@ -384,7 +380,7 @@ func TestGetPodSelectorForComponent(t *testing.T) {
 			name:          "BitwardenSDKServer component",
 			componentName: operatorv1alpha1.BitwardenSDKServer,
 			wantLabels: map[string]string{
-				"app.kubernetes.io/name": "bitwarden-sdk-server",
+				"app.kubernetes.io/name": bitwardenSDKServerContainerName,
 			},
 			wantErr: false,
 		},
@@ -404,17 +400,19 @@ func TestGetPodSelectorForComponent(t *testing.T) {
 				if err == nil {
 					t.Errorf("Expected error but got none")
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-				if len(selector.MatchLabels) != len(tt.wantLabels) {
-					t.Errorf("Expected %d labels, got %d", len(tt.wantLabels), len(selector.MatchLabels))
-				}
-				for k, v := range tt.wantLabels {
-					if selector.MatchLabels[k] != v {
-						t.Errorf("Expected label %s=%s, got %s", k, v, selector.MatchLabels[k])
-					}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if len(selector.MatchLabels) != len(tt.wantLabels) {
+				t.Errorf("Expected %d labels, got %d", len(tt.wantLabels), len(selector.MatchLabels))
+			}
+			for k, v := range tt.wantLabels {
+				if selector.MatchLabels[k] != v {
+					t.Errorf("Expected label %s=%s, got %s", k, v, selector.MatchLabels[k])
 				}
 			}
 		})
@@ -447,7 +445,7 @@ func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 			wantErr: false,
 			wantPolicy: func(np *networkingv1.NetworkPolicy) bool {
 				return np.Name == "test-core-policy" &&
-					np.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] == "external-secrets" &&
+					np.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] == externalsecretsCommonName &&
 					len(np.Spec.Egress) == 1 &&
 					len(np.Spec.PolicyTypes) == 1 &&
 					np.Spec.PolicyTypes[0] == networkingv1.PolicyTypeEgress
@@ -463,7 +461,7 @@ func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 			wantErr: false,
 			wantPolicy: func(np *networkingv1.NetworkPolicy) bool {
 				return np.Name == "test-bitwarden-policy" &&
-					np.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] == "bitwarden-sdk-server"
+					np.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] == bitwardenSDKServerContainerName
 			},
 		},
 		{

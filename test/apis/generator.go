@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck // ST1001 dot imports are idiomatic for Ginkgo
+	. "github.com/onsi/gomega"    //nolint:staticcheck // ST1001 dot imports are idiomatic for Gomega
 	yamlpatch "github.com/vmware-archive/yaml-patch"
 
 	"github.com/ghodss/yaml"
@@ -44,7 +44,7 @@ func LoadTestSuiteSpecs(paths ...string) ([]SuiteSpec, error) {
 		}
 	}
 
-	var out []SuiteSpec
+	out := make([]SuiteSpec, 0, len(suiteFiles))
 	for path := range suiteFiles {
 		suite, err := loadSuiteFile(path)
 		if err != nil {
@@ -365,7 +365,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 // newUnstructuredsFor creates a set of unstructured resources for each version of the CRD.
 // This allows us to ensure all CR instances are deleted after each test.
 func newUnstructuredsFor(crd *apiextensionsv1.CustomResourceDefinition) []*unstructured.Unstructured {
-	var out []*unstructured.Unstructured
+	out := make([]*unstructured.Unstructured, 0, len(crd.Spec.Versions))
 
 	for _, version := range crd.Spec.Versions {
 		out = append(out, newUnstructuredsForVersion(crd, version.Name))
@@ -448,8 +448,7 @@ func loadVersionedCRD(suiteSpec SuiteSpec, crdFilename string) (*apiextensionsv1
 		return crd, nil
 	}
 
-	var crdVersions []apiextensionsv1.CustomResourceDefinitionVersion
-
+	crdVersions := make([]apiextensionsv1.CustomResourceDefinitionVersion, 0, len(crd.Spec.Versions))
 	for _, version := range crd.Spec.Versions {
 		if version.Name != suiteSpec.Version {
 			continue

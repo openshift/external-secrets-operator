@@ -23,6 +23,10 @@ var (
 	testValidateCertificateResourceName = "external-secrets-webhook"
 )
 
+const (
+	testIssuerName = "test-issuer"
+)
+
 func TestCreateOrApplyCertificates(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -83,7 +87,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
 				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = ""
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = "Issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = issuerKind
 			},
 			recon:   false,
 			wantErr: fmt.Sprintf("failed to update certificate resource for %s/%s deployment: cert-manager.issuerRef.name is not configured", commontest.TestExternalSecretsNamespace, testExternalSecretsConfigForCertificate().GetName()),
@@ -93,15 +97,15 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
-						return false, commontest.TestClientError
+						return false, commontest.ErrTestClient
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
-					if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+					if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 						if u, ok := obj.(*unstructured.Unstructured); ok {
 							issuer := testIssuer()
 							unstructuredIssuer, err := runtime.DefaultUnstructuredConverter.ToUnstructured(issuer)
@@ -121,10 +125,10 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to check %s/%s certificate resource already exists: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to check %s/%s certificate resource already exists: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "reconciliation of webhook certificate fails while restoring to expected state",
@@ -139,9 +143,9 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 							return nil
 						}
 					case *unstructured.Unstructured:
-						if ns.Name == "test-issuer" && (o.GetKind() == "Issuer" || o.GetKind() == "ClusterIssuer") {
+						if ns.Name == testIssuerName && (o.GetKind() == issuerKind || o.GetKind() == clusterIssuerKind) {
 							var issuer client.Object
-							if o.GetKind() == "Issuer" {
+							if o.GetKind() == issuerKind {
 								issuer = testIssuer()
 							} else {
 								issuer = testClusterIssuer()
@@ -160,24 +164,24 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return true, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
 				})
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 					if obj.GetName() == serviceExternalSecretWebhookName {
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to update %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to update %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "reconciliation of webhook certificate which already exists in expected state",
@@ -187,15 +191,15 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					case *certmanagerv1.Certificate:
 						if ns.Name == serviceExternalSecretWebhookName {
 							esc := testExternalSecretsConfigForCertificate()
-							esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+							esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 							desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 							desiredCert.DeepCopyInto(o)
 							return nil
 						}
 					case *unstructured.Unstructured:
-						if ns.Name == "test-issuer" && (o.GetKind() == "Issuer" || o.GetKind() == "ClusterIssuer") {
+						if ns.Name == testIssuerName && (o.GetKind() == issuerKind || o.GetKind() == clusterIssuerKind) {
 							var issuer client.Object
-							if o.GetKind() == "Issuer" {
+							if o.GetKind() == issuerKind {
 								issuer = testIssuer()
 							} else {
 								issuer = testClusterIssuer()
@@ -214,7 +218,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return true, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
@@ -229,7 +233,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 			},
 			recon: false,
 		},
@@ -240,19 +244,19 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if obj.GetName() == serviceExternalSecretWebhookName {
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
-					if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+					if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
 						return nil
 					}
@@ -261,10 +265,10 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to create %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to create %s/%s certificate resource: %s", commontest.TestExternalSecretsNamespace, testValidateCertificateResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "successful webhook certificate creation",
@@ -273,7 +277,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						return false, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
@@ -286,7 +290,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
-					if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+					if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
 						return nil
 					}
@@ -295,7 +299,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 			},
 			recon: false,
 		},
@@ -305,12 +309,12 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						esc := testExternalSecretsConfigForCertificate()
-						esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+						esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 						desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 						desiredCert.DeepCopyInto(obj.(*certmanagerv1.Certificate))
 						return true, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
@@ -323,7 +327,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 							return nil
 						}
 					case *certmanagerv1.Issuer:
-						if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+						if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 							testIssuer().DeepCopyInto(o)
 							return nil
 						}
@@ -341,7 +345,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 				esc.Spec.Plugins.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
 					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
@@ -358,12 +362,12 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if ns.Name == serviceExternalSecretWebhookName {
 						esc := testExternalSecretsConfigForCertificate()
-						esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+						esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 						desiredCert, _ := r.getCertificateObject(esc, controllerDefaultResourceLabels, webhookCertificateAssetName)
 						desiredCert.DeepCopyInto(obj.(*certmanagerv1.Certificate))
 						return true, nil
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
@@ -372,10 +376,10 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					switch o := obj.(type) {
 					case *corev1.Secret:
 						if ns.Name == "bitwarden-secret" && ns.Namespace == commontest.TestExternalSecretsNamespace {
-							return commontest.TestClientError
+							return commontest.ErrTestClient
 						}
 					case *certmanagerv1.Issuer:
-						if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+						if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 							testIssuer().DeepCopyInto(o)
 							return nil
 						}
@@ -389,7 +393,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 				esc.Spec.Plugins.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
 					SecretRef: &v1alpha1.SecretReference{
 						Name: "bitwarden-secret",
@@ -398,7 +402,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 				}
 			},
 			recon:   false,
-			wantErr: fmt.Sprintf("failed to fetch %q secret: %s", types.NamespacedName{Name: "bitwarden-secret", Namespace: commontest.TestExternalSecretsNamespace}, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to fetch %q secret: %s", types.NamespacedName{Name: "bitwarden-secret", Namespace: commontest.TestExternalSecretsNamespace}, commontest.ErrTestClient),
 		},
 		{
 			name: "bitwarden disabled (explicitly nil): only webhook certificate reconciled",
@@ -410,7 +414,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					if ns.Name == "bitwarden-sdk-server" {
 						t.Errorf("Should not check for bitwarden-sdk-server certificate when Bitwarden config is nil")
 					}
-					if ns.Name == "test-issuer" {
+					if ns.Name == testIssuerName {
 						return true, nil
 					}
 					return false, nil
@@ -427,7 +431,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 					return nil
 				})
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
-					if ns.Name == "test-issuer" && ns.Namespace == commontest.TestExternalSecretsNamespace {
+					if ns.Name == testIssuerName && ns.Namespace == commontest.TestExternalSecretsNamespace {
 						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
 						return nil
 					}
@@ -436,7 +440,7 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
-				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
 				esc.Spec.Plugins.BitwardenSecretManagerProvider = nil
 			},
 			recon: false,
@@ -490,7 +494,7 @@ func testExternalSecretsConfigForCertificate() *v1alpha1.ExternalSecretsConfig {
 func testIssuer() *certmanagerv1.Issuer {
 	return &certmanagerv1.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-issuer",
+			Name:      testIssuerName,
 			Namespace: commontest.TestExternalSecretsNamespace,
 		},
 		Spec: certmanagerv1.IssuerSpec{
@@ -505,7 +509,7 @@ func testIssuer() *certmanagerv1.Issuer {
 func testClusterIssuer() *certmanagerv1.ClusterIssuer {
 	return &certmanagerv1.ClusterIssuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-issuer",
+			Name: testIssuerName,
 		},
 		Spec: certmanagerv1.IssuerSpec{
 			IssuerConfig: certmanagerv1.IssuerConfig{

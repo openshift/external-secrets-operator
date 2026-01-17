@@ -76,7 +76,11 @@ func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*certmanagerv1.Certificate)
+	result, ok := obj.(*certmanagerv1.Certificate)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a Certificate: %T", obj))
+	}
+	return result
 }
 
 func DecodeClusterRoleObjBytes(objBytes []byte) *rbacv1.ClusterRole {
@@ -84,7 +88,11 @@ func DecodeClusterRoleObjBytes(objBytes []byte) *rbacv1.ClusterRole {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*rbacv1.ClusterRole)
+	result, ok := obj.(*rbacv1.ClusterRole)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a ClusterRole: %T", obj))
+	}
+	return result
 }
 
 func DecodeClusterRoleBindingObjBytes(objBytes []byte) *rbacv1.ClusterRoleBinding {
@@ -92,7 +100,11 @@ func DecodeClusterRoleBindingObjBytes(objBytes []byte) *rbacv1.ClusterRoleBindin
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*rbacv1.ClusterRoleBinding)
+	result, ok := obj.(*rbacv1.ClusterRoleBinding)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a ClusterRoleBinding: %T", obj))
+	}
+	return result
 }
 
 func DecodeDeploymentObjBytes(objBytes []byte) *appsv1.Deployment {
@@ -100,7 +112,11 @@ func DecodeDeploymentObjBytes(objBytes []byte) *appsv1.Deployment {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*appsv1.Deployment)
+	result, ok := obj.(*appsv1.Deployment)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a Deployment: %T", obj))
+	}
+	return result
 }
 
 func DecodeRoleObjBytes(objBytes []byte) *rbacv1.Role {
@@ -108,7 +124,11 @@ func DecodeRoleObjBytes(objBytes []byte) *rbacv1.Role {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*rbacv1.Role)
+	result, ok := obj.(*rbacv1.Role)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a Role: %T", obj))
+	}
+	return result
 }
 
 func DecodeRoleBindingObjBytes(objBytes []byte) *rbacv1.RoleBinding {
@@ -116,7 +136,11 @@ func DecodeRoleBindingObjBytes(objBytes []byte) *rbacv1.RoleBinding {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*rbacv1.RoleBinding)
+	result, ok := obj.(*rbacv1.RoleBinding)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a RoleBinding: %T", obj))
+	}
+	return result
 }
 
 func DecodeSecretObjBytes(objBytes []byte) *corev1.Secret {
@@ -124,7 +148,11 @@ func DecodeSecretObjBytes(objBytes []byte) *corev1.Secret {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*corev1.Secret)
+	result, ok := obj.(*corev1.Secret)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a Secret: %T", obj))
+	}
+	return result
 }
 
 func DecodeServiceObjBytes(objBytes []byte) *corev1.Service {
@@ -132,7 +160,11 @@ func DecodeServiceObjBytes(objBytes []byte) *corev1.Service {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*corev1.Service)
+	result, ok := obj.(*corev1.Service)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a Service: %T", obj))
+	}
+	return result
 }
 
 func DecodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
@@ -140,7 +172,11 @@ func DecodeServiceAccountObjBytes(objBytes []byte) *corev1.ServiceAccount {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*corev1.ServiceAccount)
+	result, ok := obj.(*corev1.ServiceAccount)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a ServiceAccount: %T", obj))
+	}
+	return result
 }
 
 func DecodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.ValidatingWebhookConfiguration {
@@ -148,7 +184,11 @@ func DecodeValidatingWebhookConfigurationObjBytes(objBytes []byte) *webhook.Vali
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*webhook.ValidatingWebhookConfiguration)
+	result, ok := obj.(*webhook.ValidatingWebhookConfiguration)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a ValidatingWebhookConfiguration: %T", obj))
+	}
+	return result
 }
 
 func DecodeNetworkPolicyObjBytes(objBytes []byte) *networkingv1.NetworkPolicy {
@@ -156,7 +196,11 @@ func DecodeNetworkPolicyObjBytes(objBytes []byte) *networkingv1.NetworkPolicy {
 	if err != nil {
 		panic(err)
 	}
-	return obj.(*networkingv1.NetworkPolicy)
+	result, ok := obj.(*networkingv1.NetworkPolicy)
+	if !ok {
+		panic(fmt.Sprintf("decoded object is not a NetworkPolicy: %T", obj))
+	}
+	return result
 }
 
 func HasObjectChanged(desired, fetched client.Object) bool {
@@ -165,27 +209,37 @@ func HasObjectChanged(desired, fetched client.Object) bool {
 	}
 
 	var objectModified bool
-	switch desired.(type) {
+	//nolint:forcetypeassert // Type assertion for fetched is safe - type equality checked the first before switch.
+	switch d := desired.(type) {
 	case *certmanagerv1.Certificate:
-		objectModified = certificateSpecModified(desired.(*certmanagerv1.Certificate), fetched.(*certmanagerv1.Certificate))
+		f := fetched.(*certmanagerv1.Certificate)
+		objectModified = certificateSpecModified(d, f)
 	case *rbacv1.ClusterRole:
-		objectModified = rbacRoleRulesModified[*rbacv1.ClusterRole](desired.(*rbacv1.ClusterRole), fetched.(*rbacv1.ClusterRole))
+		f := fetched.(*rbacv1.ClusterRole)
+		objectModified = rbacRoleRulesModified[*rbacv1.ClusterRole](d, f)
 	case *rbacv1.ClusterRoleBinding:
-		objectModified = rbacRoleBindingRefModified[*rbacv1.ClusterRoleBinding](desired.(*rbacv1.ClusterRoleBinding), fetched.(*rbacv1.ClusterRoleBinding)) ||
-			rbacRoleBindingSubjectsModified[*rbacv1.ClusterRoleBinding](desired.(*rbacv1.ClusterRoleBinding), fetched.(*rbacv1.ClusterRoleBinding))
+		f := fetched.(*rbacv1.ClusterRoleBinding)
+		objectModified = rbacRoleBindingRefModified[*rbacv1.ClusterRoleBinding](d, f) ||
+			rbacRoleBindingSubjectsModified[*rbacv1.ClusterRoleBinding](d, f)
 	case *appsv1.Deployment:
-		objectModified = deploymentSpecModified(desired.(*appsv1.Deployment), fetched.(*appsv1.Deployment))
+		f := fetched.(*appsv1.Deployment)
+		objectModified = deploymentSpecModified(d, f)
 	case *rbacv1.Role:
-		objectModified = rbacRoleRulesModified[*rbacv1.Role](desired.(*rbacv1.Role), fetched.(*rbacv1.Role))
+		f := fetched.(*rbacv1.Role)
+		objectModified = rbacRoleRulesModified[*rbacv1.Role](d, f)
 	case *rbacv1.RoleBinding:
-		objectModified = rbacRoleBindingRefModified[*rbacv1.RoleBinding](desired.(*rbacv1.RoleBinding), fetched.(*rbacv1.RoleBinding)) ||
-			rbacRoleBindingSubjectsModified[*rbacv1.RoleBinding](desired.(*rbacv1.RoleBinding), fetched.(*rbacv1.RoleBinding))
+		f := fetched.(*rbacv1.RoleBinding)
+		objectModified = rbacRoleBindingRefModified[*rbacv1.RoleBinding](d, f) ||
+			rbacRoleBindingSubjectsModified[*rbacv1.RoleBinding](d, f)
 	case *corev1.Service:
-		objectModified = serviceSpecModified(desired.(*corev1.Service), fetched.(*corev1.Service))
+		f := fetched.(*corev1.Service)
+		objectModified = serviceSpecModified(d, f)
 	case *networkingv1.NetworkPolicy:
-		objectModified = networkPolicySpecModified(desired.(*networkingv1.NetworkPolicy), fetched.(*networkingv1.NetworkPolicy))
+		f := fetched.(*networkingv1.NetworkPolicy)
+		objectModified = networkPolicySpecModified(d, f)
 	case *webhook.ValidatingWebhookConfiguration:
-		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
+		f := fetched.(*webhook.ValidatingWebhookConfiguration)
+		objectModified = validatingWebHookSpecModified(d, f)
 	default:
 		panic(fmt.Sprintf("unsupported object type: %T", desired))
 	}
@@ -422,35 +476,38 @@ func networkPolicySpecModified(desired, fetched *networkingv1.NetworkPolicy) boo
 }
 
 func rbacRoleRulesModified[Object *rbacv1.Role | *rbacv1.ClusterRole](desired, fetched Object) bool {
-	switch typ := any(desired).(type) {
+	//nolint:forcetypeassert // Type assertion is safe - generic constraint guarantees type match
+	switch any(desired).(type) {
 	case *rbacv1.ClusterRole:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.ClusterRole).Rules, any(fetched).(*rbacv1.ClusterRole).Rules)
 	case *rbacv1.Role:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.Role).Rules, any(fetched).(*rbacv1.Role).Rules)
 	default:
-		panic(fmt.Sprintf("unsupported object type %v", typ))
+		panic(fmt.Sprintf("unsupported object type %T", desired))
 	}
 }
 
 func rbacRoleBindingRefModified[Object *rbacv1.RoleBinding | *rbacv1.ClusterRoleBinding](desired, fetched Object) bool {
-	switch typ := any(desired).(type) {
+	//nolint:forcetypeassert // Type assertion is safe - generic constraint guarantees type match
+	switch any(desired).(type) {
 	case *rbacv1.ClusterRoleBinding:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.ClusterRoleBinding).RoleRef, any(fetched).(*rbacv1.ClusterRoleBinding).RoleRef)
 	case *rbacv1.RoleBinding:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.RoleBinding).RoleRef, any(fetched).(*rbacv1.RoleBinding).RoleRef)
 	default:
-		panic(fmt.Sprintf("unsupported object type %v", typ))
+		panic(fmt.Sprintf("unsupported object type %T", desired))
 	}
 }
 
 func rbacRoleBindingSubjectsModified[Object *rbacv1.RoleBinding | *rbacv1.ClusterRoleBinding](desired, fetched Object) bool {
-	switch typ := any(desired).(type) {
+	//nolint:forcetypeassert // Type assertion is safe - generic constraint guarantees type match
+	switch any(desired).(type) {
 	case *rbacv1.ClusterRoleBinding:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.ClusterRoleBinding).Subjects, any(fetched).(*rbacv1.ClusterRoleBinding).Subjects)
 	case *rbacv1.RoleBinding:
 		return !reflect.DeepEqual(any(desired).(*rbacv1.RoleBinding).Subjects, any(fetched).(*rbacv1.RoleBinding).Subjects)
 	default:
-		panic(fmt.Sprintf("unsupported object type %v", typ))
+		panic(fmt.Sprintf("unsupported object type %T", desired))
 	}
 }
 

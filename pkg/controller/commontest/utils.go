@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	// TestClientError is the error to return for client failure scenarios.
-	TestClientError = fmt.Errorf("test client error")
+	// ErrTestClient is the error to return for client failure scenarios.
+	ErrTestClient = fmt.Errorf("test client error")
 )
 
 // TestExternalSecretsConfig returns a sample ExternalSecretsConfig object.

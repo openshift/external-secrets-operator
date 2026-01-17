@@ -64,7 +64,10 @@ func (c *CtrlClientImpl) UpdateWithRetry(
 ) error {
 	key := client.ObjectKeyFromObject(obj)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		current := reflect.New(reflect.TypeOf(obj).Elem()).Interface().(client.Object)
+		current, ok := reflect.New(reflect.TypeOf(obj).Elem()).Interface().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to create new instance of %T: type does not implement client.Object", obj)
+		}
 		if err := c.Client.Get(ctx, key, current); err != nil {
 			return fmt.Errorf("failed to fetch latest %q for update: %w", key, err)
 		}

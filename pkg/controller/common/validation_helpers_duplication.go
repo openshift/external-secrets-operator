@@ -15,7 +15,7 @@ import (
  * TODO: Remove this source file when validateAffinity method is made public.
  */
 
-// validateAffinity checks if given affinities are valid.
+// ValidateAffinity checks if given affinities are valid.
 func ValidateAffinity(affinity *core.Affinity, opts corevalidation.PodValidationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 

@@ -60,8 +60,7 @@ func TestReconcile(t *testing.T) {
 			name: "esm reconciliation successful",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, option ...client.UpdateOption) error {
-					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecretsManager:
+					if o, ok := obj.(*operatorv1alpha1.ExternalSecretsManager); ok {
 						o.DeepCopyInto(esm)
 					}
 					return nil
@@ -126,8 +125,7 @@ func TestReconcile(t *testing.T) {
 			name: "esm object not found",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
-					switch obj.(type) {
-					case *operatorv1alpha1.ExternalSecretsManager:
+					if _, ok := obj.(*operatorv1alpha1.ExternalSecretsManager); ok {
 						return errors.NewNotFound(operatorv1alpha1.Resource("externalsecretsmanagers"), ns.Name)
 					}
 					return nil
@@ -183,15 +181,13 @@ func TestReconcile(t *testing.T) {
 			name: "esm reconciliation successful with new conditions",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, option ...client.UpdateOption) error {
-					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecretsManager:
+					if o, ok := obj.(*operatorv1alpha1.ExternalSecretsManager); ok {
 						o.DeepCopyInto(esm)
 					}
 					return nil
 				})
 				m.StatusUpdateCalls(func(ctx context.Context, obj client.Object, option ...client.SubResourceUpdateOption) error {
-					switch o := obj.(type) {
-					case *operatorv1alpha1.ExternalSecretsManager:
+					if o, ok := obj.(*operatorv1alpha1.ExternalSecretsManager); ok {
 						o.DeepCopyInto(esm)
 					}
 					return nil

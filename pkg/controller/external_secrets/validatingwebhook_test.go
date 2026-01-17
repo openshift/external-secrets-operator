@@ -28,8 +28,7 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 			name: "validatingWebhookConfiguration reconciliation successful",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *webhook.ValidatingWebhookConfiguration:
+					if o, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
 						webhookConfig := testValidatingWebhookConfiguration(validatingWebhookExternalSecretCRDAssetName)
 						webhookConfig.DeepCopyInto(o)
 					}
@@ -41,28 +40,25 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 			name: "validatingWebhookConfiguration reconciliation fails while checking if exists",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch obj.(type) {
-					case *webhook.ValidatingWebhookConfiguration:
-						return false, commontest.TestClientError
+					if _, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
+						return false, commontest.ErrTestClient
 					}
 					return false, nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to check %s validatingWebhook resource already exists: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to check %s validatingWebhook resource already exists: %s", testValidateWebhookConfigurationResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while updating to desired state",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, option ...client.UpdateOption) error {
-					switch obj.(type) {
-					case *webhook.ValidatingWebhookConfiguration:
-						return commontest.TestClientError
+					if _, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *webhook.ValidatingWebhookConfiguration:
+					if o, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
 						webhookConfig := testValidatingWebhookConfiguration(validatingWebhookExternalSecretCRDAssetName)
 						webhookConfig.SetLabels(nil)
 						webhookConfig.DeepCopyInto(o)
@@ -71,20 +67,19 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 					return false, nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to update %s validatingWebhook resource with desired state: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to update %s validatingWebhook resource with desired state: %s", testValidateWebhookConfigurationResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "validatingWebhookConfiguration reconciliation fails while creating",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-					switch obj.(type) {
-					case *webhook.ValidatingWebhookConfiguration:
-						return commontest.TestClientError
+					if _, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 			},
-			wantErr: fmt.Sprintf("failed to create validatingWebhook resource %s: %s", testValidateWebhookConfigurationResourceName, commontest.TestClientError),
+			wantErr: fmt.Sprintf("failed to create validatingWebhook resource %s: %s", testValidateWebhookConfigurationResourceName, commontest.ErrTestClient),
 		},
 		{
 			name: "validatingWebhookConfiguration creation successful",

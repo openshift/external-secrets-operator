@@ -114,8 +114,7 @@ func TestReconcile(t *testing.T) {
 					return nil
 				})
 				m.ListCalls(func(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
-					switch o := obj.(type) {
-					case *crdv1.CustomResourceDefinitionList:
+					if o, ok := obj.(*crdv1.CustomResourceDefinitionList); ok {
 						crdList := &crdv1.CustomResourceDefinitionList{}
 						crdList.Items = []crdv1.CustomResourceDefinition{
 							*testCRD(),
@@ -144,7 +143,7 @@ func TestReconcile(t *testing.T) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
 					case *operatorv1alpha1.ExternalSecretsConfig:
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					case *crdv1.CustomResourceDefinition:
 						crd := testCRD()
 						crd.DeepCopyInto(o)
@@ -222,12 +221,12 @@ func TestReconcile(t *testing.T) {
 						testExtendExternalSecretsConfig(esc)
 						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 				m.ListCalls(func(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
-					return commontest.TestClientError
+					return commontest.ErrTestClient
 				})
 			},
 			expectedStatusCondition: []metav1.Condition{
@@ -254,13 +253,12 @@ func TestReconcile(t *testing.T) {
 						testExtendExternalSecretsConfig(esc)
 						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
 				m.ListCalls(func(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
-					switch o := obj.(type) {
-					case *crdv1.CustomResourceDefinitionList:
+					if o, ok := obj.(*crdv1.CustomResourceDefinitionList); ok {
 						crdList := &crdv1.CustomResourceDefinitionList{}
 						crdList.Items = []crdv1.CustomResourceDefinition{}
 						crdList.DeepCopyInto(o)
@@ -291,7 +289,7 @@ func TestReconcile(t *testing.T) {
 						testExtendExternalSecretsConfig(esc)
 						esc.DeepCopyInto(o)
 					case *crdv1.CustomResourceDefinition:
-						return commontest.TestClientError
+						return commontest.ErrTestClient
 					}
 					return nil
 				})
@@ -306,7 +304,7 @@ func TestReconcile(t *testing.T) {
 			wantErr: `failed to fetch customresourcedefinitions.apiextensions.k8s.io "/test-crd" during reconciliation: test client error`,
 		},
 		{
-			name: "reconciliation successful while fetching non-existent CRD",
+			name: "reconciliation fails when CRD not found",
 			request: ctrl.Request{
 				NamespacedName: types.NamespacedName{
 					Name: commontest.TestCRDName,
@@ -335,6 +333,7 @@ func TestReconcile(t *testing.T) {
 					Reason: operatorv1alpha1.ReasonFailed,
 				},
 			},
+			wantErr: `failed to fetch customresourcedefinitions.apiextensions.k8s.io "/test-crd" during reconciliation: test-crd.apiextensions.k8s.io "test-crd" not found`,
 		},
 		{
 			name: "reconciliation fails during annotation patch",
@@ -357,7 +356,7 @@ func TestReconcile(t *testing.T) {
 					return nil
 				})
 				m.PatchCalls(func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-					return commontest.TestClientError
+					return commontest.ErrTestClient
 				})
 			},
 			expectedStatusCondition: []metav1.Condition{
@@ -390,7 +389,7 @@ func TestReconcile(t *testing.T) {
 					return nil
 				})
 				m.StatusUpdateCalls(func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-					return commontest.TestClientError
+					return commontest.ErrTestClient
 				})
 			},
 			expectedStatusCondition: []metav1.Condition{
