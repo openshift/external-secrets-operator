@@ -114,14 +114,18 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.
+	// annotations are for adding custom annotations to all the resources created for external-secrets deployment.
+	// The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.
 	// Annotation keys with prefixes `kubernetes.io/`, `app.kubernetes.io/`, `openshift.io/`, or `k8s.io/` are not allowed.
-	// +kubebuilder:validation:MinItems:=0
-	// +kubebuilder:validation:MaxItems:=20
-	// +listType=map
-	// +listMapKey=key
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key.matches('^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\\\/)?([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$'))",message="Annotation keys must consist of alphanumeric characters, '-', '_' or '.', starting and ending with alphanumeric, with an optional lowercase DNS subdomain prefix and '/' (e.g., 'my-key' or 'example.com/my-key')"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, !key.contains('/') || key.split('/')[0].size() <= 253)",message="Annotation key prefix (DNS subdomain) must be no more than 253 characters"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key.contains('/') ? key.split('/')[1].size() <= 63 : key.size() <= 63)",message="Annotation key name part must be no more than 63 characters"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, key.startsWith(p)))",message="Annotation keys with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', or 'k8s.io/' are not allowed"
+	// +kubebuilder:validation:MinProperties=0
+	// +kubebuilder:validation:MaxProperties=20
+	// +kubebuilder:validation:Optional
 	// +optional
-	Annotations []Annotation `json:"annotations,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// networkPolicies specifies the list of network policy configurations
 	// to be applied to external-secrets pods.
@@ -187,23 +191,6 @@ type DeploymentConfig struct {
 	// +kubebuilder:validation:Optional
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
-}
-
-// Annotation is for adding custom annotations to the resources created for external-secrets deployment.
-type Annotation struct {
-	// key is the annotation key. It must follow Kubernetes qualified name syntax: an optional lowercase DNS subdomain prefix (max 253 chars) followed by '/' and a name segment (max 63 chars). The name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character. Examples: 'my-key', 'example.com/my-key'.
-	// +kubebuilder:validation:MinLength:=1
-	// +kubebuilder:validation:MaxLength:=317
-	// +kubebuilder:validation:XValidation:rule="self.matches('^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\\\/)?([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$')",message="Annotation key must consist of alphanumeric characters, '-', '_' or '.', starting and ending with alphanumeric, with an optional lowercase DNS subdomain prefix and '/' (e.g., 'my-key' or 'example.com/my-key')."
-	// +kubebuilder:validation:XValidation:rule="!self.contains('/') || self.split('/')[0].size() <= 253",message="Annotation key prefix (DNS subdomain) must be no more than 253 characters."
-	// +kubebuilder:validation:XValidation:rule="self.contains('/') ? self.split('/')[1].size() <= 63 : self.size() <= 63",message="Annotation key name part must be no more than 63 characters."
-	// +kubebuilder:validation:XValidation:rule="!['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, self.startsWith(p))",message="Annotation keys with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', or 'k8s.io/' are not allowed."
-	// +kubebuilder:validation:Required
-	Key string `json:"key"`
-
-	// value is the annotation value. It can be any string, including empty.
-	// +kubebuilder:validation:Optional
-	Value string `json:"value,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
