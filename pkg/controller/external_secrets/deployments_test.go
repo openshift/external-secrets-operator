@@ -585,7 +585,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
 					{
 						ComponentName: v1alpha1.CoreController,
-						DeploymentConfigs: v1alpha1.DeploymentConfig{
+						DeploymentConfigs: &v1alpha1.DeploymentConfig{
 							RevisionHistoryLimit: &revisionLimit,
 						},
 					},
@@ -627,7 +627,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
 					{
 						ComponentName:     v1alpha1.CoreController,
-						DeploymentConfigs: v1alpha1.DeploymentConfig{},
+						DeploymentConfigs: &v1alpha1.DeploymentConfig{},
 					},
 				}
 			},
@@ -637,6 +637,47 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return
 				}
 				// Should have the default value from the asset (10)
+				if deployment.Spec.RevisionHistoryLimit == nil {
+					t.Error("revisionHistoryLimit should have default value from asset")
+					return
+				}
+				if *deployment.Spec.RevisionHistoryLimit != 10 {
+					t.Errorf("revisionHistoryLimit = %d, want 10 (default from asset)", *deployment.Spec.RevisionHistoryLimit)
+				}
+			},
+		},
+		{
+			name: "deployment with nil DeploymentConfigs should not panic",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						if o.Name == "external-secrets" {
+							*capturedDeployment = o.DeepCopy()
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+				// ComponentConfig with nil DeploymentConfigs (user only specified componentName)
+				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
+					{
+						ComponentName:     v1alpha1.CoreController,
+						DeploymentConfigs: nil, // This should not cause panic
+					},
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+				// Should use default value from asset since DeploymentConfigs is nil
 				if deployment.Spec.RevisionHistoryLimit == nil {
 					t.Error("revisionHistoryLimit should have default value from asset")
 					return
@@ -672,20 +713,20 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
 					{
 						ComponentName: v1alpha1.CoreController,
-						DeploymentConfigs: v1alpha1.DeploymentConfig{
+						DeploymentConfigs: &v1alpha1.DeploymentConfig{
 							RevisionHistoryLimit: &controllerLimit,
 						},
 					},
 					{
 						ComponentName: v1alpha1.Webhook,
-						DeploymentConfigs: v1alpha1.DeploymentConfig{
+						DeploymentConfigs: &v1alpha1.DeploymentConfig{
 							RevisionHistoryLimit: &webhookLimit,
 						},
 					},
 					{
 						// CertController without RevisionHistoryLimit - should use default
 						ComponentName:     v1alpha1.CertController,
-						DeploymentConfigs: v1alpha1.DeploymentConfig{},
+						DeploymentConfigs: &v1alpha1.DeploymentConfig{},
 					},
 				}
 			},

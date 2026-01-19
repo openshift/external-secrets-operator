@@ -148,7 +148,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
 	if err := r.applyUserDeploymentConfigs(deployment, esc, assetName); err != nil {
-		return nil, fmt.Errorf("failed to apply revision history limit: %w", err)
+		return nil, fmt.Errorf("failed to apply user deployment configuration: %w", err)
 	}
 
 	return deployment, nil
@@ -664,7 +664,7 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 	container.VolumeMounts = filteredVolumeMounts
 }
 
-// applyUserDeploymentConfigs sets the revisionHistoryLimit from ComponentConfig if specified.
+// applyUserDeploymentConfigs updates the deployment resource spec with user specified configurations.
 func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
 	if len(esc.Spec.ControllerConfig.ComponentConfigs) == 0 {
 		return nil
@@ -672,14 +672,14 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 
 	componentName, err := getComponentNameFromAsset(assetName)
 	if err != nil {
-		r.log.Error(err, "failed to apply revision history limit due to unrecognized asset name", "assetName", assetName, "deployment", deployment.GetName())
+		r.log.Error(err, "failed to resolve deployment name for updating configurations")
 		return err
 	}
 
 	for _, i := range esc.Spec.ControllerConfig.ComponentConfigs {
 		if i.ComponentName == componentName {
 			// Apply RevisionHistoryLimit if set
-			if i.DeploymentConfigs.RevisionHistoryLimit != nil {
+			if i.DeploymentConfigs != nil && i.DeploymentConfigs.RevisionHistoryLimit != nil {
 				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
 			}
 			break
@@ -701,6 +701,6 @@ func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName
 	case bitwardenDeploymentAssetName:
 		return operatorv1alpha1.BitwardenSDKServer, nil
 	default:
-		return "", fmt.Errorf("invalid or unknown deployment asset name %q: ensure the asset is mapped to a valid ComponentName enum value (CoreController, Webhook, CertController, or BitwardenSDKServer)", assetName)
+		return "", fmt.Errorf("unknown deployment asset name: %s", assetName)
 	}
 }
