@@ -47,6 +47,7 @@ type ExternalSecretsConfig struct {
 
 	// metadata is the standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +required
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec is the specification of the desired behavior of the ExternalSecretsConfig.
@@ -90,6 +91,8 @@ type ExternalSecretsConfigStatus struct {
 
 // ApplicationConfig is for specifying the configurations for the external-secrets operand.
 type ApplicationConfig struct {
+	CommonConfigs `json:",inline"`
+
 	// operatingNamespace is for restricting the external-secrets operations to the provided namespace.
 	// When configured `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled.
 	// +kubebuilder:validation:MinLength:=1
@@ -100,9 +103,6 @@ type ApplicationConfig struct {
 	// webhookConfig is for configuring external-secrets webhook specifics.
 	// +optional
 	WebhookConfig *WebhookConfig `json:"webhookConfig,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	CommonConfigs `json:",inline"`
 }
 
 // ControllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins.
@@ -128,7 +128,6 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:XValidation:rule="self.all(key, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, key.startsWith(p)))",message="Annotation keys with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', or 'k8s.io/' are not allowed"
 	// +kubebuilder:validation:MinProperties=0
 	// +kubebuilder:validation:MaxProperties=20
-	// +kubebuilder:validation:Optional
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
@@ -154,9 +153,9 @@ type ControllerConfig struct {
 	// Each component can only have one configuration entry.
 	// +kubebuilder:validation:MinItems:=0
 	// +kubebuilder:validation:MaxItems:=4
-	// +kubebuilder:validation:Optional
 	// +listType=map
 	// +listMapKey=componentName
+	// +optional
 	ComponentConfigs []ComponentConfig `json:"componentConfigs,omitempty"`
 }
 
@@ -165,17 +164,16 @@ type ComponentConfig struct {
 	// componentName identifies which external-secrets component this configuration applies to.
 	// Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer.
 	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // ComponentName is a listMapKey and must not have omitempty for proper patch identification
 	ComponentName ComponentName `json:"componentName"`
 
 	// deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component.
-	// +kubebuilder:validation:Optional
 	// +optional
 	DeploymentConfigs *DeploymentConfig `json:"deploymentConfigs,omitempty"`
 
 	// overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.
 	// Keys starting with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' are reserved and will be rejected.
-	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxItems:=50
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="Environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
 	// +listType=map
@@ -193,7 +191,6 @@ type DeploymentConfig struct {
 	// +kubebuilder:default:=10
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=50
-	// +kubebuilder:validation:Optional
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 }
@@ -220,6 +217,7 @@ type WebhookConfig struct {
 	// certificateCheckInterval is for configuring the polling interval to check the certificate validity.
 	// +kubebuilder:default:="5m"
 	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateCheckInterval *metav1.Duration `json:"certificateCheckInterval,omitempty"`
 }
 
@@ -256,11 +254,13 @@ type CertManagerConfig struct {
 	// certificateDuration is the validity period of the webhook certificate.
 	// +kubebuilder:default:="8760h"
 	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateDuration *metav1.Duration `json:"certificateDuration,omitempty"`
 
 	// certificateRenewBefore is the ahead time to renew the webhook certificate before expiry.
 	// +kubebuilder:default:="30m"
 	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateRenewBefore *metav1.Duration `json:"certificateRenewBefore,omitempty"`
 }
 
@@ -288,10 +288,10 @@ const (
 	// BitwardenSDKServer represents the bitwarden-sdk-server component.
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
 
-	// Webhook represents the external-secrets webhook component
+	// Webhook represents the external-secrets webhook component.
 	Webhook ComponentName = "Webhook"
 
-	// CertController represents the cert-controller component
+	// CertController represents the cert-controller component.
 	CertController ComponentName = "CertController"
 )
 
@@ -303,12 +303,14 @@ type NetworkPolicy struct {
 	// +kubebuilder:validation:MinLength:=1
 	// +kubebuilder:validation:MaxLength:=253
 	// +required
-	Name string `json:"name,omitempty"`
+	//nolint:kubeapilinter // Name is a listMapKey and must not have omitempty for proper patch identification
+	Name string `json:"name"`
 
 	// componentName specifies which external-secrets component this network policy applies to.
 	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;BitwardenSDKServer
 	// +required
-	ComponentName ComponentName `json:"componentName,omitempty"`
+	//nolint:kubeapilinter // ComponentName is a listMapKey and must not have omitempty for proper patch identification
+	ComponentName ComponentName `json:"componentName"`
 
 	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
 	// is allowed if there are no NetworkPolicies selecting the pod (and cluster policy
@@ -318,6 +320,6 @@ type NetworkPolicy struct {
 	// solely to ensure that the pods it selects are isolated by default).
 	// The operator will automatically handle ingress rules based on the current running ports.
 	// +required
-	//+listType=atomic
+	// +listType=atomic
 	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
 }
