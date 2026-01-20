@@ -581,13 +581,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return nil
 				})
 			},
-			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.Annotations = []v1alpha1.Annotation{
-					{KVPair: v1alpha1.KVPair{Key: "custom-annotation", Value: "custom-value"}},
-					{KVPair: v1alpha1.KVPair{Key: "prometheus.io/scrape", Value: "true"}},
-					{KVPair: v1alpha1.KVPair{Key: "team/owner", Value: "platform"}},
-				}
-			},
+		updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+			esc.Spec.ControllerConfig.Annotations = map[string]string{
+				"custom-annotation":     "custom-value",
+				"prometheus.io/scrape":  "true",
+				"team/owner":            "platform",
+			}
+		},
 			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
 				if deployment == nil {
 					t.Error("deployment should not be nil")
@@ -648,14 +648,14 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return nil
 				})
 			},
-			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Spec.ControllerConfig.Annotations = []v1alpha1.Annotation{
-					{KVPair: v1alpha1.KVPair{Key: "allowed-annotation", Value: "allowed"}},
-					// These should be filtered by convertAnnotationsToMap
-					{KVPair: v1alpha1.KVPair{Key: "kubernetes.io/forbidden", Value: "value"}},
-					{KVPair: v1alpha1.KVPair{Key: "app.kubernetes.io/managed-by", Value: "value"}},
-				}
-			},
+		updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+			esc.Spec.ControllerConfig.Annotations = map[string]string{
+				"allowed-annotation":            "allowed",
+				// These should be filtered by validateAndFilterAnnotations
+				"kubernetes.io/forbidden":       "value",
+				"app.kubernetes.io/managed-by":  "value",
+			}
+		},
 			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
 				if deployment == nil {
 					t.Error("deployment should not be nil")

@@ -141,7 +141,7 @@ func (r *Reconciler) getClusterRoleObject(esc *operatorv1alpha1.ExternalSecretsC
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(clusterRole, annotationsMap)
 		}
@@ -195,7 +195,7 @@ func (r *Reconciler) getClusterRoleBindingObject(esc *operatorv1alpha1.ExternalS
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(clusterRoleBinding, annotationsMap)
 		}
@@ -246,7 +246,7 @@ func (r *Reconciler) getRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, 
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(role, annotationsMap)
 		}
@@ -298,7 +298,7 @@ func (r *Reconciler) getRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsC
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(roleBinding, annotationsMap)
 		}

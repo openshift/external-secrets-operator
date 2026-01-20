@@ -184,6 +184,61 @@ func TestCreateOrApplySecret(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 			},
 		},
+		{
+			name: "secret with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if secret, ok := obj.(*corev1.Secret); ok {
+						// Verify annotations are applied
+						if secret.Annotations == nil {
+							t.Error("secret annotations should not be nil")
+							return nil
+						}
+						if secret.Annotations["vault.hashicorp.com/secret-type"] != "webhook-cert" {
+							t.Errorf("expected annotation 'vault.hashicorp.com/secret-type'='webhook-cert', got '%s'",
+								secret.Annotations["vault.hashicorp.com/secret-type"])
+						}
+					}
+					return nil
+				})
+			},
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"vault.hashicorp.com/secret-type": "webhook-cert",
+					"security/classification":         "confidential",
+				}
+			},
+		},
+		{
+			name: "secret filters reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if secret, ok := obj.(*corev1.Secret); ok {
+						// Verify only allowed annotation is present
+						if secret.Annotations["allowed-secret-annotation"] != "value" {
+							t.Errorf("expected 'allowed-secret-annotation'")
+						}
+						// Verify reserved prefixes were filtered
+						if _, exists := secret.Annotations["k8s.io/test"]; exists {
+							t.Error("reserved prefix 'k8s.io/' should have been filtered")
+						}
+					}
+					return nil
+				})
+			},
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-secret-annotation": "value",
+					"k8s.io/test":               "filtered",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

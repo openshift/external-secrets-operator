@@ -16,23 +16,6 @@ Package v1alpha1 contains API Schema definitions for the operator v1alpha1 API g
 
 
 
-#### Annotation
-
-
-
-Annotation is for adding custom annotations to the resources created for external-secrets deployment.
-
-
-
-_Appears in:_
-- [ControllerConfig](#controllerconfig)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `key` _string_ | key is the annotation key. It must follow Kubernetes qualified name syntax: an optional lowercase DNS subdomain prefix (max 253 chars) followed by '/' and a name segment (max 63 chars). The name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character. Examples: 'my-key', 'example.com/my-key'. |  | MaxLength: 317 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `value` _string_ | value is the annotation value. It can be any string, including empty. |  | Optional: \{\} <br /> |
-
-
 #### ApplicationConfig
 
 
@@ -218,7 +201,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
-| `annotations` _[Annotation](#annotation) array_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment. The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.<br />Annotation keys with prefixes `kubernetes.io/`, `app.kubernetes.io/`, `openshift.io/`, or `k8s.io/` are not allowed. |  | MaxItems: 20 <br />MinItems: 0 <br /> |
+| `annotations` _object (keys:string, values:string)_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment.<br />The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.<br />Annotation keys with prefixes `kubernetes.io/`, `app.kubernetes.io/`, `openshift.io/`, or `k8s.io/` are not allowed. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
 | `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 | `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings for each component independently.<br />Each component can only have one configuration entry. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 

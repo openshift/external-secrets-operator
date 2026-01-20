@@ -92,7 +92,7 @@ func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsC
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(certificate, annotationsMap)
 		}

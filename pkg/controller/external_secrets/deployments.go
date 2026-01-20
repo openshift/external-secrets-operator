@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
@@ -106,7 +107,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 
 	// Apply annotations from ControllerConfig
 	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
-		annotationsMap := convertAnnotationsToMap(esc.Spec.ControllerConfig.Annotations, r.log)
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
 		if len(annotationsMap) > 0 {
 			common.UpdateResourceAnnotations(deployment, annotationsMap)
 			updatePodTemplateAnnotations(deployment, annotationsMap)
@@ -170,25 +171,35 @@ func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]st
 	deployment.Spec.Template.SetLabels(l)
 }
 
-// convertAnnotationsToMap converts []Annotation to map[string]string with reserved prefix filtering.
-func convertAnnotationsToMap(annotations []operatorv1alpha1.Annotation, logger logr.Logger) map[string]string {
-	result := make(map[string]string, len(annotations))
+// validateAndFilterAnnotations validates annotations using Kubernetes validation and filters out reserved prefixes.
+func validateAndFilterAnnotations(annotations map[string]string, logger logr.Logger) map[string]string {
+	if len(annotations) == 0 {
+		return annotations
+	}
 
+	// Validate annotations using Kubernetes built-in validation
+	if errs := apivalidation.ValidateAnnotations(annotations, field.NewPath("annotations")); len(errs) > 0 {
+		logger.Error(errs.ToAggregate(), "invalid annotations detected, skipping all annotations")
+		return make(map[string]string)
+	}
+
+	// Filter reserved prefixes
+	result := make(map[string]string, len(annotations))
 	reservedPrefixes := []string{"kubernetes.io/", "app.kubernetes.io/", "openshift.io/", "k8s.io/"}
 
-	for _, ann := range annotations {
+	for key, value := range annotations {
 		isReserved := false
 		for _, prefix := range reservedPrefixes {
-			if hasPrefix := len(ann.Key) >= len(prefix) && ann.Key[:len(prefix)] == prefix; hasPrefix {
+			if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 				isReserved = true
 				logger.V(1).Info("skipping annotation with reserved prefix",
-					"key", ann.Key, "prefix", prefix)
+					"key", key, "prefix", prefix)
 				break
 			}
 		}
 
-		if !isReserved && ann.Key != "" {
-			result[ann.Key] = ann.Value
+		if !isReserved {
+			result[key] = value
 		}
 	}
 

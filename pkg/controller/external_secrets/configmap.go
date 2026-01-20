@@ -15,7 +15,7 @@ import (
 // in the operand namespace when proxy configuration is present. The ConfigMap is labeled
 // with the injection label required by the Cluster Network Operator (CNO), which watches
 // for this label and injects the cluster's trusted CA bundle into the ConfigMap's data.
-// This function ensures the correct labels are present so that CNO can manage the CA bundle
+// This function ensures the correct Testinglabels are present so that CNO can manage the CA bundle
 // content as expected.
 func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
 	proxyConfig := r.getProxyConfiguration(esc)
@@ -39,6 +39,14 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 		},
 	}
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			desiredConfigMap.Annotations = annotationsMap
+		}
+	}
+
 	configMapName := fmt.Sprintf("%s/%s", desiredConfigMap.GetNamespace(), desiredConfigMap.GetName())
 	r.log.V(4).Info("reconciling trusted CA bundle ConfigMap resource", "name", configMapName)
 
@@ -58,16 +66,25 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 		return nil
 	}
 
-	// ConfigMap exists, ensure it has the correct labels
+	// ConfigMap exists, ensure it has the correct labels and annotations
 	// Do not update the data of the ConfigMap since it is managed by CNO
-	// Check if metadata (labels) has been modified.
-	// NOTE: Currently ObjectMetadataModified only checks labels, but if it's extended
-	// in the future to check annotations as well, CNO may race with this update since
-	// CNO adds `openshift.io/owning-component: Networking / cluster-network-operator` annotations on this ConfigMap.
+	// Check if metadata (labels/annotations) has been modified.
+	// NOTE: CNO adds `openshift.io/owning-component: Networking / cluster-network-operator` annotations on this ConfigMap.
+	// validateAndFilterAnnotations function filters out reserved prefixes like openshift.io/, so we won't overwrite CNO's annotations.
 	if exist && common.ObjectMetadataModified(desiredConfigMap, existingConfigMap) {
 		r.log.V(1).Info("trusted CA bundle ConfigMap has been modified, updating to desired state", "name", configMapName)
-		// Update the labels since
+		// Update the labels
 		existingConfigMap.Labels = desiredConfigMap.Labels
+
+		// Merge annotations - preserve existing annotations that are not managed by us
+		if desiredConfigMap.Annotations != nil {
+			if existingConfigMap.Annotations == nil {
+				existingConfigMap.Annotations = make(map[string]string)
+			}
+			for k, v := range desiredConfigMap.Annotations {
+				existingConfigMap.Annotations[k] = v
+			}
+		}
 
 		if err := r.UpdateWithRetry(r.ctx, existingConfigMap); err != nil {
 			return common.FromClientError(err, "failed to update %s trusted CA bundle ConfigMap resource", configMapName)

@@ -114,6 +114,80 @@ func TestCreateOrApplyServices(t *testing.T) {
 			},
 			wantErr: `failed to create service external-secrets/external-secrets-webhook: test client error`,
 		},
+		{
+			name: "service with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				var capturedService *corev1.Service
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					switch svc := obj.(type) {
+					case *corev1.Service:
+						capturedService = svc.DeepCopy()
+						// Verify annotations are applied
+						if capturedService.Annotations == nil {
+							t.Error("service annotations should not be nil")
+							return nil
+						}
+						if capturedService.Annotations["prometheus.io/scrape"] != "true" {
+							t.Errorf("expected annotation 'prometheus.io/scrape'='true', got '%s'", 
+								capturedService.Annotations["prometheus.io/scrape"])
+						}
+						if capturedService.Annotations["team/owner"] != "platform" {
+							t.Errorf("expected annotation 'team/owner'='platform', got '%s'", 
+								capturedService.Annotations["team/owner"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"prometheus.io/scrape": "true",
+					"team/owner":           "platform",
+				}
+			},
+		},
+		{
+			name: "service filters reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				var capturedService *corev1.Service
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					switch svc := obj.(type) {
+					case *corev1.Service:
+						capturedService = svc.DeepCopy()
+						// Verify only allowed annotation is present
+						if capturedService.Annotations == nil {
+							t.Error("service annotations should not be nil")
+							return nil
+						}
+						if capturedService.Annotations["allowed-key"] != "allowed-value" {
+							t.Errorf("expected 'allowed-key' annotation, got '%s'", 
+								capturedService.Annotations["allowed-key"])
+						}
+						// Verify reserved prefixes were filtered
+						if _, exists := capturedService.Annotations["kubernetes.io/test"]; exists {
+							t.Error("reserved prefix 'kubernetes.io/' should have been filtered")
+						}
+						if _, exists := capturedService.Annotations["app.kubernetes.io/component"]; exists {
+							t.Error("reserved prefix 'app.kubernetes.io/' should have been filtered")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-key":                "allowed-value",
+					"kubernetes.io/test":         "filtered",
+					"app.kubernetes.io/component": "filtered",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
