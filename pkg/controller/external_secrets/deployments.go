@@ -2,10 +2,10 @@ package external_secrets
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
 	"os"
 	"unsafe"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
@@ -171,7 +171,7 @@ func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]st
 	deployment.Spec.Template.SetLabels(l)
 }
 
-// validateAndFilterAnnotations validates annotations using Kubernetes validation and filters out reserved prefixes.
+// validateAndFilterAnnotations validates annotations using Kubernetes validation and filters out reserved domains using the common utility function.
 func validateAndFilterAnnotations(annotations map[string]string, logger logr.Logger) map[string]string {
 	if len(annotations) == 0 {
 		return annotations
@@ -183,27 +183,18 @@ func validateAndFilterAnnotations(annotations map[string]string, logger logr.Log
 		return make(map[string]string)
 	}
 
-	// Filter reserved prefixes
-	result := make(map[string]string, len(annotations))
-	reservedPrefixes := []string{"kubernetes.io/", "app.kubernetes.io/", "openshift.io/", "k8s.io/"}
+	// Filter reserved domains kubernetes.io/*, *.kubernetes.io/*, openshift.io/*, *.openshift.io/*, etc.
+	filtered := common.FilterReservedAnnotations(annotations)
 
-	for key, value := range annotations {
-		isReserved := false
-		for _, prefix := range reservedPrefixes {
-			if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
-				isReserved = true
-				logger.V(1).Info("skipping annotation with reserved prefix",
-					"key", key, "prefix", prefix)
-				break
+	if len(filtered) < len(annotations) {
+		for key := range annotations {
+			if _, exists := filtered[key]; !exists {
+				logger.V(1).Info("filtered annotation with reserved domain", "key", key)
 			}
-		}
-
-		if !isReserved {
-			result[key] = value
 		}
 	}
 
-	return result
+	return filtered
 }
 
 // updatePodTemplateAnnotations sets annotations on the pod template spec.

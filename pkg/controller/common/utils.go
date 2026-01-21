@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -210,11 +211,54 @@ func ObjectMetadataModified(desired, fetched client.Object) bool {
 	if !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels()) {
 		return true
 	}
-	// Check if annotations have changed
-	if !reflect.DeepEqual(desired.GetAnnotations(), fetched.GetAnnotations()) {
+	// Check if annotations have changed (ignoring system-managed annotations)
+	desiredAnnotates := desired.GetAnnotations()
+	fetchedAnnotates := FilterReservedAnnotations(fetched.GetAnnotations())
+	if !reflect.DeepEqual(desiredAnnotates, fetchedAnnotates) {
 		return true
 	}
 	return false
+}
+
+// FilterReservedAnnotations filters out Kubernetes/OpenShift reserved domain annotations.
+// This function serves two purposes:
+// 1. Filter user-provided annotations to prevent using reserved domains (security)
+// 2. Filter system-managed annotations during comparison to prevent reconciliation loops
+//
+// Reserved domains: kubernetes.io, openshift.io, k8s.io (including all subdomains)
+func FilterReservedAnnotations(annotations map[string]string) map[string]string {
+	if len(annotations) == 0 {
+		return annotations
+	}
+
+	// Reserved domain patterns: blocks both "kubernetes.io/*" and "*.kubernetes.io/*"
+	reservedDomains := []string{"kubernetes.io", "openshift.io", "k8s.io"}
+
+	result := make(map[string]string, len(annotations))
+	for key, value := range annotations {
+		isReserved := false
+
+		for _, domain := range reservedDomains {
+			// Check for direct prefix: kubernetes.io/foo
+			if strings.HasPrefix(key, domain+"/") {
+				isReserved = true
+				break
+			}
+			
+			// Check for subdomain: *.kubernetes.io/foo
+			// Look for ".kubernetes.io/" or ".kubernetes.io" in the key
+			if strings.Contains(key, "."+domain+"/") || strings.Contains(key, "."+domain) {
+				isReserved = true
+				break
+			}
+		}
+
+		if !isReserved {
+			result[key] = value
+		}
+	}
+
+	return result
 }
 
 func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
@@ -222,6 +266,22 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
+	if desired.Labels != nil && !reflect.DeepEqual(desired.Labels, fetched.GetLabels()) {
+		return true
+	}
+
+	if desired.Annotations != nil {
+		fetchedAnnots := fetched.GetAnnotations()
+		if fetchedAnnots == nil {
+			return true
+		}
+
+		fetchedAnnots = FilterReservedAnnotations(fetchedAnnots)
+		if !reflect.DeepEqual(desired.Annotations, fetchedAnnots) {
+			return true
+		}
+	}
+
 	if desired.Spec.Replicas != nil && !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
 		return true
 	}

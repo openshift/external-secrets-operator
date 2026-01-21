@@ -581,13 +581,13 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return nil
 				})
 			},
-		updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-			esc.Spec.ControllerConfig.Annotations = map[string]string{
-				"custom-annotation":     "custom-value",
-				"prometheus.io/scrape":  "true",
-				"team/owner":            "platform",
-			}
-		},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"custom-annotation":    "custom-value",
+					"prometheus.io/scrape": "true",
+					"team/owner":           "platform",
+				}
+			},
 			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
 				if deployment == nil {
 					t.Error("deployment should not be nil")
@@ -648,14 +648,17 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 					return nil
 				})
 			},
-		updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-			esc.Spec.ControllerConfig.Annotations = map[string]string{
-				"allowed-annotation":            "allowed",
-				// These should be filtered by validateAndFilterAnnotations
-				"kubernetes.io/forbidden":       "value",
-				"app.kubernetes.io/managed-by":  "value",
-			}
-		},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-annotation":                "allowed",
+					"kubernetes.io/forbidden":           "value",
+					"app.kubernetes.io/managed-by":      "value",
+					"deployment.kubernetes.io/revision": "100",
+					"pod.kubernetes.io/name":            "test",
+					"openshift.io/test":                 "value",
+					"console.openshift.io/route":        "value",
+				}
+			},
 			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
 				if deployment == nil {
 					t.Error("deployment should not be nil")
@@ -674,15 +677,31 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 						annotations["allowed-annotation"])
 				}
 
-				// Reserved prefixed annotations should NOT be added by user config
-				if _, exists := annotations["kubernetes.io/forbidden"]; exists {
-					t.Error("kubernetes.io/ prefixed annotation should not be applied from user config")
+				// Verify ALL reserved domain patterns are filtered
+				reservedKeys := []string{
+					"kubernetes.io/forbidden",
+					"app.kubernetes.io/managed-by",
+					"deployment.kubernetes.io/revision",
+					"pod.kubernetes.io/name",
+					"openshift.io/test",
+					"console.openshift.io/route",
 				}
-				if val, exists := annotations["app.kubernetes.io/managed-by"]; exists {
-					// It might exist from default annotations, but not with user's value
-					if val == "value" {
-						t.Error("app.kubernetes.io/ prefixed annotation should not override with user value")
+
+				for _, key := range reservedKeys {
+					if val, exists := annotations[key]; exists && val == "value" {
+						t.Errorf("reserved annotation %q should have been filtered but found with value %q", key, val)
 					}
+				}
+
+				// Verify only the allowed annotation exists (excluding any default annotations)
+				userAnnotationCount := 0
+				for key := range annotations {
+					if key == "allowed-annotation" {
+						userAnnotationCount++
+					}
+				}
+				if userAnnotationCount != 1 {
+					t.Errorf("expected exactly 1 user annotation, found user annotations: %v", annotations)
 				}
 			},
 		},

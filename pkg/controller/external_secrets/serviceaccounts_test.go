@@ -155,24 +155,37 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 		},
 		{
-			name: "serviceaccount filters reserved annotation prefixes",
+			name: "serviceaccount filters reserved annotation prefixes with wildcard",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
+						if sa.Annotations == nil {
+							t.Error("serviceaccount annotations should not be nil")
+							return nil
+						}
+						
 						// Verify only allowed annotation is present
 						if sa.Annotations["allowed-annotation"] != "value" {
 							t.Errorf("expected 'allowed-annotation', got '%s'", 
 								sa.Annotations["allowed-annotation"])
 						}
-						// Verify reserved prefixes were filtered
-						if _, exists := sa.Annotations["openshift.io/test"]; exists {
-							t.Error("reserved prefix 'openshift.io/' should have been filtered")
+						
+						reservedKeys := []string{
+							"kubernetes.io/test",                
+							"app.kubernetes.io/component",       
+							"deployment.kubernetes.io/revision", 
+							"openshift.io/test",                 
+							"console.openshift.io/route",        
+							"k8s.io/test",                       
 						}
-						if _, exists := sa.Annotations["k8s.io/test"]; exists {
-							t.Error("reserved prefix 'k8s.io/' should have been filtered")
+						
+						for _, key := range reservedKeys {
+							if val, exists := sa.Annotations[key]; exists && val == "filtered" {
+								t.Errorf("reserved annotation %q should have been filtered but found with value %q", key, val)
+							}
 						}
 					}
 					return nil
@@ -180,9 +193,15 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
 				esc.Spec.ControllerConfig.Annotations = map[string]string{
-					"allowed-annotation": "value",
-					"openshift.io/test":  "filtered",
-					"k8s.io/test":        "filtered",
+					"allowed-annotation":                "value",
+					// Direct domain patterns
+					"kubernetes.io/test":                "filtered",
+					"openshift.io/test":                 "filtered",
+					"k8s.io/test":                       "filtered",
+					// Wildcard subdomain patterns (should also be filtered)
+					"app.kubernetes.io/component":       "filtered",
+					"deployment.kubernetes.io/revision": "filtered",
+					"console.openshift.io/route":        "filtered",
 				}
 			},
 		},
