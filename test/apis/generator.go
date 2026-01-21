@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck // ST1001 dot imports are idiomatic for Ginkgo
+	. "github.com/onsi/gomega"    //nolint:staticcheck // ST1001 dot imports are idiomatic for Gomega
 	yamlpatch "github.com/vmware-archive/yaml-patch"
 
 	"github.com/ghodss/yaml"
@@ -44,7 +44,7 @@ func LoadTestSuiteSpecs(paths ...string) ([]SuiteSpec, error) {
 		}
 	}
 
-	var out []SuiteSpec
+	out := make([]SuiteSpec, 0, len(suiteFiles))
 	for path := range suiteFiles {
 		suite, err := loadSuiteFile(path)
 		if err != nil {
@@ -157,7 +157,7 @@ func generateOnCreateTable(onCreateTests []OnCreateTestSpec) {
 	}
 
 	// assertOnCreate runs the actual test for each table entry
-	var assertOnCreate interface{} = func(in onCreateTableInput) {
+	var assertOnCreate any = func(in onCreateTableInput) {
 		initialObj, err := newUnstructuredFrom(in.initial, in.resourceName, in.useGenerateName)
 		Expect(err).ToNot(HaveOccurred(), "initial data should be a valid Kubernetes YAML resource")
 
@@ -184,7 +184,7 @@ func generateOnCreateTable(onCreateTests []OnCreateTestSpec) {
 	}
 
 	// First argument to the table is the test function.
-	tableEntries := []interface{}{assertOnCreate}
+	tableEntries := []any{assertOnCreate}
 
 	// Convert the test specs into table entries
 	for _, testEntry := range onCreateTests {
@@ -216,7 +216,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 		useGenerateName     bool
 	}
 
-	var assertOnUpdate interface{} = func(in onUpdateTableInput) {
+	var assertOnUpdate any = func(in onUpdateTableInput) {
 		var originalCRDObjectKey client.ObjectKey
 		var originalCRDSpec apiextensionsv1.CustomResourceDefinitionSpec
 
@@ -239,7 +239,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 			originalCRD.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["sentinel"] = apiextensionsv1.JSONSchemaProps{
 				Type: "string",
 				Enum: []apiextensionsv1.JSON{
-					{Raw: []byte(fmt.Sprintf(`"%s+patched"`, initialObj.GetUID()))},
+					{Raw: fmt.Appendf(nil, `"%s+patched"`, initialObj.GetUID())},
 				},
 			}
 			initialObj.Object["sentinel"] = initialObj.GetUID() + "+patched"
@@ -273,7 +273,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 			originalCRD.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["sentinel"] = apiextensionsv1.JSONSchemaProps{
 				Type: "string",
 				Enum: []apiextensionsv1.JSON{
-					{Raw: []byte(fmt.Sprintf(`"%s+restored"`, initialObj.GetUID()))},
+					{Raw: fmt.Appendf(nil, `"%s+restored"`, initialObj.GetUID())},
 				},
 			}
 
@@ -341,7 +341,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 	}
 
 	// First argument to the table is the test function.
-	tableEntries := []interface{}{assertOnUpdate}
+	tableEntries := []any{assertOnUpdate}
 
 	// Convert the test specs into table entries
 	for _, testEntry := range onUpdateTests {
@@ -365,7 +365,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 // newUnstructuredsFor creates a set of unstructured resources for each version of the CRD.
 // This allows us to ensure all CR instances are deleted after each test.
 func newUnstructuredsFor(crd *apiextensionsv1.CustomResourceDefinition) []*unstructured.Unstructured {
-	var out []*unstructured.Unstructured
+	out := make([]*unstructured.Unstructured, 0, len(crd.Spec.Versions))
 
 	for _, version := range crd.Spec.Versions {
 		out = append(out, newUnstructuredsForVersion(crd, version.Name))
@@ -448,8 +448,7 @@ func loadVersionedCRD(suiteSpec SuiteSpec, crdFilename string) (*apiextensionsv1
 		return crd, nil
 	}
 
-	var crdVersions []apiextensionsv1.CustomResourceDefinitionVersion
-
+	crdVersions := make([]apiextensionsv1.CustomResourceDefinitionVersion, 0, len(crd.Spec.Versions))
 	for _, version := range crd.Spec.Versions {
 		if version.Name != suiteSpec.Version {
 			continue

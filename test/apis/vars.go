@@ -139,5 +139,5 @@ type Patch struct {
 	Path string `json:"path"`
 
 	// Value is the value to be used within the operation. This field is required for operations like "add" and "replace".
-	Value *interface{} `json:"value"`
+	Value *any `json:"value"`
 }

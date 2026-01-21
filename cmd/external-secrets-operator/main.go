@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -58,6 +59,37 @@ const (
 
 	openshiftCACertificateFile = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 )
+
+// validateMetricsCertDir validates that the certificate and key files exist in the given directory.
+// Returns an error if validation fails.
+func validateMetricsCertDir(certDir string) error {
+	if _, err := os.Stat(filepath.Join(certDir, metricsCertFileName)); err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(certDir, metricsKeyFileName)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadOpenShiftCACertPool loads the OpenShift service CA certificate and returns a cert pool.
+// Falls back to system cert pool if available, otherwise creates a new empty pool.
+func loadOpenShiftCACertPool() (*x509.CertPool, error) {
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		certPool = x509.NewCertPool()
+	}
+
+	openshiftCACert, err := os.ReadFile(openshiftCACertificateFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read OpenShift service CA certificate file %q: %w", openshiftCACertificateFile, err)
+	}
+
+	if ok := certPool.AppendCertsFromPEM(openshiftCACert); !ok {
+		return nil, fmt.Errorf("failed to parse any certificate from OpenShift service CA certificate file %q", openshiftCACertificateFile)
+	}
+	return certPool, nil
+}
 
 var (
 	ctx      = context.Background()
@@ -142,13 +174,10 @@ func main() {
 	if secureMetrics {
 		setupLog.Info("setting up secure metrics server")
 		metricsServerOptions.SecureServing = secureMetrics
+
 		if metricsCerts != "" {
-			if _, err := os.Stat(filepath.Join(metricsCerts, metricsCertFileName)); err != nil {
-				setupLog.Error(err, "metrics certificate file not found at configured path")
-				os.Exit(1)
-			}
-			if _, err := os.Stat(filepath.Join(metricsCerts, metricsKeyFileName)); err != nil {
-				setupLog.Error(err, "metrics private key file not found at configured path")
+			if err := validateMetricsCertDir(metricsCerts); err != nil {
+				setupLog.Error(err, "metrics certificate validation failed")
 				os.Exit(1)
 			}
 			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
@@ -156,19 +185,14 @@ func main() {
 			metricsServerOptions.CertName = metricsCertFileName
 			metricsServerOptions.KeyName = metricsKeyFileName
 		}
+
+		certPool, err := loadOpenShiftCACertPool()
+		if err != nil {
+			setupLog.Error(err, "failed to load OpenShift CA certificate")
+			os.Exit(1)
+		}
+		setupLog.Info("using openshift service CA for metrics client verification")
 		metricsTLSOpts = append(metricsTLSOpts, func(c *tls.Config) {
-			certPool, err := x509.SystemCertPool()
-			if err != nil {
-				setupLog.Info("unable to load system certificate pool", "error", err)
-				certPool = x509.NewCertPool()
-			}
-			openshiftCACert, err := os.ReadFile(openshiftCACertificateFile)
-			if err != nil {
-				setupLog.Error(err, "failed to read OpenShift CA certificate")
-				os.Exit(1)
-			}
-			setupLog.Info("using openshift service CA for metrics client verification")
-			certPool.AppendCertsFromPEM(openshiftCACert)
 			c.ClientCAs = certPool
 		})
 		metricsServerOptions.TLSOpts = metricsTLSOpts

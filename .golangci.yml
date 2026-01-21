@@ -100,10 +100,16 @@ linters:
         linters:
           - gocyclo
           - errcheck
+          - errname
           - dupl
           - gosec
           - wrapcheck
           - mnd
+          - forcetypeassert
+      # Exclude some linters from running on package created for tests.
+      - path: pkg/controller/commontest
+        linters:
+          - errname
       # Run some linter only for test files by excluding its issues for everything else.
       - path-except: _test\.go
         linters:
@@ -116,6 +122,19 @@ linters:
       - path-except: api/v1alpha1/*
         linters:
           - kubeapilinter
+      # Exclude optionalfields pointer suggestions - we handle pointers case-by-case
+      - linters:
+          - kubeapilinter
+        text: "should be a pointer"
+      # Exclude omitzero suggestions - omitempty is conventional for K8s CRD struct fields
+      - linters:
+          - modernize
+        text: "Omitempty has no effect on nested struct fields"
+      # Exclude tagalign for Conditions field - kubeapilinter requires different order
+      - linters:
+          - tagalign
+        path: api/v1alpha1/meta.go
+        text: "tag is not aligned"
   settings:
     depguard:
       rules:
@@ -143,8 +162,8 @@ linters:
         description: Kube API Linter lints Kube like APIs based on API conventions and best practices.
         original-url: sigs.k8s.io/kube-api-linter
         settings:
-          linters: {}
-          lintersConfig: {}
+          linters: {} # All linters enabled by default
+          lintersConfig: {} # All using default settings
 
 formatters:
   settings:

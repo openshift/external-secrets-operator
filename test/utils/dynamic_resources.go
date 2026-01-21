@@ -109,7 +109,7 @@ func (d DynamicResourceLoader) do(do doFunc, assetFunc func(name string) ([]byte
 func (d DynamicResourceLoader) DeleteFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
 	d.t.Logf("Deleting resource %v\n", filename)
 	deleteFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
-		err := dynamicResourceInterface.Delete(context.TODO(), unstructured.GetName(), metav1.DeleteOptions{})
+		err := dynamicResourceInterface.Delete(context.Background(), unstructured.GetName(), metav1.DeleteOptions{})
 		d.noErrorSkipNotExisting(err)
 	}
 
@@ -120,7 +120,7 @@ func (d DynamicResourceLoader) DeleteFromFile(assetFunc func(name string) ([]byt
 func (d DynamicResourceLoader) CreateFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
 	d.t.Logf("Creating resource %v\n", filename)
 	createFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
-		_, err := dynamicResourceInterface.Create(context.TODO(), unstructured, metav1.CreateOptions{})
+		_, err := dynamicResourceInterface.Create(context.Background(), unstructured, metav1.CreateOptions{})
 		d.noErrorSkipExists(err)
 	}
 

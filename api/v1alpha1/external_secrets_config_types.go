@@ -20,7 +20,8 @@ type ExternalSecretsConfigList struct {
 	// metadata is the standard list's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ListMeta `json:"metadata"`
-	Items           []ExternalSecretsConfig `json:"items"`
+
+	Items []ExternalSecretsConfig `json:"items"`
 }
 
 // +genclient
@@ -46,12 +47,15 @@ type ExternalSecretsConfig struct {
 
 	// metadata is the standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +required
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec is the specification of the desired behavior of the ExternalSecretsConfig.
+	// +optional
 	Spec ExternalSecretsConfigSpec `json:"spec,omitempty"`
 
 	// status is the most recently observed status of the ExternalSecretsConfig.
+	// +optional
 	Status ExternalSecretsConfigStatus `json:"status,omitempty"`
 }
 
@@ -59,15 +63,15 @@ type ExternalSecretsConfig struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.plugins) || !has(self.plugins.bitwardenSecretManagerProvider) || !has(self.plugins.bitwardenSecretManagerProvider.mode) || self.plugins.bitwardenSecretManagerProvider.mode != 'Enabled' || has(self.plugins.bitwardenSecretManagerProvider.secretRef) || (has(self.controllerConfig) && has(self.controllerConfig.certProvider) && has(self.controllerConfig.certProvider.certManager) && has(self.controllerConfig.certProvider.certManager.mode) && self.controllerConfig.certProvider.certManager.mode == 'Enabled')",message="secretRef or certManager must be configured when bitwardenSecretManagerProvider plugin is enabled"
 type ExternalSecretsConfigSpec struct {
 	// appConfig is for specifying the configurations for the `external-secrets` operand.
-	// +kubebuilder:validation:Optional
+	// +optional
 	ApplicationConfig ApplicationConfig `json:"appConfig,omitempty"`
 
 	// plugins is for configuring the optional provider plugins.
-	// +kubebuilder:validation:Optional
+	// +optional
 	Plugins PluginsConfig `json:"plugins,omitempty"`
 
 	// controllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins.
-	// +kubebuilder:validation:Optional
+	// +optional
 	ControllerConfig ControllerConfig `json:"controllerConfig,omitempty"`
 }
 
@@ -77,33 +81,34 @@ type ExternalSecretsConfigStatus struct {
 	ConditionalStatus `json:",inline"`
 
 	// externalSecretsImage is the name of the image and the tag used for deploying external-secrets.
+	// +optional
 	ExternalSecretsImage string `json:"externalSecretsImage,omitempty"`
 
-	// BitwardenSDKServerImage is the name of the image and the tag used for deploying bitwarden-sdk-server.
+	// bitwardenSDKServerImage is the name of the image and the tag used for deploying bitwarden-sdk-server.
+	// +optional
 	BitwardenSDKServerImage string `json:"bitwardenSDKServerImage,omitempty"`
 }
 
 // ApplicationConfig is for specifying the configurations for the external-secrets operand.
 type ApplicationConfig struct {
+	CommonConfigs `json:",inline"`
+
 	// operatingNamespace is for restricting the external-secrets operations to the provided namespace.
 	// When configured `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled.
 	// +kubebuilder:validation:MinLength:=1
 	// +kubebuilder:validation:MaxLength:=63
-	// +kubebuilder:validation:Optional
+	// +optional
 	OperatingNamespace string `json:"operatingNamespace,omitempty"`
 
 	// webhookConfig is for configuring external-secrets webhook specifics.
-	// +kubebuilder:validation:Optional
+	// +optional
 	WebhookConfig *WebhookConfig `json:"webhookConfig,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	CommonConfigs `json:",inline"`
 }
 
 // ControllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins.
 type ControllerConfig struct {
 	// certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins.
-	// +kubebuilder:validation:Optional
+	// +optional
 	CertProvider *CertProvidersConfig `json:"certProvider,omitempty"`
 
 	// labels to apply to all resources created for the external-secrets operand deployment.
@@ -111,7 +116,7 @@ type ControllerConfig struct {
 	// +mapType=granular
 	// +kubebuilder:validation:MinProperties:=0
 	// +kubebuilder:validation:MaxProperties:=20
-	// +kubebuilder:validation:Optional
+	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
 
 	// annotations are for adding custom annotations to all the resources created for external-secrets deployment.
@@ -123,7 +128,6 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:XValidation:rule="self.all(key, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, key.startsWith(p)))",message="Annotation keys with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', or 'k8s.io/' are not allowed"
 	// +kubebuilder:validation:MinProperties=0
 	// +kubebuilder:validation:MaxProperties=20
-	// +kubebuilder:validation:Optional
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
@@ -139,7 +143,7 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:XValidation:rule="oldSelf.all(op, self.exists(p, p.name == op.name && p.componentName == op.componentName))",message="name and componentName fields in networkPolicies are immutable"
 	// +kubebuilder:validation:MinItems:=0
 	// +kubebuilder:validation:MaxItems:=50
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +listMapKey=componentName
@@ -149,9 +153,9 @@ type ControllerConfig struct {
 	// Each component can only have one configuration entry.
 	// +kubebuilder:validation:MinItems:=0
 	// +kubebuilder:validation:MaxItems:=4
-	// +kubebuilder:validation:Optional
 	// +listType=map
 	// +listMapKey=componentName
+	// +optional
 	ComponentConfigs []ComponentConfig `json:"componentConfigs,omitempty"`
 }
 
@@ -160,17 +164,16 @@ type ComponentConfig struct {
 	// componentName identifies which external-secrets component this configuration applies to.
 	// Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer.
 	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // ComponentName is a listMapKey and must not have omitempty for proper patch identification
 	ComponentName ComponentName `json:"componentName"`
 
 	// deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component.
-	// +kubebuilder:validation:Optional
 	// +optional
 	DeploymentConfigs *DeploymentConfig `json:"deploymentConfigs,omitempty"`
 
 	// overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.
 	// Keys starting with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' are reserved and will be rejected.
-	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxItems:=50
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="Environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
 	// +listType=map
@@ -188,7 +191,6 @@ type DeploymentConfig struct {
 	// +kubebuilder:default:=10
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=50
-	// +kubebuilder:validation:Optional
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 }
@@ -200,21 +202,22 @@ type BitwardenSecretManagerProvider struct {
 	// Disabled: Disables reconciliation of the Bitwarden provider plugin. The plugin and its resources will remain in their current state and will not be managed by the operator.
 	// +kubebuilder:validation:Enum:=Enabled;Disabled
 	// +kubebuilder:default:=Disabled
-	// +kubebuilder:validation:Optional
+	// +optional
 	Mode Mode `json:"mode,omitempty"`
 
-	// SecretRef is the Kubernetes secret containing the TLS key pair to be used for the bitwarden server.
+	// secretRef is the Kubernetes secret containing the TLS key pair to be used for the bitwarden server.
 	// The issuer in CertManagerConfig will be utilized to generate the required certificate if the secret reference is not provided and CertManagerConfig is configured.
 	// The key names in secret for certificate must be `tls.crt`, for private key must be `tls.key` and for CA certificate key name must be `ca.crt`.
-	// +kubebuilder:validation:Optional
+	// +optional
 	SecretRef *SecretReference `json:"secretRef,omitempty"`
 }
 
 // WebhookConfig is for configuring external-secrets webhook specifics.
 type WebhookConfig struct {
-	// CertificateCheckInterval is for configuring the polling interval to check the certificate validity.
+	// certificateCheckInterval is for configuring the polling interval to check the certificate validity.
 	// +kubebuilder:default:="5m"
-	// +kubebuilder:validation:Optional
+	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateCheckInterval *metav1.Duration `json:"certificateCheckInterval,omitempty"`
 }
 
@@ -228,7 +231,7 @@ type CertManagerConfig struct {
 	// This field is immutable once set.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="mode is immutable once set"
 	// +kubebuilder:validation:Enum:=Enabled;Disabled
-	// +kubebuilder:validation:Required
+	// +required
 	Mode Mode `json:"mode,omitempty"`
 
 	// injectAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the webhooks and CRDs to automatically setup webhook to use the cert-manager CA. This requires CA Injector to be enabled in cert-manager.
@@ -236,7 +239,7 @@ type CertManagerConfig struct {
 	// +kubebuilder:validation:Enum:="true";"false"
 	// +kubebuilder:default:="false"
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="injectAnnotations is immutable once set"
-	// +kubebuilder:validation:Optional
+	// +optional
 	InjectAnnotations string `json:"injectAnnotations,omitempty"`
 
 	// issuerRef contains details of the referenced object used for obtaining certificates.
@@ -245,31 +248,33 @@ type CertManagerConfig struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="issuerRef is immutable once set"
 	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind.lowerAscii() == 'issuer' || self.kind.lowerAscii() == 'clusterissuer'",message="kind must be either 'Issuer' or 'ClusterIssuer'"
 	// +kubebuilder:validation:XValidation:rule="!has(self.group) || self.group.lowerAscii() == 'cert-manager.io'",message="group must be 'cert-manager.io'"
-	// +kubebuilder:validation:Optional
+	// +optional
 	IssuerRef *ObjectReference `json:"issuerRef,omitempty"`
 
 	// certificateDuration is the validity period of the webhook certificate.
 	// +kubebuilder:default:="8760h"
-	// +kubebuilder:validation:Optional
+	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateDuration *metav1.Duration `json:"certificateDuration,omitempty"`
 
 	// certificateRenewBefore is the ahead time to renew the webhook certificate before expiry.
 	// +kubebuilder:default:="30m"
-	// +kubebuilder:validation:Optional
+	// +optional
+	//nolint:kubeapilinter // Duration type retained to avoid breaking API change
 	CertificateRenewBefore *metav1.Duration `json:"certificateRenewBefore,omitempty"`
 }
 
 // PluginsConfig is for configuring the optional plugins.
 type PluginsConfig struct {
 	// bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider plugin for connecting with the bitwarden secrets manager.
-	// +kubebuilder:validation:Optional
+	// +optional
 	BitwardenSecretManagerProvider *BitwardenSecretManagerProvider `json:"bitwardenSecretManagerProvider,omitempty"`
 }
 
 // CertProvidersConfig defines the configuration for certificate providers used to manage TLS certificates for webhook and plugins.
 type CertProvidersConfig struct {
 	// certManager is for configuring cert-manager provider specifics.
-	// +kubebuilder:validation:Optional
+	// +optional
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
 }
 
@@ -277,16 +282,16 @@ type CertProvidersConfig struct {
 type ComponentName string
 
 const (
-	// CoreController represents the external-secrets component
+	// CoreController represents the external-secrets component.
 	CoreController ComponentName = "ExternalSecretsCoreController"
 
-	// BitwardenSDKServer represents the bitwarden-sdk-server component
+	// BitwardenSDKServer represents the bitwarden-sdk-server component.
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
 
-	// Webhook represents the external-secrets webhook component
+	// Webhook represents the external-secrets webhook component.
 	Webhook ComponentName = "Webhook"
 
-	// CertController represents the cert-controller component
+	// CertController represents the cert-controller component.
 	CertController ComponentName = "CertController"
 )
 
@@ -297,12 +302,14 @@ type NetworkPolicy struct {
 	// This name will be used as part of the generated NetworkPolicy resource name.
 	// +kubebuilder:validation:MinLength:=1
 	// +kubebuilder:validation:MaxLength:=253
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // Name is a listMapKey and must not have omitempty for proper patch identification
 	Name string `json:"name"`
 
 	// componentName specifies which external-secrets component this network policy applies to.
 	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;BitwardenSDKServer
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // ComponentName is a listMapKey and must not have omitempty for proper patch identification
 	ComponentName ComponentName `json:"componentName"`
 
 	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
@@ -312,7 +319,7 @@ type NetworkPolicy struct {
 	// this field is empty then this NetworkPolicy limits all outgoing traffic (and serves
 	// solely to ensure that the pods it selects are isolated by default).
 	// The operator will automatically handle ingress rules based on the current running ports.
-	// +kubebuilder:validation:Required
-	//+listType=atomic
+	// +required
+	// +listType=atomic
 	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
 }

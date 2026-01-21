@@ -57,6 +57,7 @@ var (
 // Reconciler reconciles externalsecretsmanagers.operator.openshift.io CR.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	Scheme        *runtime.Scheme
 	ctx           context.Context
 	eventRecorder record.EventRecorder
@@ -91,8 +92,14 @@ func NewClient(m manager.Manager) operatorclient.CtrlClient {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	statusUpdatePredicate := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj := e.ObjectOld.(*operatorv1alpha1.ExternalSecretsConfig)
-			newObj := e.ObjectNew.(*operatorv1alpha1.ExternalSecretsConfig)
+			oldObj, ok := e.ObjectOld.(*operatorv1alpha1.ExternalSecretsConfig)
+			if !ok {
+				return false
+			}
+			newObj, ok := e.ObjectNew.(*operatorv1alpha1.ExternalSecretsConfig)
+			if !ok {
+				return false
+			}
 			return !reflect.DeepEqual(oldObj.Status, newObj.Status)
 		},
 	}

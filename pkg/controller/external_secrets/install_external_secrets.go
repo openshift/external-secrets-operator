@@ -2,11 +2,12 @@ package external_secrets
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
@@ -48,9 +49,7 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 			resourceLabels[k] = v
 		}
 	}
-	for k, v := range controllerDefaultResourceLabels {
-		resourceLabels[k] = v
-	}
+	maps.Copy(resourceLabels, controllerDefaultResourceLabels)
 
 	if err := r.createOrApplyNamespace(esc, resourceLabels); err != nil {
 		r.log.Error(err, "failed to create namespace")
@@ -112,22 +111,63 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 	return nil
 }
 
-// createOrApplyNamespace is for the creating the namespace in which the `external-secrets`
-// resources will be created.
+// createOrApplyNamespace ensures the namespace for external-secrets resources exists
+// with the correct labels. It creates the namespace if it doesn't exist, or updates
+// the labels if they have changed. Unlike other resources, namespaces may be pre-created
+// by users with their own labels, so we only add/update our desired labels without
+// removing existing ones.
 func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
-	namespace := getNamespace(esc)
-	obj := &corev1.Namespace{
+	namespaceName := getNamespace(esc)
+
+	desired := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
+			Name:   namespaceName,
+			Labels: resourceLabels,
 		},
 	}
 
-	if err := r.Create(r.ctx, obj); err != nil {
-		if errors.IsAlreadyExists(err) {
-			r.log.V(4).Info("namespace already exists", "namespace", namespace)
-			return nil
-		}
-		return fmt.Errorf("failed to create %s namespace: %w", namespace, err)
+	fetched := &corev1.Namespace{}
+	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
+	if err != nil {
+		return fmt.Errorf("failed to check if namespace %s exists: %w", namespaceName, err)
 	}
+
+	switch {
+	case !exists:
+		r.log.V(4).Info("Creating namespace", "name", namespaceName)
+		if err := r.Create(r.ctx, desired); err != nil {
+			return fmt.Errorf("failed to create namespace %s: %w", namespaceName, err)
+		}
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s created", namespaceName)
+	case exists && namespaceLabelsNeedUpdate(fetched, resourceLabels):
+		r.log.V(1).Info("Namespace labels changed, updating", "name", namespaceName)
+		// Merge existing labels with desired labels (desired labels take precedence)
+		if fetched.Labels == nil {
+			fetched.Labels = make(map[string]string)
+		}
+		maps.Copy(fetched.Labels, resourceLabels)
+		if err := r.UpdateWithRetry(r.ctx, fetched); err != nil {
+			return fmt.Errorf("failed to update namespace %s: %w", namespaceName, err)
+		}
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s updated", namespaceName)
+	default:
+		r.log.V(4).Info("Namespace already exists with correct labels", "name", namespaceName)
+	}
+
 	return nil
+}
+
+// namespaceLabelsNeedUpdate checks if any of the desired labels are missing or different
+// in the existing namespace. This is different from ObjectMetadataModified because namespaces
+// may be pre-created by users with their own labels that should be preserved.
+func namespaceLabelsNeedUpdate(existing *corev1.Namespace, desiredLabels map[string]string) bool {
+	if existing.Labels == nil && len(desiredLabels) > 0 {
+		return true
+	}
+	for k, v := range desiredLabels {
+		if existing.Labels[k] != v {
+			return true
+		}
+	}
+	return false
 }

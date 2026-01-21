@@ -81,9 +81,10 @@ var (
 	}
 )
 
-// Reconciler reconciles a ExternalSecretsConfig object
+// Reconciler reconciles a ExternalSecretsConfig object.
 type Reconciler struct {
 	operatorclient.CtrlClient
+
 	UncachedClient        operatorclient.CtrlClient
 	Scheme                *runtime.Scheme
 	ctx                   context.Context
@@ -130,7 +131,7 @@ func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 	}
 
 	// Check if cert-manager is installed and register Certificate informer if present
-	certManagerInstalled, err := checkAndRegisterCertificates(mgr, r)
+	certManagerInstalled, err := checkAndRegisterCertificates(ctx, mgr, r)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +232,7 @@ func buildCacheObjectList(includeCertManager bool) map[client.Object]cache.ByObj
 
 // checkAndRegisterCertificates checks if cert-manager CRD exists and registers Certificate informer if present.
 // Returns true if Certificate CRD is installed.
-func checkAndRegisterCertificates(mgr ctrl.Manager, r *Reconciler) (bool, error) {
+func checkAndRegisterCertificates(ctx context.Context, mgr ctrl.Manager, r *Reconciler) (bool, error) {
 	exist, err := isCRDInstalled(mgr.GetConfig(), certificateCRDName, certificateCRDGroupVersion)
 	if err != nil {
 		return false, fmt.Errorf("failed to check %s/%s CRD is installed: %w", certificateCRDGroupVersion, certificateCRDName, err)
@@ -241,7 +242,7 @@ func checkAndRegisterCertificates(mgr ctrl.Manager, r *Reconciler) (bool, error)
 		r.optionalResourcesList[certificateCRDGKV] = struct{}{}
 
 		// Get informer for Certificate - this registers it with the manager's cache
-		_, err = mgr.GetCache().GetInformer(context.Background(), &certmanagerv1.Certificate{})
+		_, err = mgr.GetCache().GetInformer(ctx, &certmanagerv1.Certificate{})
 		if err != nil {
 			return false, fmt.Errorf("failed to add Certificate informer: %w", err)
 		}

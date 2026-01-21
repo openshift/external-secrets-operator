@@ -34,14 +34,14 @@ func testReconciler(t *testing.T) *Reconciler {
 	}
 }
 
-// testService returns a Service object decoded from the specified asset file,
+// testService returns a Service object decoded from the specified asset file.
 func testService(assetName string) *corev1.Service {
 	service := common.DecodeServiceObjBytes(assets.MustAsset(assetName))
 	service.SetLabels(controllerDefaultResourceLabels)
 	return service
 }
 
-// testServiceAccount returns a ServiceAccount object decoded from the specified asset file,
+// testServiceAccount returns a ServiceAccount object decoded from the specified asset file.
 func testServiceAccount(assetName string) *corev1.ServiceAccount {
 	serviceAccount := common.DecodeServiceAccountObjBytes(assets.MustAsset(assetName))
 	serviceAccount.SetLabels(controllerDefaultResourceLabels)
@@ -82,7 +82,7 @@ func testValidatingWebhookConfiguration(assetName string) *webhook.ValidatingWeb
 	return validateWebhook
 }
 
-// Helper function to create a dummy deployment for testing
+// Helper function to create a dummy deployment for testing.
 func testDeployment(name string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -115,6 +115,8 @@ func testCertificate(assetName string) *certmanagerv1.Certificate {
 }
 
 // testSecret returns Secret object read from provided static asset of same kind.
+//
+//nolint:unparam // assetName kept as parameter for future test scenarios, thought currently just webhookTLSSecretAssetName is passed.
 func testSecret(assetName string) *corev1.Secret {
 	validateSecret := common.DecodeSecretObjBytes(assets.MustAsset(assetName))
 	validateSecret.SetLabels(controllerDefaultResourceLabels)

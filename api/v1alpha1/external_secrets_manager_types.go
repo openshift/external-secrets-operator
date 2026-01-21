@@ -18,7 +18,8 @@ type ExternalSecretsManagerList struct {
 	// metadata is the standard list's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ListMeta `json:"metadata"`
-	Items           []ExternalSecretsManager `json:"items"`
+
+	Items []ExternalSecretsManager `json:"items"`
 }
 
 // +genclient
@@ -43,33 +44,36 @@ type ExternalSecretsManager struct {
 
 	// metadata is the standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +required
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec is the specification of the desired behavior
+	// +optional
 	Spec ExternalSecretsManagerSpec `json:"spec,omitempty"`
 
 	// status is the most recently observed status of controllers used by External Secrets Operator.
+	// +optional
 	Status ExternalSecretsManagerStatus `json:"status,omitempty"`
 }
 
 // ExternalSecretsManagerSpec is the specification of the desired behavior of the ExternalSecretsManager.
 type ExternalSecretsManagerSpec struct {
 	// globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator.
-	// +kubebuilder:validation:Optional
+	// +optional
 	GlobalConfig *GlobalConfig `json:"globalConfig,omitempty"`
 }
 
 // GlobalConfig is for configuring the external-secrets-operator behavior.
 type GlobalConfig struct {
+	CommonConfigs `json:",inline"`
+
 	// labels to apply to all resources created by the operator.
 	// This field can have a maximum of 20 entries.
 	// +mapType=granular
 	// +kubebuilder:validation:MinProperties:=0
 	// +kubebuilder:validation:MaxProperties:=20
-	// +kubebuilder:validation:Optional
+	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
-
-	CommonConfigs `json:",inline"`
 }
 
 // ExternalSecretsManagerStatus is the most recently observed status of the ExternalSecretsManager.
@@ -79,18 +83,21 @@ type ExternalSecretsManagerStatus struct {
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=name
+	// +optional
 	ControllerStatuses []ControllerStatus `json:"controllerStatuses,omitempty"`
 
 	// lastTransitionTime is the last time the condition transitioned from one status to another.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format=date-time
+	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 }
 
 // ControllerStatus holds the observed conditions of the controllers part of the operator.
 type ControllerStatus struct {
 	// name of the controller for which the observed condition is recorded.
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // Name is a listMapKey and must not have omitempty for proper patch identification
 	Name string `json:"name"`
 
 	// conditions holds information of the current state of the external-secrets-operator controllers.
@@ -98,21 +105,26 @@ type ControllerStatus struct {
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	//nolint:kubeapilinter // custom Condition type is intentional, not all fields of metav1.Condition are needed.
 	Conditions []Condition `json:"conditions,omitempty"`
 
 	// observedGeneration represents the .metadata.generation on the observed resource.
 	// +kubebuilder:validation:Minimum=0
+	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 type Condition struct {
 	// type of the condition
-	// +kubebuilder:validation:Required
+	// +required
+	//nolint:kubeapilinter // Type is a listMapKey and must not have omitempty for proper patch identification
 	Type string `json:"type"`
 
 	// status of the condition
-	Status metav1.ConditionStatus `json:"status"`
+	// +optional
+	Status metav1.ConditionStatus `json:"status,omitempty"`
 
 	// message provides details about the state.
-	Message string `json:"message"`
+	// +optional
+	Message string `json:"message,omitempty"`
 }

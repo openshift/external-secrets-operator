@@ -28,7 +28,7 @@ func TestAPIs(t *testing.T) {
 	g := NewGomegaWithT(t)
 
 	var err error
-	suites, err = LoadTestSuiteSpecs(filepath.Join("../../api"))
+	suites, err = LoadTestSuiteSpecs(filepath.Join("..", "..", "api"))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	RunSpecs(t, "API Integration Suite")

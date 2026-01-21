@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"unsafe"
 
@@ -64,7 +65,6 @@ func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecr
 func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string,
 	externalSecretsConfigCreateRecon bool,
 ) error {
-
 	deployment, err := r.getDeploymentObject(assetName, esc, resourceLabels)
 	if err != nil {
 		return err
@@ -79,18 +79,19 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	if exist && externalSecretsConfigCreateRecon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s deployment resource already exists", deploymentName)
 	}
-	if exist && common.HasObjectChanged(deployment, fetched) {
+	switch {
+	case exist && common.HasObjectChanged(deployment, fetched):
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s updated", deploymentName)
-	} else if !exist {
+	case !exist:
 		if err := r.Create(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to create %s deployment resource", deploymentName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "deployment resource %s created", deploymentName)
-	} else {
+	default:
 		r.log.V(4).Info("deployment resource already exists and is in expected state", "name", deploymentName)
 	}
 
@@ -154,9 +155,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 // updatePodTemplateLabels sets labels on the pod template spec.
 func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]string) {
 	l := deployment.Spec.Template.GetLabels()
-	for k, v := range labels {
-		l[k] = v
-	}
+	maps.Copy(l, labels)
 	deployment.Spec.Template.SetLabels(l)
 }
 
@@ -180,11 +179,12 @@ func updateContainerSecurityContext(container *corev1.Container) {
 // updateResourceRequirement sets validated resource requirements to all containers.
 func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	rscReqs := corev1.ResourceRequirements{}
-	if esc.Spec.ApplicationConfig.Resources != nil {
+	switch {
+	case esc.Spec.ApplicationConfig.Resources != nil:
 		esc.Spec.ApplicationConfig.Resources.DeepCopyInto(&rscReqs)
-	} else if r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil {
+	case r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil:
 		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
-	} else {
+	default:
 		return nil
 	}
 
@@ -304,7 +304,7 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-// argument list for external-secrets deployment resource
+// argument list for external-secrets deployment resource.
 func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
 		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
@@ -343,7 +343,7 @@ func updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.Ex
 	}
 }
 
-// argument list for webhook deployment resource
+// argument list for webhook deployment resource.
 func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, checkInterval string) {
 	args := []string{
 		"webhook",
@@ -367,7 +367,7 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 	}
 }
 
-// argument list for cert controller deployment resource
+// argument list for cert controller deployment resource.
 func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
 	namespace := deployment.GetNamespace()
 	args := []string{
@@ -445,9 +445,7 @@ func updateSecretVolumeConfig(deployment *appsv1.Deployment, volumeName, secretN
 func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	proxyConfig := r.getProxyConfiguration(esc)
 
-	if err := r.updateProxyEnvironmentVariables(deployment, proxyConfig); err != nil {
-		return fmt.Errorf("failed to update proxy environment variables: %w", err)
-	}
+	r.updateProxyEnvironmentVariables(deployment, proxyConfig)
 	if err := r.updateTrustedCABundleVolumes(deployment, proxyConfig); err != nil {
 		return fmt.Errorf("failed to update trusted CA bundle volumes: %w", err)
 	}
@@ -456,7 +454,7 @@ func (r *Reconciler) updateProxyConfiguration(deployment *appsv1.Deployment, esc
 }
 
 // updateProxyEnvironmentVariables sets or removes proxy environment variables on all containers and init containers in the deployment.
-func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
+func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) {
 	// Apply proxy environment variables to all containers
 	for i := range deployment.Spec.Template.Spec.Containers {
 		container := &deployment.Spec.Template.Spec.Containers[i]
@@ -476,8 +474,6 @@ func (r *Reconciler) updateProxyEnvironmentVariables(deployment *appsv1.Deployme
 			r.removeProxyEnvVars(initContainer)
 		}
 	}
-
-	return nil
 }
 
 // setProxyEnvVars sets proxy environment variables on a container.
@@ -549,7 +545,6 @@ func (r *Reconciler) removeProxyEnvVars(container *corev1.Container) {
 // updateTrustedCABundleVolumes adds or removes trusted CA bundle volume and volume mounts to/from the deployment
 // based on proxy configuration presence.
 func (r *Reconciler) updateTrustedCABundleVolumes(deployment *appsv1.Deployment, proxyConfig *operatorv1alpha1.ProxyConfig) error {
-
 	if proxyConfig != nil {
 		// Add trusted CA bundle volume and volume mounts
 		return r.addTrustedCABundleVolumes(deployment)

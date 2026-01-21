@@ -62,24 +62,23 @@ func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.Externa
 		return common.FromClientError(err, "failed to check existence of service %s", serviceName)
 	}
 
-	if exists {
-		if externalSecretsConfigCreateRecon {
-			r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
+	if exists && externalSecretsConfigCreateRecon {
+		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
+	}
+	switch {
+	case exists && common.HasObjectChanged(service, fetched):
+		r.log.V(1).Info("Service modified, updating", "name", serviceName)
+		if err := r.UpdateWithRetry(r.ctx, service); err != nil {
+			return common.FromClientError(err, "failed to update service %s", serviceName)
 		}
-		if common.HasObjectChanged(service, fetched) {
-			r.log.V(1).Info("Service modified, updating", "name", serviceName)
-			if err := r.UpdateWithRetry(r.ctx, service); err != nil {
-				return common.FromClientError(err, "failed to update service %s", serviceName)
-			}
-			r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Service %s updated", serviceName)
-		} else {
-			r.log.V(4).Info("Service already up-to-date", "name", serviceName)
-		}
-	} else {
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Service %s updated", serviceName)
+	case !exists:
 		if err := r.Create(r.ctx, service); err != nil {
 			return common.FromClientError(err, "failed to create service %s", serviceName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Service %s created", serviceName)
+	default:
+		r.log.V(4).Info("Service already up-to-date", "name", serviceName)
 	}
 
 	return nil

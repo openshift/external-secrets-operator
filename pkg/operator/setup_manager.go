@@ -32,7 +32,7 @@ func StartControllers(ctx context.Context, mgr ctrl.Manager) error {
 	}
 
 	if externalSecretsConfig.IsCertManagerInstalled() {
-		crdAnnotator, err := crdannotator.New(mgr)
+		crdAnnotator, err := crdannotator.New(ctx, mgr)
 		if err != nil {
 			logger.Error(err, "failed to create crd annotator controller", "controller", crdannotator.ControllerName)
 			return err

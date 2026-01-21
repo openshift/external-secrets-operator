@@ -14,7 +14,7 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
-var testErr = fmt.Errorf("test client error")
+var errTest = fmt.Errorf("test client error")
 
 func staticServiceAccounts() map[string]string {
 	return map[string]string{
@@ -47,7 +47,6 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if _, found := expectedSAMap[sa.Name]; found {
-
 							return nil
 						}
 						return fmt.Errorf("unexpected ServiceAccount created: %s", sa.Name)
@@ -88,7 +87,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if sa.Name == "external-secrets-cert-controller" {
-							return testErr // should not be called
+							return errTest // should not be called
 						}
 					}
 					return nil
@@ -115,7 +114,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if sa, ok := obj.(*corev1.ServiceAccount); ok && sa.Name == "external-secrets" {
-						return testErr
+						return errTest
 					}
 					return nil
 				})

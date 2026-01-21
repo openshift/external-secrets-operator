@@ -1,8 +1,6 @@
 package external_secrets
 
 import (
-	"fmt"
-
 	webhook "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,10 +11,7 @@ import (
 )
 
 func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, recon bool) error {
-	desiredWebhooks, err := r.getValidatingWebhookObjects(esc, resourceLabels)
-	if err != nil {
-		return fmt.Errorf("failed to generate validatingWebhook resource for creation: %w", err)
-	}
+	desiredWebhooks := r.getValidatingWebhookObjects(esc, resourceLabels)
 
 	for _, desired := range desiredWebhooks {
 		validatingWebhookName := desired.GetName()
@@ -48,34 +43,30 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 		}
 	}
 	return nil
-
 }
 
-func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) ([]*webhook.ValidatingWebhookConfiguration, error) {
-	var webhooks []*webhook.ValidatingWebhookConfiguration
+func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) []*webhook.ValidatingWebhookConfiguration {
+	assetNames := []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName}
+	webhooks := make([]*webhook.ValidatingWebhookConfiguration, 0, len(assetNames))
 
-	for _, assetName := range []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName} {
-
+	for _, assetName := range assetNames {
 		validatingWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
 		common.UpdateResourceLabels(validatingWebhook, resourceLabels)
-		if err := updateValidatingWebhookAnnotation(esc, validatingWebhook); err != nil {
-			return nil, fmt.Errorf("failed to update validatingWebhook resource for %s external secrets: %s", esc.GetName(), err.Error())
-		}
-
+		updateValidatingWebhookAnnotation(esc, validatingWebhook)
 		webhooks = append(webhooks, validatingWebhook)
 	}
 
-	return webhooks, nil
+	return webhooks
 }
 
-func updateValidatingWebhookAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, webhook *webhook.ValidatingWebhookConfiguration) error {
+func updateValidatingWebhookAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, webhook *webhook.ValidatingWebhookConfiguration) {
 	if common.IsInjectCertManagerAnnotationEnabled(esc) {
 		if webhook.Annotations == nil {
 			webhook.Annotations = map[string]string{}
 		}
 		webhook.Annotations[common.CertManagerInjectCAFromAnnotation] = common.CertManagerInjectCAFromAnnotationValue
-		return nil
+		return
 	}
 	if webhook.Annotations != nil {
 		delete(webhook.Annotations, common.CertManagerInjectCAFromAnnotation)
@@ -83,5 +74,4 @@ func updateValidatingWebhookAnnotation(esc *operatorv1alpha1.ExternalSecretsConf
 			webhook.Annotations = nil
 		}
 	}
-	return nil
 }

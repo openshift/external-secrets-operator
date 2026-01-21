@@ -24,8 +24,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			name: "service reconciliation successful",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *corev1.Service:
+					if o, ok := obj.(*corev1.Service); ok {
 						svc := testService("external-secrets/resources/service_external-secrets-webhook.yml")
 						svc.DeepCopyInto(o)
 						return true, nil
@@ -38,8 +37,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			name: "bitwarden service created when enabled",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *corev1.Service:
+					if o, ok := obj.(*corev1.Service); ok {
 						svc := testService("external-secrets/resources/service_bitwarden-sdk-server.yml")
 						svc.DeepCopyInto(o)
 						return false, nil
@@ -47,10 +45,9 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return false, nil
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-					switch svc := obj.(type) {
-					case *corev1.Service:
-						if svc.Name == "bitwarden-sdk-server" {
-							return commontest.TestClientError // trigger error
+					if svc, ok := obj.(*corev1.Service); ok {
+						if svc.Name == bitwardenSDKServerContainerName {
+							return commontest.ErrTestClient // trigger error
 						}
 					}
 					return nil
@@ -72,7 +69,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			name: "service reconciliation fails while checking if exists",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, commontest.TestClientError
+					return false, commontest.ErrTestClient
 				})
 			},
 			wantErr: `failed to check existence of service external-secrets/external-secrets-webhook: test client error`,
@@ -81,8 +78,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			name: "service reconciliation fails while updating to desired state",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					switch o := obj.(type) {
-					case *corev1.Service:
+					if o, ok := obj.(*corev1.Service); ok {
 						svc := testService("external-secrets/resources/service_external-secrets-webhook.yml")
 						svc.SetLabels(nil) // Trigger update
 						svc.DeepCopyInto(o)
@@ -91,7 +87,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return false, nil
 				})
 				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-					return commontest.TestClientError
+					return commontest.ErrTestClient
 				})
 			},
 			wantErr: `failed to update service external-secrets/external-secrets-webhook: test client error`,
@@ -103,13 +99,12 @@ func TestCreateOrApplyServices(t *testing.T) {
 					return false, nil
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-					switch svc := obj.(type) {
-					case *corev1.Service:
+					if svc, ok := obj.(*corev1.Service); ok {
 						if svc.Name != "external-secrets-webhook" {
 							t.Errorf("Expected webhook service to be created, got %s", svc.Name)
 						}
 					}
-					return commontest.TestClientError
+					return commontest.ErrTestClient
 				})
 			},
 			wantErr: `failed to create service external-secrets/external-secrets-webhook: test client error`,
