@@ -80,7 +80,14 @@ func IsIrrecoverableError(err error) bool {
 // Error implements the error interface, returning a formatted string
 // containing both the message and the underlying error.
 func (e *ReconcileError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Message, e.Err)
+	return fmt.Sprintf("%s: %v", e.Message, e.Err)
+}
+
+// Unwrap returns the underlying error, implementing the standard library's
+// error unwrapping interface. This enables errors.Is, errors.As, and
+// errors.Unwrap to traverse the error chain.
+func (e *ReconcileError) Unwrap() error {
+	return e.Err
 }
 
 // FromClientError creates a ReconcileError from a Kubernetes API client error.
@@ -94,8 +101,8 @@ func FromClientError(err error, message string, args ...any) *ReconcileError {
 	if err == nil {
 		return nil
 	}
-	if apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err) || apierrors.IsInvalid(err) ||
-		apierrors.IsBadRequest(err) || apierrors.IsServiceUnavailable(err) {
+	if apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err) ||
+		apierrors.IsInvalid(err) || apierrors.IsBadRequest(err) {
 		return NewIrrecoverableError(err, message, args...)
 	}
 

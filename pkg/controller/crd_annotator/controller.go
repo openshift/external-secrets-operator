@@ -65,7 +65,6 @@ const (
 type Reconciler struct {
 	operatorclient.CtrlClient
 
-	ctx context.Context
 	log logr.Logger
 }
 
@@ -82,7 +81,6 @@ func NewClient(ctx context.Context, m manager.Manager) (operatorclient.CtrlClien
 // New is for building the reconciler instance consumed by the Reconcile method.
 func New(ctx context.Context, mgr ctrl.Manager) (*Reconciler, error) {
 	r := &Reconciler{
-		ctx: context.Background(),
 		log: ctrl.Log.WithName(ControllerName),
 	}
 	c, err := NewClient(ctx, mgr)
@@ -205,30 +203,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if common.IsInjectCertManagerAnnotationEnabled(esc) {
-		return r.processReconcileRequest(esc, req.NamespacedName)
+		return r.processReconcileRequest(ctx, esc, req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil
 }
 
 // processReconcileRequest is the reconciliation handler to manage the resources.
-func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecretsConfig, req types.NamespacedName) (ctrl.Result, error) {
+func (r *Reconciler) processReconcileRequest(ctx context.Context, esc *operatorv1alpha1.ExternalSecretsConfig, req types.NamespacedName) (ctrl.Result, error) {
 	var oErr error = nil
 	if req.Name == reconcileObjectIdentifier {
-		if err := r.updateAnnotationsInAllCRDs(); err != nil {
+		if err := r.updateAnnotationsInAllCRDs(ctx); err != nil {
 			oErr = fmt.Errorf("failed while updating annotations in all CRDs: %w", err)
 		}
 	} else {
 		crd := &crdv1.CustomResourceDefinition{}
-		if err := r.Get(r.ctx, req, crd); err != nil {
+		if err := r.Get(ctx, req, crd); err != nil {
 			oErr = fmt.Errorf("failed to fetch customresourcedefinitions.apiextensions.k8s.io %q during reconciliation: %w", req, err)
-		}
-		if err := r.updateAnnotations(crd); err != nil {
+		} else if err := r.updateAnnotations(ctx, crd); err != nil {
 			oErr = fmt.Errorf("failed to update annotations in %q: %w", req, err)
 		}
 	}
 
-	if err := r.updateCondition(esc, oErr); err != nil {
+	if err := r.updateCondition(ctx, esc, oErr); err != nil {
 		return ctrl.Result{}, utilerrors.NewAggregate([]error{err, oErr})
 	}
 
@@ -236,26 +233,26 @@ func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecre
 }
 
 // updateAnnotations is for updating the annotations on the managed CRDs.
-func (r *Reconciler) updateAnnotations(crd *crdv1.CustomResourceDefinition) error {
+func (r *Reconciler) updateAnnotations(ctx context.Context, crd *crdv1.CustomResourceDefinition) error {
 	annotations := crd.GetAnnotations()
 	if val, ok := annotations[common.CertManagerInjectCAFromAnnotation]; !ok || val != common.CertManagerInjectCAFromAnnotationValue {
 		patch := client.RawPatch(types.MergePatchType,
 			fmt.Appendf(nil, "{\"metadata\":{\"annotations\":{\"%s\":\"%s\"}}}",
 				common.CertManagerInjectCAFromAnnotation, common.CertManagerInjectCAFromAnnotationValue),
 		)
-		if err := r.Patch(r.ctx, crd, patch); err != nil {
+		if err := r.Patch(ctx, crd, patch); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Reconciler) updateAnnotationsInAllCRDs() error {
+func (r *Reconciler) updateAnnotationsInAllCRDs(ctx context.Context) error {
 	managedCRDList := &crdv1.CustomResourceDefinitionList{}
 	crdLabelFilter := map[string]string{
 		requestEnqueueLabelKey: requestEnqueueLabelValue,
 	}
-	if err := r.List(r.ctx, managedCRDList, client.MatchingLabels(crdLabelFilter)); err != nil {
+	if err := r.List(ctx, managedCRDList, client.MatchingLabels(crdLabelFilter)); err != nil {
 		return fmt.Errorf("failed to list managed CRD resources: %w", err)
 	}
 	if len(managedCRDList.Items) == 0 {
@@ -264,7 +261,7 @@ func (r *Reconciler) updateAnnotationsInAllCRDs() error {
 	}
 
 	for _, crd := range managedCRDList.Items {
-		if err := r.updateAnnotations(&crd); err != nil {
+		if err := r.updateAnnotations(ctx, &crd); err != nil {
 			return fmt.Errorf("failed to update annotations in %q: %w", crd.GetName(), err)
 		}
 	}
@@ -272,7 +269,7 @@ func (r *Reconciler) updateAnnotationsInAllCRDs() error {
 	return nil
 }
 
-func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig, err error) error {
+func (r *Reconciler) updateCondition(ctx context.Context, esc *operatorv1alpha1.ExternalSecretsConfig, err error) error {
 	cond := metav1.Condition{
 		Type:               operatorv1alpha1.UpdateAnnotation,
 		ObservedGeneration: esc.GetGeneration(),
@@ -289,7 +286,7 @@ func (r *Reconciler) updateCondition(esc *operatorv1alpha1.ExternalSecretsConfig
 	}
 
 	if apimeta.SetStatusCondition(&esc.Status.Conditions, cond) {
-		return r.updateStatus(r.ctx, esc)
+		return r.updateStatus(ctx, esc)
 	}
 
 	return nil

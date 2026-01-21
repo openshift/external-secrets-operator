@@ -23,7 +23,6 @@ import (
 // testReconciler returns a sample Reconciler instance.
 func testReconciler(t *testing.T) *Reconciler {
 	return &Reconciler{
-		ctx: context.Background(),
 		log: testr.New(t),
 	}
 }
@@ -420,7 +419,7 @@ func TestReconcile(t *testing.T) {
 			key := types.NamespacedName{
 				Name: common.ExternalSecretsConfigObjectName,
 			}
-			_ = r.Get(r.ctx, key, esc)
+			_ = r.Get(context.Background(), key, esc)
 			for _, c1 := range esc.Status.Conditions {
 				for _, c2 := range tt.expectedStatusCondition {
 					if c1.Type == c2.Type {

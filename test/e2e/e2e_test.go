@@ -68,7 +68,7 @@ const (
 )
 
 var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered, func() {
-	ctx := context.TODO()
+	ctx := context.Background()
 	var (
 		clientset     *kubernetes.Clientset
 		dynamicClient *dynamic.DynamicClient

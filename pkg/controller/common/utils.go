@@ -622,14 +622,16 @@ func RemoveFinalizer(ctx context.Context, obj client.Object, opClient operatorcl
 
 // Do is same as sync.Once.Do, which calls the passed func f only once
 // until Now is reset.
+// Do calls f() only once until Reset is called, similar to sync.Once.Do.
+// Uses double-checked locking to ensure thread-safety.
 func (n *Now) Do(f func()) {
-	n.done.Load()
 	if n.done.Load() == 0 {
 		n.Lock()
 		defer n.Unlock()
-
-		defer n.done.Store(1)
-		f()
+		if n.done.Load() == 0 {
+			defer n.done.Store(1)
+			f()
+		}
 	}
 }
 

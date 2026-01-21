@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -81,10 +82,12 @@ func loadOpenShiftCACertPool() (*x509.CertPool, error) {
 
 	openshiftCACert, err := os.ReadFile(openshiftCACertificateFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read OpenShift service CA certificate file %q: %w", openshiftCACertificateFile, err)
 	}
 
-	certPool.AppendCertsFromPEM(openshiftCACert)
+	if ok := certPool.AppendCertsFromPEM(openshiftCACert); !ok {
+		return nil, fmt.Errorf("failed to parse any certificate from OpenShift service CA certificate file %q", openshiftCACertificateFile)
+	}
 	return certPool, nil
 }
 
