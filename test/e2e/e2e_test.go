@@ -230,8 +230,34 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 	})
 
 	Context("Deployment Revision History Limit", func() {
-		It("should set revisionHistoryLimit for all component deployments", func() {
-			By("Updating the ExternalSecretsConfig with revision history limits")
+		It("should use default revisionHistoryLimit when not configured", func() {
+			By("Verifying default revisionHistoryLimit (10) for ExternalSecretsCoreController deployment")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets deployment")
+				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(10)), "revisionHistoryLimit should default to 10 when not configured")
+			}, time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying default revisionHistoryLimit (10) for Webhook deployment")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-webhook", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-webhook deployment")
+				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(10)), "revisionHistoryLimit should default to 10 when not configured")
+			}, time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying default revisionHistoryLimit (10) for CertController deployment")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-cert-controller", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-cert-controller deployment")
+				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(10)), "revisionHistoryLimit should default to 10 when not configured")
+			}, time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should set custom revisionHistoryLimit for all component deployments", func() {
+			By("Updating the ExternalSecretsConfig with custom revision history limits")
 			loader.DeleteFromFile(testassets.ReadFile, externalSecretsFile, "")
 			loader.CreateFromFile(testassets.ReadFile, externalSecretsWithRevisionLimitFile, "")
 			defer func() {
@@ -246,7 +272,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				operandWebhookPodPrefix,
 			})).To(Succeed())
 
-			By("Verifying revisionHistoryLimit for ExternalSecretsCoreController deployment")
+			By("Verifying custom revisionHistoryLimit (3) for ExternalSecretsCoreController deployment")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets deployment")
@@ -254,7 +280,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(3)), "revisionHistoryLimit should be 3 for controller")
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Verifying revisionHistoryLimit for Webhook deployment")
+			By("Verifying custom revisionHistoryLimit (5) for Webhook deployment")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-webhook", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-webhook deployment")
@@ -262,7 +288,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(5)), "revisionHistoryLimit should be 5 for webhook")
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Verifying revisionHistoryLimit for CertController deployment")
+			By("Verifying custom revisionHistoryLimit (2) for CertController deployment")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-cert-controller", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-cert-controller deployment")

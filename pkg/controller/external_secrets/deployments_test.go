@@ -1450,21 +1450,21 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 			assetName:     "invalid-asset-name.yml",
 			wantComponent: "",
 			wantErr:       true,
-			errContains:   "invalid or unknown deployment asset name",
+			errContains:   "unknown deployment asset name",
 		},
 		{
 			name:          "empty asset name returns error",
 			assetName:     "",
 			wantComponent: "",
 			wantErr:       true,
-			errContains:   "invalid or unknown deployment asset name",
+			errContains:   "unknown deployment asset name",
 		},
 		{
 			name:          "random string returns error",
 			assetName:     "some-random-deployment.yml",
 			wantComponent: "",
 			wantErr:       true,
-			errContains:   "ensure the asset is mapped to a valid ComponentName",
+			errContains:   "unknown deployment asset name",
 		},
 	}
 
