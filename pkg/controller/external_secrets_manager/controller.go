@@ -117,7 +117,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.now.Do(func() {
 			r.eventRecorder.Eventf(esm, corev1.EventTypeWarning, "Read", "failed to fetch externalsecretsmanagers.operator.openshift.io %q", key)
 		})
-		return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, fmt.Errorf("failed to fetch externalsecretsmanagers.operator.openshift.io %q during reconciliation: %w", key, err)
+		// Return error and let controller-runtime handle backoff (don't return both RequeueAfter and error)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsmanagers.operator.openshift.io %q during reconciliation: %w", key, err)
 	}
 	r.now.Reset()
 
