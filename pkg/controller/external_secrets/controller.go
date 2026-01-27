@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -423,16 +422,30 @@ func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecre
 			readyCond.Message = fmt.Sprintf("reconciliation failed, retrying: %v", err)
 		}
 
-		if apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond) ||
-			apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond) {
+		// Set both conditions atomically before updating status
+		degradedChanged := apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond)
+		readyChanged := apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond)
+
+		if degradedChanged || readyChanged {
+			r.log.V(2).Info("updating externalsecretsconfig conditions on error",
+				"namespace", esc.GetNamespace(),
+				"name", esc.GetName(),
+				"degradedChanged", degradedChanged,
+				"readyChanged", readyChanged,
+				"isFatal", isFatal,
+				"error", err)
 			errUpdate = r.updateCondition(esc, err)
-			err = utilerrors.NewAggregate([]error{err, errUpdate})
 		}
 
 		if isFatal {
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, errUpdate
 		}
-		return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, fmt.Errorf("failed to reconcile %q external-secrets deployment: %w", req, err)
+		// For recoverable errors, either requeue manually or return error, not both
+		// If status update failed, return the update error; otherwise requeue with nil error
+		if errUpdate != nil {
+			return ctrl.Result{}, errUpdate
+		}
+		return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 	}
 
 	// Successful reconciliation
@@ -450,8 +463,16 @@ func (r *Reconciler) processReconcileRequest(esc *operatorv1alpha1.ExternalSecre
 		ObservedGeneration: observedGeneration,
 	}
 
-	if apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond) ||
-		apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond) {
+	// Set both conditions atomically before updating status on success
+	degradedChanged := apimeta.SetStatusCondition(&esc.Status.Conditions, degradedCond)
+	readyChanged := apimeta.SetStatusCondition(&esc.Status.Conditions, readyCond)
+
+	if degradedChanged || readyChanged {
+		r.log.V(2).Info("updating externalsecretsconfig conditions on successful reconciliation",
+			"namespace", esc.GetNamespace(),
+			"name", esc.GetName(),
+			"degradedChanged", degradedChanged,
+			"readyChanged", readyChanged)
 		errUpdate = r.updateCondition(esc, nil)
 	}
 

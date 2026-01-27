@@ -110,6 +110,10 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 		By("Creating the externalsecrets.openshift.operator.io/cluster CR")
 		loader.CreateFromFile(testassets.ReadFile, externalSecretsFile, "")
+
+		By("Waiting for ExternalSecretsConfig to be Ready (with Degraded=False)")
+		Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute)).To(Succeed(),
+			"ExternalSecretsConfig should have Ready=True and Degraded=False conditions")
 	})
 
 	AfterAll(func() {

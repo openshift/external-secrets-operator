@@ -97,6 +97,7 @@ func isPodReady(pod *corev1.Pod) bool {
 }
 
 // WaitForESOResourceReady checks if a custom ESO resource (like SecretStore/PushSecret) is Ready=True
+// and not Degraded. Returns early with error if Degraded condition is true.
 func WaitForESOResourceReady(
 	ctx context.Context,
 	client dynamic.Interface,
@@ -104,7 +105,9 @@ func WaitForESOResourceReady(
 	namespace, name string,
 	timeout time.Duration,
 ) error {
-	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+	var lastConditions []map[string]interface{}
+
+	err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		u, err := client.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return false, nil // retry
@@ -115,25 +118,135 @@ func WaitForESOResourceReady(
 			return false, nil // retry
 		}
 
+		// Store conditions for timeout error message
+		lastConditions = make([]map[string]interface{}, 0, len(conds))
+
+		var readyCondition, degradedCondition map[string]interface{}
 		for _, c := range conds {
 			cond, ok := c.(map[string]interface{})
 			if !ok {
 				continue
 			}
-			t := cond["type"]
-			s := cond["status"]
-			msg := cond["message"]
+			lastConditions = append(lastConditions, cond)
 
+			t := cond["type"]
 			if t == "Ready" {
-				if s == "True" {
-					return true, nil
-				} else {
-					fmt.Printf("resource %s/%s not ready: %v\n", namespace, name, msg)
-				}
+				readyCondition = cond
+			}
+			if t == "Degraded" {
+				degradedCondition = cond
 			}
 		}
+
+		// Check for Degraded condition first - fail fast if degraded
+		if degradedCondition != nil && degradedCondition["status"] == "True" {
+			return false, fmt.Errorf("resource %s/%s is degraded: %v", namespace, name, degradedCondition["message"])
+		}
+
+		// Check Ready condition
+		if readyCondition != nil {
+			if readyCondition["status"] == "True" {
+				return true, nil
+			}
+			fmt.Printf("resource %s/%s not ready: %v\n", namespace, name, readyCondition["message"])
+		}
+
 		return false, nil
 	})
+
+	// Provide detailed error message on timeout
+	if err != nil && wait.Interrupted(err) {
+		conditionSummary := "no conditions found"
+		if len(lastConditions) > 0 {
+			var parts []string
+			for _, c := range lastConditions {
+				parts = append(parts, fmt.Sprintf("%s=%s", c["type"], c["status"]))
+			}
+			conditionSummary = strings.Join(parts, ", ")
+		}
+		return fmt.Errorf("timeout waiting for %s %s/%s to be ready: %s", gvr.Resource, namespace, name, conditionSummary)
+	}
+
+	return err
+}
+
+// externalSecretsConfigGVR is the GroupVersionResource for ExternalSecretsConfig
+var externalSecretsConfigGVR = schema.GroupVersionResource{
+	Group:    "operator.openshift.io",
+	Version:  "v1alpha1",
+	Resource: "externalsecretsconfigs",
+}
+
+// WaitForExternalSecretsConfigReady checks if the ExternalSecretsConfig CR has Ready=True and Degraded=False.
+// This verifies that the operator has successfully reconciled the configuration.
+// Returns early with error if Degraded condition is true.
+func WaitForExternalSecretsConfigReady(
+	ctx context.Context,
+	client dynamic.Interface,
+	name string,
+	timeout time.Duration,
+) error {
+	var lastReadyCondition, lastDegradedCondition map[string]interface{}
+
+	err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		u, err := client.Resource(externalSecretsConfigGVR).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false, nil // retry on not found or other errors
+		}
+
+		conds, found, err := unstructured.NestedSlice(u.Object, "status", "conditions")
+		if err != nil {
+			return false, fmt.Errorf("failed to extract conditions from ExternalSecretsConfig: %w", err)
+		}
+		if !found {
+			return false, nil // conditions not yet set, retry
+		}
+
+		for _, c := range conds {
+			cond, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			condType, _ := cond["type"].(string)
+			switch condType {
+			case "Ready":
+				lastReadyCondition = cond
+			case "Degraded":
+				lastDegradedCondition = cond
+			}
+		}
+
+		// Check for Degraded condition first - fail fast if degraded
+		if lastDegradedCondition != nil && lastDegradedCondition["status"] == "True" {
+			return false, fmt.Errorf("ExternalSecretsConfig %s is degraded: %v", name, lastDegradedCondition["message"])
+		}
+
+		// Check Ready condition
+		if lastReadyCondition == nil {
+			return false, nil // Ready condition not yet set, retry
+		}
+
+		return lastReadyCondition["status"] == "True", nil
+	})
+
+	// Provide detailed error message on timeout
+	if err != nil && wait.Interrupted(err) {
+		readyStatus := "not set"
+		degradedStatus := "not set"
+		if lastReadyCondition != nil {
+			readyStatus = fmt.Sprintf("%v (reason: %v, message: %v)",
+				lastReadyCondition["status"], lastReadyCondition["reason"], lastReadyCondition["message"])
+		}
+		if lastDegradedCondition != nil {
+			degradedStatus = fmt.Sprintf("%v (reason: %v, message: %v)",
+				lastDegradedCondition["status"], lastDegradedCondition["reason"], lastDegradedCondition["message"])
+		}
+		return fmt.Errorf("timeout waiting for ExternalSecretsConfig %s to be ready: Ready=%s, Degraded=%s",
+			name, readyStatus, degradedStatus)
+	}
+
+	return err
 }
 
 func fetchAWSCreds(ctx context.Context, k8sClient *kubernetes.Clientset) (string, string, error) {
