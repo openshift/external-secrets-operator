@@ -1,0 +1,8 @@
+go 1.25.3
+
+use (
+	.
+	./test/e2e
+	./tools
+)
+

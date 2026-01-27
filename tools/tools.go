@@ -7,18 +7,16 @@
 package tools
 
 import (
-	// Makefile
+	// Makefile tools
 	_ "github.com/elastic/crd-ref-docs"
 	_ "github.com/go-bindata/go-bindata/go-bindata"
+	_ "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	_ "github.com/maxbrunsfeld/counterfeiter/v6"
 	_ "github.com/onsi/ginkgo/v2/ginkgo"
 	_ "github.com/openshift/build-machinery-go"
 	_ "golang.org/x/vuln/cmd/govulncheck"
-	_ "sigs.k8s.io/kube-api-linter/pkg/plugin"
-
-	// prow-ci
-	_ "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	_ "sigs.k8s.io/controller-runtime/tools/setup-envtest"
 	_ "sigs.k8s.io/controller-tools/cmd/controller-gen"
+	_ "sigs.k8s.io/kube-api-linter/pkg/plugin"
 	_ "sigs.k8s.io/kustomize/kustomize/v5"
 )

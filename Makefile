@@ -64,6 +64,14 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+PACKAGE=github.com/openshift/external-secrets-operator
+PROJECT_ROOT := $(shell pwd)
+TOOLS_DIR=$(PROJECT_ROOT)/tools
+
+# Tools that need to run from tools directory context (using go run)
+CONTROLLER_GEN_RUN := cd $(TOOLS_DIR) && GOFLAGS="" go run sigs.k8s.io/controller-tools/cmd/controller-gen
+SETUP_ENVTEST_RUN := cd $(TOOLS_DIR) && GOFLAGS="" go run sigs.k8s.io/controller-runtime/tools/setup-envtest
+
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
@@ -111,27 +119,27 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+manifests: ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN_RUN) rbac:roleName=manager-role crd webhook paths="$(PROJECT_ROOT)/api/...;$(PROJECT_ROOT)/pkg/...;$(PROJECT_ROOT)/cmd/..." output:crd:artifacts:config=$(PROJECT_ROOT)/config/crd/bases output:rbac:artifacts:config=$(PROJECT_ROOT)/config/rbac
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+generate: ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN_RUN) object:headerFile="$(PROJECT_ROOT)/hack/boilerplate.go.txt" paths="$(PROJECT_ROOT)/api/..."
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	GOFLAGS="" go fmt ./...
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	GOFLAGS="" go vet ./...
 
 .PHONY: test
 test: manifests generate fmt vet envtest test-apis test-unit ## Run tests.
 
 .PHONY: test-unit
 test-unit: vet ## Run unit tests.
-	go test $$(go list ./... | grep -vE 'test/[e2e|apis|utils]') -coverprofile cover.out
+	GOFLAGS="" go test $$(go list ./... | grep -vE 'test/[e2e|apis|utils]') -coverprofile cover.out
 
 update-operand-manifests: helm yq
 	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
@@ -144,13 +152,13 @@ E2E_TIMEOUT ?= 1h
 E2E_GINKGO_LABEL_FILTER ?= "Platform: isSubsetOf {AWS}"
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
 test-e2e:
-	go test \
+	cd test/e2e && GOFLAGS="" go test \
 	-timeout $(E2E_TIMEOUT) \
 	-count 1 \
 	-v \
 	-p 1 \
 	-tags e2e \
-	./test/e2e \
+	./... \
 	-ginkgo.v \
 	-ginkgo.show-node-events \
 	-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
@@ -265,31 +273,30 @@ HELM_VERSION ?= v3.17.3
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	$(call go-install-tool,$(KUSTOMIZE),./vendor/sigs.k8s.io/kustomize/kustomize/v5)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	$(call go-install-tool,$(CONTROLLER_GEN),./vendor/sigs.k8s.io/controller-tools/cmd/controller-gen)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	$(call go-install-tool,$(ENVTEST),./vendor/sigs.k8s.io/controller-runtime/tools/setup-envtest)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest)
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),./vendor/github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
 
 .PHONY: crd-ref-docs
 crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
-	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),./vendor/github.com/elastic/crd-ref-docs)
+	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),github.com/elastic/crd-ref-docs)
 
 .PHONY: kube-api-linter
 kube-api-linter: $(LOCALBIN)
-	@#go get sigs.k8s.io/kube-api-linter/pkg/plugin@v0.0.0-20251203203220-2d0643557c8d
-	go build -mod=vendor -buildmode=plugin -o $(KUBE_API_LINT) ./vendor/sigs.k8s.io/kube-api-linter/pkg/plugin
+	cd $(TOOLS_DIR) && GOFLAGS="" go build -mod=vendor -buildmode=plugin -o $(KUBE_API_LINT) sigs.k8s.io/kube-api-linter/pkg/plugin
 
 .PHONY: govulncheck
 govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
@@ -301,15 +308,15 @@ ginkgo: $(LOCALBIN) ## Download ginkgo locally if necessary.
 
 # go-install-tool will 'go install' any package with custom target and name of the binary.
 # $1 - target path with name of binary
-# $2 - vendor code path of the package
+# $2 - package import path (from tools module)
 define go-install-tool
 @{ \
 set -e; \
 bin_path=$(1); \
 package=$(2); \
-echo "Building $${package}"; \
+echo "Building $${package} from tools module"; \
 rm -f $(1) || true; \
-go build -mod=vendor -o $${bin_path} $${package}; \
+cd $(TOOLS_DIR) && GOFLAGS="" go build -mod=vendor -o $${bin_path} $${package}; \
 }
 endef
 
@@ -408,7 +415,13 @@ catalog-push: ## Push a catalog image.
 
 ## verify the changes are working as expected.
 .PHONY: verify
-verify: vet fmt verify-bindata verify-bindata-assets verify-generated govulnscan
+verify: vet fmt verify-bindata verify-bindata-assets verify-generated verify-deps govulnscan
+
+.PHONY: verify-deps
+verify-deps: ## Verify all module dependencies are in sync.
+	go mod verify
+	cd $(TOOLS_DIR) && go mod verify
+	cd test/e2e && go mod verify
 
 ## update the relevant data based on new changes.
 .PHONY: update
@@ -453,8 +466,27 @@ govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
 
 # Utilize controller-runtime provided envtest for API integration test
 .PHONY: test-apis  ## Run only the api integration tests.
-test-apis: envtest ginkgo
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ./hack/test-apis.sh
+test-apis: ginkgo
+	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST_RUN) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" GOFLAGS="" ./hack/test-apis.sh
+
+.PHONY: update-vendor
+update-vendor: ## Update vendor directory for all modules in the workspace.
+	go mod tidy
+	cd $(TOOLS_DIR) && go mod tidy
+	cd test/e2e && go mod tidy
+	go work vendor
+
+.PHONY: update-dep
+update-dep: ## Update a dependency across all modules. Usage: make update-dep PKG=k8s.io/api@v0.35.0
+	@if [ -z "$(PKG)" ]; then echo "Usage: make update-dep PKG=package@version"; exit 1; fi
+	@echo "Updating $(PKG) in main module..."
+	go get $(PKG)
+	@echo "Updating $(PKG) in tools module..."
+	-cd $(TOOLS_DIR) && go get $(PKG)
+	@echo "Updating $(PKG) in test/e2e module..."
+	-cd test/e2e && go get $(PKG)
+	@echo "Running update-vendor..."
+	$(MAKE) update-vendor
 
 .PHONY: clean
 clean:
