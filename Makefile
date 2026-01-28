@@ -1,9 +1,29 @@
-# VERSION defines the project version for the bundle.
+# Warn when an undefined variable is referenced, helping catch typos and missing definitions.
+MAKEFLAGS += --warn-undefined-variables
+
+# Setting SHELL to bash allows bash commands to be executed by recipes.
+# Options are set to exit when a recipe line exits non-zero or a piped command fails.
+SHELL := /usr/bin/env bash
+.SHELLFLAGS := -euo pipefail -c
+
+# Ensure cache and config directories are writable (needed for CI environments where
+# HOME may be unset or pointing to a non-writable directory like /).
+export XDG_CACHE_HOME ?= $(shell pwd)/_output/.cache
+export XDG_CONFIG_HOME ?= $(shell pwd)/_output/.config
+
+# VERSION defines the project version for the bundle (must be valid semver: Major.Minor.Patch).
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 1.1.0
+DEFAULT_VERSION := 1.1.0
+VERSION ?= $(DEFAULT_VERSION)
+
+# Validate VERSION is valid semver (Major.Minor.Patch), fallback to default if not.
+ifneq ($(shell echo '$(VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && echo valid),valid)
+$(warning VERSION '$(VERSION)' is not valid semver (expected: Major.Minor.Patch), using default '$(DEFAULT_VERSION)')
+override VERSION := $(DEFAULT_VERSION)
+endif
 
 # EXTERNAL_SECRETS_VERSION defines the external-secrets release version to fetch helm charts.
 EXTERNAL_SECRETS_VERSION ?= v0.20.4
@@ -13,6 +33,7 @@ EXTERNAL_SECRETS_VERSION ?= v0.20.4
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
+BUNDLE_CHANNELS ?=
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
 endif
@@ -22,6 +43,7 @@ endif
 # To re-generate a bundle for any other default channel without changing the default setup, you can:
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
+BUNDLE_DEFAULT_CHANNEL ?=
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
@@ -49,11 +71,11 @@ ifeq ($(USE_IMAGE_DIGESTS), true)
 	BUNDLE_GEN_FLAGS += --use-image-digests
 endif
 
-# Set the Operator SDK version to use. By default, what is installed on the system is used.
-# This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
-OPERATOR_SDK_VERSION ?= v1.39.0
-# Image URL to use all building/pushing image targets
+# IMG is the image URL used for building/pushing image targets.
+# Default tag is 'latest' to avoid unnecessary changes in checked-in manifests.
+# Override with a specific version when building release images (e.g., IMG=openshift.io/external-secrets-operator:v1.1.0).
 IMG ?= openshift.io/external-secrets-operator:latest
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.32.0
 
@@ -69,11 +91,6 @@ endif
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= podman
-
-# Setting SHELL to bash allows bash commands to be executed by recipes.
-# Options are set to exit when a recipe line exits non-zero or a piped command fails.
-SHELL = /usr/bin/env bash -o pipefail
-.SHELLFLAGS = -ec
 
 COMMIT ?= $(shell git rev-parse HEAD)
 SHORTCOMMIT ?= $(shell git rev-parse --short HEAD)
@@ -120,52 +137,64 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	@echo "Running go formatter..."
+	@go fmt ./...
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	@echo "Running go vet..."
+	@go vet ./...
+
+##@ Testing
 
 .PHONY: test
-test: manifests generate fmt vet envtest test-apis test-unit ## Run tests.
+test: manifests generate fmt vet envtest test-apis test-unit ## Run all tests.
 
 .PHONY: test-unit
 test-unit: vet ## Run unit tests.
-	go test $$(go list ./... | grep -vE 'test/[e2e|apis|utils]') -coverprofile cover.out
+	@echo "Running go unit tests..."
+	@go test $$(go list ./... | grep -vE 'test/(e2e|apis|utils)') -coverprofile cover.out
 
-update-operand-manifests: helm yq
-	hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
-.PHONY: update-operand-manifests
-
-# Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
+# E2E_TIMEOUT is the timeout for e2e tests.
 E2E_TIMEOUT ?= 1h
 # E2E_GINKGO_LABEL_FILTER is ginkgo label query for selecting tests. See
 # https://onsi.github.io/ginkgo/#spec-labels. The default is to run tests on the AWS platform.
 E2E_GINKGO_LABEL_FILTER ?= "Platform: isSubsetOf {AWS}"
-.PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
-test-e2e:
-	go test \
+
+.PHONY: test-e2e
+test-e2e: ## Run e2e tests against a cluster.
+	@echo "Running go e2e tests..."
+	@go test -C ./test/e2e \
 	-timeout $(E2E_TIMEOUT) \
 	-count 1 \
 	-v \
 	-p 1 \
 	-tags e2e \
-	./test/e2e \
+	. \
 	-ginkgo.v \
 	-ginkgo.show-node-events \
 	-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
 
+.PHONY: test-apis
+test-apis: envtest ginkgo ## Run API integration tests.
+	@echo "Running API unit tests..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ./hack/test-apis.sh
+
 .PHONY: lint
-lint: golangci-lint kube-api-linter ## Run golangci-lint linter
-	$(GOLANGCI_LINT) run --verbose --config .golangci.yml
+lint: golangci-lint kube-api-linter ## Run golangci-lint linter.
+	@echo "Running go linter..."
+	@$(GOLANGCI_LINT) run --verbose --config .golangci.yml
 
 .PHONY: lint-fix
-lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_LINT) run --verbose --fix --config .golangci.yml
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
+	@echo "Running go linter with auto-fix..."
+	@$(GOLANGCI_LINT) run --verbose --fix --config .golangci.yml
 
 ##@ Build
 
-build-operator: ## Build operator binary, no additional checks or code generation
+.PHONY: build-operator
+build-operator: ## Build operator binary, no additional checks or code generation.
+	@echo "Building operator..."
 	@GOFLAGS="-mod=vendor" source hack/go-fips.sh && \
 	go build $(GOBUILD_VERSION_ARGS) -o $(LOCALBIN)/external-secrets-operator cmd/external-secrets-operator/main.go
 
@@ -174,18 +203,21 @@ build: manifests generate fmt vet build-operator ## Build manager binary.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/external-secrets-operator/main.go --v=5 --metrics-secure=false
+	@echo "Starting operator in local env..."
+	@go run ./cmd/external-secrets-operator/main.go --v=5 --metrics-secure=false
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: image-build
 image-build: ## Build operator image.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	@echo "Building operator container image ${IMG}..."
+	@$(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: image-push
 image-push: ## Push operator image.
-	$(CONTAINER_TOOL) push ${IMG}
+	@echo "Pushing operator container to image ${IMG}..."
+	@$(CONTAINER_TOOL) push ${IMG}
 
 # PLATFORMS defines the target platforms for the operator image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -206,9 +238,10 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
-	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > dist/install.yaml
+	@echo "Generating a consolidated yaml with CRDs and resource manifests..."
+	@mkdir -p dist
+	@cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	@$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Deployment
 
@@ -218,34 +251,40 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
+	@echo "Installing the CRDs..."
+	@$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	@echo "Uninstalling the CRDs..."
+	@$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
+	@echo "Installing the CRDs and the operator..."
+	@cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	@$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	@echo "Uninstalling the CRDs and the operator..."
+	@$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 
-## Location to install dependencies to
+# Location to install dependencies to.
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
-	mkdir -p $(LOCALBIN)
+	@echo "Creating $(LOCALBIN) directory..."
+	@mkdir -p $(LOCALBIN)
 
-## Location to store temp outputs
+# Location to store temp outputs.
 OUTPUTS_PATH ?= $(shell pwd)/_output
 $(OUTPUTS_PATH):
-	mkdir -p $(OUTPUTS_PATH)
+	@echo "Creating $(OUTPUTS_PATH) directory..."
+	@mkdir -p $(OUTPUTS_PATH)
 
-## Tool Binaries
+# Tool Binaries
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
@@ -253,12 +292,17 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 YQ = $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
+OPM = $(LOCALBIN)/opm
+OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 REFERENCE_DOC_GENERATOR ?= $(LOCALBIN)/crd-ref-docs
 GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 GINKGO ?= $(LOCALBIN)/ginkgo
 KUBE_API_LINT = $(LOCALBIN)/kube-api-linter.so
 
-## Tool Versions
+# Tool Versions
+# Set the Operator SDK version to use. By default, what is installed on the system is used.
+# This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
+OPERATOR_SDK_VERSION ?= v1.39.0
 YQ_VERSION = v4.45.2
 HELM_VERSION ?= v3.17.3
 
@@ -287,9 +331,9 @@ crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
 	$(call go-install-tool,$(REFERENCE_DOC_GENERATOR),./vendor/github.com/elastic/crd-ref-docs)
 
 .PHONY: kube-api-linter
-kube-api-linter: $(LOCALBIN)
-	@#go get sigs.k8s.io/kube-api-linter/pkg/plugin@v0.0.0-20251203203220-2d0643557c8d
-	go build -mod=vendor -buildmode=plugin -o $(KUBE_API_LINT) ./vendor/sigs.k8s.io/kube-api-linter/pkg/plugin
+kube-api-linter: $(LOCALBIN) ## Build kube-api-linter plugin locally.
+	@echo "Building kube-api-linter plugin library..."
+	@go build -mod=vendor -buildmode=plugin -o $(KUBE_API_LINT) ./vendor/sigs.k8s.io/kube-api-linter/pkg/plugin
 
 .PHONY: govulncheck
 govulncheck: $(LOCALBIN) ## Download govulncheck locally if necessary.
@@ -304,22 +348,19 @@ ginkgo: $(LOCALBIN) ## Download ginkgo locally if necessary.
 # $2 - vendor code path of the package
 define go-install-tool
 @{ \
-set -e; \
 bin_path=$(1); \
 package=$(2); \
-echo "Building $${package}"; \
+echo "Building $${package}..."; \
 rm -f $(1) || true; \
 go build -mod=vendor -o $${bin_path} $${package}; \
 }
 endef
 
 .PHONY: operator-sdk
-OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 operator-sdk: ## Download operator-sdk locally if necessary.
 ifeq (,$(wildcard $(OPERATOR_SDK)))
-ifeq (, $(shell which operator-sdk 2>/dev/null))
+ifeq (,$(shell which operator-sdk 2>/dev/null))
 	@{ \
-	set -e ;\
 	mkdir -p $(dir $(OPERATOR_SDK)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
 	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$${OS}_$${ARCH} ;\
@@ -336,9 +377,7 @@ yq: $(LOCALBIN) ensure-yq  ## Download yq locally if necessary.
 .PHONY: helm
 helm: ## Download helm locally if necessary.
 ifeq (,$(wildcard $(HELM)))
-ifeq (, $(shell ls $(HELM) 2>/dev/null))
 	@{ \
-	set -e ;\
 	mkdir -p $(dir $(HELM)) ;\
 	temp_dir=$(shell mktemp -d) && OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
 	curl -sSLo $${temp_dir}/helm.tar.gz https://get.helm.sh/helm-${HELM_VERSION}-$${OS}-$${ARCH}.tar.gz ;\
@@ -348,30 +387,30 @@ ifeq (, $(shell ls $(HELM) 2>/dev/null))
 	rm -r $${temp_dir} ;\
 	}
 endif
-endif
 
 .PHONY: bundle
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
-	$(OPERATOR_SDK) generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
-	$(OPERATOR_SDK) bundle validate ./bundle
+	@echo "Generating the bundle manifests and metadata..."
+	@$(OPERATOR_SDK) generate kustomize manifests -q
+	@cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	@$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
+	@$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	@echo "Building bundle image $(BUNDLE_IMG)..."
+	@$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
-	$(CONTAINER_TOOL) push $(BUNDLE_IMG)
+	@echo "Pushing bundle image $(BUNDLE_IMG)..."
+	@$(CONTAINER_TOOL) push $(BUNDLE_IMG)
 
 .PHONY: opm
-OPM = $(LOCALBIN)/opm
 opm: ## Download opm locally if necessary.
 ifeq (,$(wildcard $(OPM)))
 ifeq (,$(shell which opm 2>/dev/null))
 	@{ \
-	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
 	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.23.0/$${OS}-$${ARCH}-opm ;\
@@ -399,33 +438,25 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool $(CONTAINER_TOOL) --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	@echo "Building catalog image $(CATALOG_IMG)..."
+	@$(OPM) index add --container-tool $(CONTAINER_TOOL) --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
-	$(CONTAINER_TOOL) push $(CATALOG_IMG)
+	@echo "Pushing catalog image $(CATALOG_IMG)..."
+	@$(CONTAINER_TOOL) push $(CATALOG_IMG)
 
-## verify the changes are working as expected.
+##@ Verification
+
 .PHONY: verify
-verify: vet fmt verify-bindata verify-bindata-assets verify-generated govulnscan
+verify: vet fmt verify-bindata verify-bindata-assets verify-generated govulnscan check-git-diff ## Verify the changes are working as expected.
 
-## update the relevant data based on new changes.
-.PHONY: update
-update: generate manifests update-operand-manifests update-bindata bundle docs
-
-## checks for any uncommitted changes.
 .PHONY: check-git-diff
-check-git-diff: update
-	./hack/check-git-diff-clean.sh
+check-git-diff: update ## Check for any uncommitted changes including untracked files.
+	@echo "Checking for any uncommitted changes including untracked files..."
+	@./hack/check-git-diff-clean.sh
 
-## generate internal docs.
-.PHONY: docs
-docs: crd-ref-docs
-	$(REFERENCE_DOC_GENERATOR) --source-path=api/v1alpha1/ --renderer=markdown --config=hack/docs/config.yaml --output-path=docs/api_reference.md
-
-## perform vulnerabilities scan using govulncheck.
-.PHONY: govulnscan
 # The ignored vulnerabilities are not in the operator code, but in the vendored packages.
 # Each vulnerability ID corresponds to a specific issue that has been reviewed and deemed
 # acceptable for the current vendored dependencies.
@@ -433,7 +464,9 @@ docs: crd-ref-docs
 # - https://pkg.go.dev/vuln/GO-2025-3547
 # - https://pkg.go.dev/vuln/GO-2025-3521
 KNOWN_VULNERABILITIES=GO-2025-3956|GO-2025-3547|GO-2025-3521
-govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
+
+.PHONY: govulnscan
+govulnscan: govulncheck $(OUTPUTS_PATH) ## Run govulncheck vulnerability scan.
 	@echo "Running govulncheck vulnerability scan..."
 	@$(GOVULNCHECK) ./... > $(OUTPUTS_PATH)/govulcheck.results 2>&1 || true
 	@grep -q "pkg.go.dev" $(OUTPUTS_PATH)/govulcheck.results || { \
@@ -451,11 +484,22 @@ govulnscan: govulncheck $(OUTPUTS_PATH)  ## Run govulncheck
 		echo "✓ Vulnerability scan passed - no new issues found"; \
 	fi)
 
-# Utilize controller-runtime provided envtest for API integration test
-.PHONY: test-apis  ## Run only the api integration tests.
-test-apis: envtest ginkgo
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ./hack/test-apis.sh
+##@ Maintenance
+
+.PHONY: update
+update: generate manifests update-operand-manifests update-bindata bundle docs ## Update generated code, manifests, and documentation.
+
+.PHONY: update-operand-manifests
+update-operand-manifests: helm yq ## Update external-secrets operand manifests from upstream helm charts.
+	@echo "Updating external-secrets operand manifests..."
+	@hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
+
+.PHONY: docs
+docs: crd-ref-docs ## Generate API reference documentation.
+	@echo "Generating API doc..."
+	@$(REFERENCE_DOC_GENERATOR) --source-path=api/v1alpha1/ --renderer=markdown --config=hack/docs/config.yaml --output-path=docs/api_reference.md
 
 .PHONY: clean
-clean:
-	rm -rf $(LOCALBIN) $(OUTPUTS_PATH) cover.out dist
+clean: ## Clean up generated files and directories.
+	@echo "Cleaning up make generated files...."
+	@rm -rf $(LOCALBIN) $(OUTPUTS_PATH) cover.out dist
