@@ -200,9 +200,11 @@ func HasObjectChanged(desired, fetched client.Object) bool {
 		objectModified = networkPolicySpecModified(desired.(*networkingv1.NetworkPolicy), fetched.(*networkingv1.NetworkPolicy))
 	case *webhook.ValidatingWebhookConfiguration:
 		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
+
 	default:
-		panic(fmt.Sprintf("unsupported object type: %T", desired))
+		return ObjectMetadataModified(desired, fetched)
 	}
+
 	return objectModified || ObjectMetadataModified(desired, fetched)
 }
 
@@ -214,6 +216,10 @@ func ObjectMetadataModified(desired, fetched client.Object) bool {
 	// Check if annotations have changed (ignoring system-managed annotations)
 	desiredAnnotates := desired.GetAnnotations()
 	fetchedAnnotates := FilterReservedAnnotations(fetched.GetAnnotations())
+	// Handle nil vs empty map: both are semantically equivalent
+	if len(desiredAnnotates) == 0 && len(fetchedAnnotates) == 0 {
+		return false
+	}
 	if !reflect.DeepEqual(desiredAnnotates, fetchedAnnotates) {
 		return true
 	}
@@ -221,10 +227,6 @@ func ObjectMetadataModified(desired, fetched client.Object) bool {
 }
 
 // FilterReservedAnnotations filters out Kubernetes/OpenShift reserved domain annotations.
-// This function serves two purposes:
-// 1. Filter user-provided annotations to prevent using reserved domains (security)
-// 2. Filter system-managed annotations during comparison to prevent reconciliation loops
-//
 // Reserved domains: kubernetes.io, openshift.io, k8s.io (including all subdomains)
 func FilterReservedAnnotations(annotations map[string]string) map[string]string {
 	if len(annotations) == 0 {
@@ -232,22 +234,15 @@ func FilterReservedAnnotations(annotations map[string]string) map[string]string 
 	}
 
 	// Reserved domain patterns: blocks both "kubernetes.io/*" and "*.kubernetes.io/*"
-	reservedDomains := []string{"kubernetes.io", "openshift.io", "k8s.io"}
+	reservedDomains := []string{"kubernetes.io", "openshift.io", "k8s.io", "cert-manager.io"}
 
 	result := make(map[string]string, len(annotations))
 	for key, value := range annotations {
 		isReserved := false
 
 		for _, domain := range reservedDomains {
-			// Check for direct prefix: kubernetes.io/foo
-			if strings.HasPrefix(key, domain+"/") {
-				isReserved = true
-				break
-			}
-			
-			// Check for subdomain: *.kubernetes.io/foo
-			// Look for ".kubernetes.io/" or ".kubernetes.io" in the key
-			if strings.Contains(key, "."+domain+"/") || strings.Contains(key, "."+domain) {
+			// Checks for patterns like kubernetes.io/* and *.kubernetes.io/* only
+			if strings.HasPrefix(key, domain+"/") || strings.Contains(key, "."+domain+"/") {
 				isReserved = true
 				break
 			}
@@ -266,22 +261,6 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
-	if desired.Labels != nil && !reflect.DeepEqual(desired.Labels, fetched.GetLabels()) {
-		return true
-	}
-
-	if desired.Annotations != nil {
-		fetchedAnnots := fetched.GetAnnotations()
-		if fetchedAnnots == nil {
-			return true
-		}
-
-		fetchedAnnots = FilterReservedAnnotations(fetchedAnnots)
-		if !reflect.DeepEqual(desired.Annotations, fetchedAnnots) {
-			return true
-		}
-	}
-
 	if desired.Spec.Replicas != nil && !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
 		return true
 	}
@@ -302,7 +281,10 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 	}
 
 	// Check pod template annotations
-	if desired.Spec.Template.Annotations != nil && !reflect.DeepEqual(desired.Spec.Template.Annotations, fetched.Spec.Template.Annotations) {
+	if desired.Spec.Template.Annotations != nil && !reflect.DeepEqual(
+		desired.Spec.Template.Annotations,
+		FilterReservedAnnotations(fetched.Spec.Template.Annotations),
+	) {
 		return true
 	}
 
