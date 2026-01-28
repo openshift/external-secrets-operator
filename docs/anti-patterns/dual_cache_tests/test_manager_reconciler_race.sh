@@ -1,4 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o nounset
+set -o pipefail
+set -o errexit
+
 # By changing the catalog-source, different versions of the operator can be tested.
 # Earlier versions prior to ESO-203 fix should have the race condition reported in 20-50 attempts, later versions should not.
 attempt=1

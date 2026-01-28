@@ -1,4 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o nounset
+set -o pipefail
+set -o errexit
+
+GOFLAGS="${GOFLAGS:-}"
 
 if GOEXPERIMENT="strictfipsruntime" go build ./tools > /dev/null 2>&1 ; then
     echo "INFO: building with FIPS support"
