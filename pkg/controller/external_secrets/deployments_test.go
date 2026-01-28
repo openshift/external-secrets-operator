@@ -11,12 +11,67 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
+
+// Helper function to create an ExistsCalls mock that returns false
+func doesNotExist() func(context.Context, types.NamespacedName, client.Object) (bool, error) {
+	return func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+		return false, nil
+	}
+}
+
+// Helper function to set up mock for deployment creation
+func setupDeploymentCreate(m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment, deploymentName string) {
+	m.ExistsCalls(doesNotExist())
+	m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
+		switch o := obj.(type) {
+		case *appsv1.Deployment:
+			if o.Name == deploymentName {
+				*capturedDeployment = o.DeepCopy()
+			}
+		}
+		return nil
+	})
+}
+
+// Helper function to validate revision history limit
+func validateRevisionHistory(expectedLimit int32) func(*testing.T, *appsv1.Deployment) {
+	return func(t *testing.T, deployment *appsv1.Deployment) {
+		if deployment == nil {
+			t.Error("deployment should not be nil")
+			return
+		}
+		if deployment.Spec.RevisionHistoryLimit == nil {
+			t.Error("revisionHistoryLimit should be set")
+			return
+		}
+		if *deployment.Spec.RevisionHistoryLimit != expectedLimit {
+			t.Errorf("revisionHistoryLimit = %d, want %d", *deployment.Spec.RevisionHistoryLimit, expectedLimit)
+		}
+	}
+}
+
+// Helper to create component config with revision history limit
+func componentConfigWithRevisionLimit(name v1alpha1.ComponentName, limit *int32) v1alpha1.ComponentConfig {
+	return v1alpha1.ComponentConfig{
+		ComponentName:     name,
+		DeploymentConfigs: &v1alpha1.DeploymentConfig{RevisionHistoryLimit: limit},
+	}
+}
+
+// Helper to create ESC update function with component configs
+func escWithComponentConfigs(configs ...v1alpha1.ComponentConfig) func(*v1alpha1.ExternalSecretsConfig) {
+	return func(esc *v1alpha1.ExternalSecretsConfig) {
+		esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+		esc.Spec.ControllerConfig.ComponentConfigs = configs
+	}
+}
 
 func TestCreateOrApplyDeployments(t *testing.T) {
 	tests := []struct {
@@ -565,187 +620,53 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 		},
 		{
 			name: "deployment with custom revisionHistoryLimit from componentConfig",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, nil
-				})
-				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						if o.Name == "external-secrets" {
-							*capturedDeployment = o.DeepCopy()
-						}
-					}
-					return nil
-				})
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, d **appsv1.Deployment) {
+				setupDeploymentCreate(m, d, "external-secrets")
 			},
-			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
-				revisionLimit := int32(5)
-				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
-					{
-						ComponentName: v1alpha1.CoreController,
-						DeploymentConfigs: &v1alpha1.DeploymentConfig{
-							RevisionHistoryLimit: &revisionLimit,
-						},
-					},
-				}
-			},
-			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
-				if deployment == nil {
-					t.Error("deployment should not be nil")
-					return
-				}
-				if deployment.Spec.RevisionHistoryLimit == nil {
-					t.Error("revisionHistoryLimit should be set")
-					return
-				}
-				if *deployment.Spec.RevisionHistoryLimit != 5 {
-					t.Errorf("revisionHistoryLimit = %d, want 5", *deployment.Spec.RevisionHistoryLimit)
-				}
-			},
+			updateExternalSecretsConfig: escWithComponentConfigs(componentConfigWithRevisionLimit(v1alpha1.CoreController, ptr.To(int32(5)))),
+			validateDeployment:          validateRevisionHistory(5),
 		},
 		{
 			name: "deployment without revisionHistoryLimit should use default",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, nil
-				})
-				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						if o.Name == "external-secrets" {
-							*capturedDeployment = o.DeepCopy()
-						}
-					}
-					return nil
-				})
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, d **appsv1.Deployment) {
+				setupDeploymentCreate(m, d, "external-secrets")
 			},
-			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
-				// ComponentConfigs set but without RevisionHistoryLimit
-				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
-					{
-						ComponentName:     v1alpha1.CoreController,
-						DeploymentConfigs: &v1alpha1.DeploymentConfig{},
-					},
-				}
-			},
-			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
-				if deployment == nil {
-					t.Error("deployment should not be nil")
-					return
-				}
-				// Should have the default value from the asset (10)
-				if deployment.Spec.RevisionHistoryLimit == nil {
-					t.Error("revisionHistoryLimit should have default value from asset")
-					return
-				}
-				if *deployment.Spec.RevisionHistoryLimit != 10 {
-					t.Errorf("revisionHistoryLimit = %d, want 10 (default from asset)", *deployment.Spec.RevisionHistoryLimit)
-				}
-			},
+			updateExternalSecretsConfig: escWithComponentConfigs(componentConfigWithRevisionLimit(v1alpha1.CoreController, nil)),
+			validateDeployment:          validateRevisionHistory(10),
 		},
 		{
 			name: "deployment with nil DeploymentConfigs should not panic",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, nil
-				})
-				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						if o.Name == "external-secrets" {
-							*capturedDeployment = o.DeepCopy()
-						}
-					}
-					return nil
-				})
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, d **appsv1.Deployment) {
+				setupDeploymentCreate(m, d, "external-secrets")
 			},
 			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
 				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
-				// ComponentConfig with nil DeploymentConfigs (user only specified componentName)
-				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
-					{
-						ComponentName:     v1alpha1.CoreController,
-						DeploymentConfigs: nil, // This should not cause panic
-					},
-				}
+				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{{ComponentName: v1alpha1.CoreController, DeploymentConfigs: nil}}
 			},
-			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
-				if deployment == nil {
-					t.Error("deployment should not be nil")
-					return
-				}
-				// Should use default value from asset since DeploymentConfigs is nil
-				if deployment.Spec.RevisionHistoryLimit == nil {
-					t.Error("revisionHistoryLimit should have default value from asset")
-					return
-				}
-				if *deployment.Spec.RevisionHistoryLimit != 10 {
-					t.Errorf("revisionHistoryLimit = %d, want 10 (default from asset)", *deployment.Spec.RevisionHistoryLimit)
-				}
-			},
+			validateDeployment: validateRevisionHistory(10),
 		},
 		{
 			name: "multiple components with mixed revisionHistoryLimit configurations",
-			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
-				capturedDeployments := make(map[string]*appsv1.Deployment)
-				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
-					return false, nil
-				})
-				m.CreateCalls(func(ctx context.Context, obj client.Object, _ ...client.CreateOption) error {
-					switch o := obj.(type) {
-					case *appsv1.Deployment:
-						capturedDeployments[o.Name] = o.DeepCopy()
-						// Assign the webhook deployment for validation
-						if o.Name == "external-secrets-webhook" {
-							*capturedDeployment = o.DeepCopy()
-						}
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, d **appsv1.Deployment) {
+				m.ExistsCalls(doesNotExist())
+				m.CreateCalls(func(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+					if dep, ok := obj.(*appsv1.Deployment); ok && dep.Name == "external-secrets-webhook" {
+						*d = dep.DeepCopy()
 					}
 					return nil
 				})
 			},
-			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
-				esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
-				controllerLimit := int32(3)
-				webhookLimit := int32(7)
-				esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
-					{
-						ComponentName: v1alpha1.CoreController,
-						DeploymentConfigs: &v1alpha1.DeploymentConfig{
-							RevisionHistoryLimit: &controllerLimit,
-						},
-					},
-					{
-						ComponentName: v1alpha1.Webhook,
-						DeploymentConfigs: &v1alpha1.DeploymentConfig{
-							RevisionHistoryLimit: &webhookLimit,
-						},
-					},
-					{
-						// CertController without RevisionHistoryLimit - should use default
-						ComponentName:     v1alpha1.CertController,
-						DeploymentConfigs: &v1alpha1.DeploymentConfig{},
-					},
-				}
-			},
-			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
-				if deployment == nil {
-					t.Error("webhook deployment should not be nil")
+			updateExternalSecretsConfig: escWithComponentConfigs(
+				componentConfigWithRevisionLimit(v1alpha1.CoreController, ptr.To(int32(3))),
+				componentConfigWithRevisionLimit(v1alpha1.Webhook, ptr.To(int32(7))),
+				componentConfigWithRevisionLimit(v1alpha1.CertController, nil),
+			),
+			validateDeployment: func(t *testing.T, d *appsv1.Deployment) {
+				if d == nil || d.Name != "external-secrets-webhook" {
+					t.Errorf("expected webhook deployment, got %v", d)
 					return
 				}
-				if deployment.Name != "external-secrets-webhook" {
-					t.Errorf("expected webhook deployment, got %s", deployment.Name)
-					return
-				}
-				if deployment.Spec.RevisionHistoryLimit == nil {
-					t.Error("webhook revisionHistoryLimit should be set")
-					return
-				}
-				if *deployment.Spec.RevisionHistoryLimit != 7 {
-					t.Errorf("webhook revisionHistoryLimit = %d, want 7", *deployment.Spec.RevisionHistoryLimit)
-				}
+				validateRevisionHistory(7)(t, d)
 			},
 		},
 	}

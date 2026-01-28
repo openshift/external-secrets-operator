@@ -43,9 +43,9 @@ var testassets embed.FS
 
 const (
 	// test bindata
-	externalSecretsFile                  = "testdata/external_secret.yaml"
-	externalSecretsWithRevisionLimitFile = "testdata/external_secret_with_revision_limit.yaml"
-	expectedSecretValueFile              = "testdata/expected_value.yaml"
+	externalSecretsFile                 = "testdata/external_secret.yaml"
+	externalSecretsFileWithRevisionLimit = "testdata/external_secret_with_revision_limits.yaml"
+	expectedSecretValueFile             = "testdata/expected_value.yaml"
 )
 
 const (
@@ -257,11 +257,17 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		})
 
 		It("should set custom revisionHistoryLimit for all component deployments", func() {
+			const (
+				controllerLimit     = int32(3)
+				webhookLimit        = int32(5)
+				certControllerLimit = int32(2)
+			)
+
 			By("Updating the ExternalSecretsConfig with custom revision history limits")
 			loader.DeleteFromFile(testassets.ReadFile, externalSecretsFile, "")
-			loader.CreateFromFile(testassets.ReadFile, externalSecretsWithRevisionLimitFile, "")
+			loader.CreateFromFile(testassets.ReadFile, externalSecretsFileWithRevisionLimit, "")
 			defer func() {
-				loader.DeleteFromFile(testassets.ReadFile, externalSecretsWithRevisionLimitFile, "")
+				loader.DeleteFromFile(testassets.ReadFile, externalSecretsFileWithRevisionLimit, "")
 				loader.CreateFromFile(testassets.ReadFile, externalSecretsFile, "")
 			}()
 
@@ -277,7 +283,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets deployment")
 				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
-				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(3)), "revisionHistoryLimit should be 3 for controller")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(controllerLimit), "revisionHistoryLimit should be %d for controller", controllerLimit)
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
 			By("Verifying custom revisionHistoryLimit (5) for Webhook deployment")
@@ -285,7 +291,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-webhook", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-webhook deployment")
 				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
-				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(5)), "revisionHistoryLimit should be 5 for webhook")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(webhookLimit), "revisionHistoryLimit should be %d for webhook", webhookLimit)
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
 			By("Verifying custom revisionHistoryLimit (2) for CertController deployment")
@@ -293,7 +299,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, "external-secrets-cert-controller", metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred(), "should get external-secrets-cert-controller deployment")
 				g.Expect(deployment.Spec.RevisionHistoryLimit).NotTo(BeNil(), "revisionHistoryLimit should be set")
-				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(int32(2)), "revisionHistoryLimit should be 2 for cert-controller")
+				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(certControllerLimit), "revisionHistoryLimit should be %d for cert-controller", certControllerLimit)
 			}, time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})

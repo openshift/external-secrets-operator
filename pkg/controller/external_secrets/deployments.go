@@ -666,13 +666,8 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 
 // applyUserDeploymentConfigs updates the deployment resource spec with user specified configurations.
 func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
-	if len(esc.Spec.ControllerConfig.ComponentConfigs) == 0 {
-		return nil
-	}
-
 	componentName, err := getComponentNameFromAsset(assetName)
 	if err != nil {
-		r.log.Error(err, "failed to resolve deployment name for updating configurations")
 		return err
 	}
 
