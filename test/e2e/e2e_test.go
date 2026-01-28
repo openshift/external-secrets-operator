@@ -22,6 +22,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -65,6 +66,7 @@ const (
 	clusterSecretStoresKind  = "clustersecretstores"
 	PushSecretsKind          = "pushsecrets"
 	externalSecretsKind      = "externalsecrets"
+	awsSecretRegionName      = "ap-south-1"
 )
 
 var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered, func() {
@@ -139,7 +141,6 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			awsSecretNamePattern             = "${AWS_SECRET_KEY_NAME}"
 			awsSecretValuePattern            = "${SECRET_VALUE}"
 			awsClusterSecretStoreNamePattern = "${CLUSTERSECRETSTORE_NAME}"
-			awsSecretRegionName              = "ap-south-1"
 		)
 
 		AfterAll(func() {
@@ -171,7 +172,10 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			defer loader.DeleteFromFile(testassets.ReadFile, awsSecretToPushFile, testNamespace)
 
 			By("Creating ClusterSecretStore")
-			cssAssetFunc := utils.ReplacePatternInAsset(awsClusterSecretStoreNamePattern, clusterSecretStoreResourceName)
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				awsClusterSecretStoreNamePattern, clusterSecretStoreResourceName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
 			loader.CreateFromFile(cssAssetFunc, clusterSecretStoreFile, testNamespace)
 			defer loader.DeleteFromFile(cssAssetFunc, clusterSecretStoreFile, testNamespace)
 
@@ -227,4 +231,420 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			}, time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
+
+	Context("Basic Operations", Label("Platform:AWS"), func() {
+		It("should work with namespace-scoped SecretStore", func() {
+			secretStoreName := fmt.Sprintf("aws-secret-store-ns-%s", utils.GetRandomString(5))
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-ns-%s", utils.GetRandomString(5))
+			secretValue := `{"value":"test-namespace-scoped-secret"}`
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, secretValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Copying AWS credentials to test namespace")
+			awsCreds, err := clientset.CoreV1().Secrets("kube-system").Get(ctx, "aws-creds", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			awsCredsSecretName := fmt.Sprintf("aws-creds-ns-%s", utils.GetRandomString(5))
+			namespacedCreds := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      awsCredsSecretName,
+					Namespace: testNamespace,
+				},
+				Data: awsCreds.Data,
+			}
+			_, err = clientset.CoreV1().Secrets(testNamespace).Create(ctx, namespacedCreds, metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			defer clientset.CoreV1().Secrets(testNamespace).Delete(ctx, awsCredsSecretName, metav1.DeleteOptions{})
+
+			By("Creating namespace-scoped SecretStore")
+			storeAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETNAME}", awsCredsSecretName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(storeAssetFunc, "testdata/aws_secret_store_namespace.yaml", testNamespace)
+			defer loader.DeleteFromFile(storeAssetFunc, "testdata/aws_secret_store_namespace.yaml", testNamespace)
+
+			By("Waiting for SecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: "secretstores",
+				},
+				testNamespace, secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "SecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_datafrom.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_datafrom.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-datafrom", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying target secret contains the data")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-datafrom", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("value"))
+				g.Expect(string(secret.Data["value"])).To(Equal("test-namespace-scoped-secret"))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+
+		It("should handle binary data correctly", func() {
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-binary-%s", utils.GetRandomString(5))
+			secretStoreName := fmt.Sprintf("aws-secret-store-%s", utils.GetRandomString(5))
+			binaryData := []byte("binary-test-data-12345")
+			encodedData := base64.StdEncoding.EncodeToString(binaryData)
+			secretValue := fmt.Sprintf(`{"binary_data":"%s"}`, encodedData)
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret with binary data")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, secretValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				"${CLUSTERSECRETSTORE_NAME}", secretStoreName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret for binary data")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "ClusterSecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_binary.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_binary.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-binary", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying binary data is correctly decoded")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-binary", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("binary_data"))
+				g.Expect(string(secret.Data["binary_data"])).To(Equal(encodedData))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Advanced Features", Label("Platform:AWS"), func() {
+		It("should refresh secret when AWS secret is updated", func() {
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-refresh-%s", utils.GetRandomString(5))
+			secretStoreName := fmt.Sprintf("aws-secret-store-%s", utils.GetRandomString(5))
+			initialValue := `{"value":"initial-value"}`
+			updatedValue := `{"value":"updated-value"}`
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret with initial value")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, initialValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				"${CLUSTERSECRETSTORE_NAME}", secretStoreName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret with short refresh interval")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "ClusterSecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_refresh.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_refresh.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-refresh", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying initial value")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-refresh", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("refresh_value"))
+				g.Expect(string(secret.Data["refresh_value"])).To(Equal("initial-value"))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+
+			By("Updating AWS secret")
+			Expect(utils.UpdateAWSSecret(ctx, clientset, awsSecretName, updatedValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Waiting for secret to be refreshed (30s refresh interval + buffer)")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-refresh", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("refresh_value"))
+				g.Expect(string(secret.Data["refresh_value"])).To(Equal("updated-value"))
+			}, 2*time.Minute, 10*time.Second).Should(Succeed())
+		})
+
+		It("should apply template transformation to secret data", func() {
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-template-%s", utils.GetRandomString(5))
+			secretStoreName := fmt.Sprintf("aws-secret-store-%s", utils.GetRandomString(5))
+			secretValue := `{"username":"testuser","password":"testpass123"}`
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, secretValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				"${CLUSTERSECRETSTORE_NAME}", secretStoreName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret with template")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "ClusterSecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_template.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_template.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-template", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying template transformation applied")
+			expectedConfig := "database:\n  username: testuser\n  password: testpass123\n"
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-template", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("config.yaml"))
+				g.Expect(string(secret.Data["config.yaml"])).To(Equal(expectedConfig))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+
+		It("should fetch entire secret using dataFrom", func() {
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-datafrom-%s", utils.GetRandomString(5))
+			secretStoreName := fmt.Sprintf("aws-secret-store-%s", utils.GetRandomString(5))
+			secretValue := `{"api_key":"key123","api_secret":"secret456","endpoint":"https://api.example.com"}`
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret with multiple fields")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, secretValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				"${CLUSTERSECRETSTORE_NAME}", secretStoreName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret with dataFrom")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "ClusterSecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_datafrom.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_datafrom.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-datafrom", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying all keys imported without explicit mapping")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-datafrom", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("api_key"))
+				g.Expect(secret.Data).To(HaveKey("api_secret"))
+				g.Expect(secret.Data).To(HaveKey("endpoint"))
+				g.Expect(string(secret.Data["api_key"])).To(Equal("key123"))
+				g.Expect(string(secret.Data["api_secret"])).To(Equal("secret456"))
+				g.Expect(string(secret.Data["endpoint"])).To(Equal("https://api.example.com"))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+
+		It("should extract nested JSON values using property path", func() {
+			awsSecretName := fmt.Sprintf("eso-e2e-secret-json-%s", utils.GetRandomString(5))
+			secretStoreName := fmt.Sprintf("aws-secret-store-%s", utils.GetRandomString(5))
+			nestedSecret := map[string]interface{}{
+				"db": map[string]interface{}{
+					"credentials": map[string]interface{}{
+						"password": "nested-password-123",
+					},
+				},
+			}
+			secretBytes, _ := json.Marshal(nestedSecret)
+			secretValue := string(secretBytes)
+
+			defer func() {
+				By("Cleaning up AWS secret")
+				Expect(utils.DeleteAWSSecret(ctx, clientset, awsSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred())
+			}()
+
+			By("Creating AWS secret with nested JSON")
+			Expect(utils.CreateAWSSecret(ctx, clientset, awsSecretName, secretValue, awsSecretRegionName)).
+				NotTo(HaveOccurred())
+
+			By("Creating ClusterSecretStore")
+			cssAssetFunc := utils.ReplacePatternInAsset(
+				"${CLUSTERSECRETSTORE_NAME}", secretStoreName,
+				"${AWS_REGION}", awsSecretRegionName,
+			)
+			loader.CreateFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+			defer loader.DeleteFromFile(cssAssetFunc, "testdata/aws_secret_store.yaml", testNamespace)
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", secretStoreName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret with JSON path extraction")
+			esAssetFunc := utils.ReplacePatternInAsset(
+				"${SECRETSTORE_NAME}", secretStoreName,
+				"${SECRETSTORE_KIND}", "ClusterSecretStore",
+				"${AWS_SECRET_KEY_NAME}", awsSecretName,
+			)
+			loader.CreateFromFile(esAssetFunc, "testdata/aws_external_secret_jsonpath.yaml", testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, "testdata/aws_external_secret_jsonpath.yaml", testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, "aws-external-secret-jsonpath", time.Minute,
+			)).To(Succeed())
+
+			By("Verifying nested value extracted correctly")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, "aws-secret-jsonpath", metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Data).To(HaveKey("nested_value"))
+				g.Expect(string(secret.Data["nested_value"])).To(Equal("nested-password-123"))
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
 })
