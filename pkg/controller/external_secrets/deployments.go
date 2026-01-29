@@ -147,6 +147,9 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	if err := r.updateProxyConfiguration(deployment, esc); err != nil {
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
+	if err := r.applyUserDeploymentConfigs(deployment, esc, assetName); err != nil {
+		return nil, fmt.Errorf("failed to apply user deployment configuration: %w", err)
+	}
 
 	return deployment, nil
 }
@@ -659,4 +662,40 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 		}
 	}
 	container.VolumeMounts = filteredVolumeMounts
+}
+
+// applyUserDeploymentConfigs updates the deployment resource spec with user specified configurations.
+func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
+	componentName, err := getComponentNameFromAsset(assetName)
+	if err != nil {
+		return err
+	}
+
+	for _, i := range esc.Spec.ControllerConfig.ComponentConfigs {
+		if i.ComponentName == componentName {
+			// Apply RevisionHistoryLimit if set
+			if i.DeploymentConfigs != nil && i.DeploymentConfigs.RevisionHistoryLimit != nil {
+				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
+			}
+			break
+		}
+	}
+
+	return nil
+}
+
+// getComponentNameFromAsset maps asset file names to ComponentName enum values.
+func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName, error) {
+	switch assetName {
+	case controllerDeploymentAssetName:
+		return operatorv1alpha1.CoreController, nil
+	case webhookDeploymentAssetName:
+		return operatorv1alpha1.Webhook, nil
+	case certControllerDeploymentAssetName:
+		return operatorv1alpha1.CertController, nil
+	case bitwardenDeploymentAssetName:
+		return operatorv1alpha1.BitwardenSDKServer, nil
+	default:
+		return "", fmt.Errorf("unknown deployment asset name: %s", assetName)
+	}
 }
