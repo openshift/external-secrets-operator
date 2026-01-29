@@ -122,6 +122,89 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 			wantErr: "failed to create serviceaccount external-secrets/external-secrets: test client error",
 		},
+		{
+			name: "serviceaccount with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if sa, ok := obj.(*corev1.ServiceAccount); ok {
+						// Verify annotations are applied
+						if sa.Annotations == nil {
+							t.Error("serviceaccount annotations should not be nil")
+							return nil
+						}
+						if sa.Annotations["vault.hashicorp.com/agent-inject"] != "true" {
+							t.Errorf("expected annotation 'vault.hashicorp.com/agent-inject'='true', got '%s'", 
+								sa.Annotations["vault.hashicorp.com/agent-inject"])
+						}
+						if sa.Annotations["team/owner"] != "platform" {
+							t.Errorf("expected annotation 'team/owner'='platform', got '%s'", 
+								sa.Annotations["team/owner"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"vault.hashicorp.com/agent-inject": "true",
+					"team/owner":                        "platform",
+				}
+			},
+		},
+		{
+			name: "serviceaccount filters reserved annotation prefixes with wildcard",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if sa, ok := obj.(*corev1.ServiceAccount); ok {
+						if sa.Annotations == nil {
+							t.Error("serviceaccount annotations should not be nil")
+							return nil
+						}
+						
+						// Verify only allowed annotation is present
+						if sa.Annotations["allowed-annotation"] != "value" {
+							t.Errorf("expected 'allowed-annotation', got '%s'", 
+								sa.Annotations["allowed-annotation"])
+						}
+						
+						reservedKeys := []string{
+							"kubernetes.io/test",                
+							"app.kubernetes.io/component",       
+							"deployment.kubernetes.io/revision", 
+							"openshift.io/test",                 
+							"console.openshift.io/route",        
+							"k8s.io/test",                       
+						}
+						
+						for _, key := range reservedKeys {
+							if val, exists := sa.Annotations[key]; exists && val == "filtered" {
+								t.Errorf("reserved annotation %q should have been filtered but found with value %q", key, val)
+							}
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-annotation":                "value",
+					// Direct domain patterns
+					"kubernetes.io/test":                "filtered",
+					"openshift.io/test":                 "filtered",
+					"k8s.io/test":                       "filtered",
+					// Wildcard subdomain patterns (should also be filtered)
+					"app.kubernetes.io/component":       "filtered",
+					"deployment.kubernetes.io/revision": "filtered",
+					"console.openshift.io/route":        "filtered",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

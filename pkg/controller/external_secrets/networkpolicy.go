@@ -137,6 +137,14 @@ func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.E
 	updateNamespace(networkPolicy, esc)
 	common.UpdateResourceLabels(networkPolicy, resourceLabels)
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(networkPolicy, annotationsMap)
+		}
+	}
+
 	networkPolicyName := fmt.Sprintf("%s/%s", networkPolicy.GetNamespace(), networkPolicy.GetName())
 	r.log.V(4).Info("Reconciling static network policy", "name", networkPolicyName)
 

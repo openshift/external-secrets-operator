@@ -562,6 +562,149 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "deployment reconciliation with custom annotations successful",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						deployment := testDeployment(controllerDeploymentAssetName)
+						deployment.DeepCopyInto(o)
+					}
+					return true, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"custom-annotation":    "custom-value",
+					"prometheus.io/scrape": "true",
+					"team/owner":           "platform",
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+
+				// Validate deployment-level annotations
+				deploymentAnnotations := deployment.GetAnnotations()
+				if deploymentAnnotations == nil {
+					t.Error("deployment annotations should not be nil")
+					return
+				}
+				if deploymentAnnotations["custom-annotation"] != "custom-value" {
+					t.Errorf("deployment annotation 'custom-annotation' = %v, want 'custom-value'",
+						deploymentAnnotations["custom-annotation"])
+				}
+				if deploymentAnnotations["prometheus.io/scrape"] != "true" {
+					t.Errorf("deployment annotation 'prometheus.io/scrape' = %v, want 'true'",
+						deploymentAnnotations["prometheus.io/scrape"])
+				}
+				if deploymentAnnotations["team/owner"] != "platform" {
+					t.Errorf("deployment annotation 'team/owner' = %v, want 'platform'",
+						deploymentAnnotations["team/owner"])
+				}
+
+				// Validate pod template annotations
+				podAnnotations := deployment.Spec.Template.GetAnnotations()
+				if podAnnotations == nil {
+					t.Error("pod template annotations should not be nil")
+					return
+				}
+				if podAnnotations["custom-annotation"] != "custom-value" {
+					t.Errorf("pod annotation 'custom-annotation' = %v, want 'custom-value'",
+						podAnnotations["custom-annotation"])
+				}
+				if podAnnotations["prometheus.io/scrape"] != "true" {
+					t.Errorf("pod annotation 'prometheus.io/scrape' = %v, want 'true'",
+						podAnnotations["prometheus.io/scrape"])
+				}
+			},
+		},
+		{
+			name: "deployment reconciliation filters reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						deployment := testDeployment(controllerDeploymentAssetName)
+						deployment.DeepCopyInto(o)
+					}
+					return true, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+					switch o := obj.(type) {
+					case *appsv1.Deployment:
+						*capturedDeployment = o.DeepCopy()
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-annotation":                "allowed",
+					"kubernetes.io/forbidden":           "value",
+					"app.kubernetes.io/managed-by":      "value",
+					"deployment.kubernetes.io/revision": "100",
+					"pod.kubernetes.io/name":            "test",
+					"openshift.io/test":                 "value",
+					"console.openshift.io/route":        "value",
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Error("deployment should not be nil")
+					return
+				}
+
+				annotations := deployment.GetAnnotations()
+				if annotations == nil {
+					t.Error("deployment annotations should not be nil")
+					return
+				}
+
+				// Allowed annotation should be present
+				if annotations["allowed-annotation"] != "allowed" {
+					t.Errorf("allowed-annotation should be present with value 'allowed', got: %v",
+						annotations["allowed-annotation"])
+				}
+
+				// Verify ALL reserved domain patterns are filtered
+				reservedKeys := []string{
+					"kubernetes.io/forbidden",
+					"app.kubernetes.io/managed-by",
+					"deployment.kubernetes.io/revision",
+					"pod.kubernetes.io/name",
+					"openshift.io/test",
+					"console.openshift.io/route",
+				}
+
+				for _, key := range reservedKeys {
+					if val, exists := annotations[key]; exists && val == "value" {
+						t.Errorf("reserved annotation %q should have been filtered but found with value %q", key, val)
+					}
+				}
+
+				// Verify only the allowed annotation exists (excluding any default annotations)
+				userAnnotationCount := 0
+				for key := range annotations {
+					if key == "allowed-annotation" {
+						userAnnotationCount++
+					}
+				}
+				if userAnnotationCount != 1 {
+					t.Errorf("expected exactly 1 user annotation, found user annotations: %v", annotations)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

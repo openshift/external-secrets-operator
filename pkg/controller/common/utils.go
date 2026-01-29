@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -69,6 +70,19 @@ func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 		l[k] = v
 	}
 	obj.SetLabels(l)
+}
+
+// UpdateResourceAnnotations merges provided annotations into the object's existing annotations.
+// User-provided annotations take precedence over existing ones.
+func UpdateResourceAnnotations(obj client.Object, annotations map[string]string) {
+	a := obj.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string, len(annotations))
+	}
+	for k, v := range annotations {
+		a[k] = v
+	}
+	obj.SetAnnotations(a)
 }
 
 func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
@@ -186,14 +200,60 @@ func HasObjectChanged(desired, fetched client.Object) bool {
 		objectModified = networkPolicySpecModified(desired.(*networkingv1.NetworkPolicy), fetched.(*networkingv1.NetworkPolicy))
 	case *webhook.ValidatingWebhookConfiguration:
 		objectModified = validatingWebHookSpecModified(desired.(*webhook.ValidatingWebhookConfiguration), fetched.(*webhook.ValidatingWebhookConfiguration))
+
 	default:
-		panic(fmt.Sprintf("unsupported object type: %T", desired))
+		return ObjectMetadataModified(desired, fetched)
 	}
+
 	return objectModified || ObjectMetadataModified(desired, fetched)
 }
 
 func ObjectMetadataModified(desired, fetched client.Object) bool {
-	return !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels())
+	// Check if labels have changed
+	if !reflect.DeepEqual(desired.GetLabels(), fetched.GetLabels()) {
+		return true
+	}
+	// Check if annotations have changed (ignoring system-managed annotations)
+	desiredAnnotates := desired.GetAnnotations()
+	fetchedAnnotates := FilterReservedAnnotations(fetched.GetAnnotations())
+	// Handle nil vs empty map: both are semantically equivalent
+	if len(desiredAnnotates) == 0 && len(fetchedAnnotates) == 0 {
+		return false
+	}
+	if !reflect.DeepEqual(desiredAnnotates, fetchedAnnotates) {
+		return true
+	}
+	return false
+}
+
+// FilterReservedAnnotations filters out Kubernetes/OpenShift reserved domain annotations.
+// Reserved domains: kubernetes.io, openshift.io, k8s.io (including all subdomains)
+func FilterReservedAnnotations(annotations map[string]string) map[string]string {
+	if len(annotations) == 0 {
+		return annotations
+	}
+
+	// Reserved domain patterns: blocks both "kubernetes.io/*" and "*.kubernetes.io/*"
+	reservedDomains := []string{"kubernetes.io", "openshift.io", "k8s.io", "cert-manager.io"}
+
+	result := make(map[string]string, len(annotations))
+	for key, value := range annotations {
+		isReserved := false
+
+		for _, domain := range reservedDomains {
+			// Checks for patterns like kubernetes.io/* and *.kubernetes.io/* only
+			if strings.HasPrefix(key, domain+"/") || strings.Contains(key, "."+domain+"/") {
+				isReserved = true
+				break
+			}
+		}
+
+		if !isReserved {
+			result[key] = value
+		}
+	}
+
+	return result
 }
 
 func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
@@ -217,6 +277,14 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment) bool {
 	}
 
 	if desired.Spec.Template.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) {
+		return true
+	}
+
+	// Check pod template annotations
+	if desired.Spec.Template.Annotations != nil && !reflect.DeepEqual(
+		desired.Spec.Template.Annotations,
+		FilterReservedAnnotations(fetched.Spec.Template.Annotations),
+	) {
 		return true
 	}
 

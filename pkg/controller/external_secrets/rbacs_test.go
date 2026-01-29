@@ -297,6 +297,133 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		{
 			name: "rolebindings creation successful",
 		},
+		{
+			name: "clusterrole with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if cr, ok := obj.(*rbacv1.ClusterRole); ok {
+						// Verify annotations are applied
+						if cr.Annotations != nil {
+							if cr.Annotations["rbac/managed-by"] != "operator" {
+								t.Errorf("expected annotation 'rbac/managed-by'='operator', got '%s'",
+									cr.Annotations["rbac/managed-by"])
+							}
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"rbac/managed-by": "operator",
+					"team/owner":      "platform",
+				}
+			},
+		},
+		{
+			name: "clusterrolebinding with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if crb, ok := obj.(*rbacv1.ClusterRoleBinding); ok {
+						// Verify annotations are applied
+						if crb.Annotations != nil {
+							if crb.Annotations["binding/type"] != "cluster" {
+								t.Errorf("expected annotation 'binding/type'='cluster'")
+							}
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"binding/type": "cluster",
+				}
+			},
+		},
+		{
+			name: "role with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if role, ok := obj.(*rbacv1.Role); ok {
+						// Verify annotations are applied
+						if role.Annotations != nil {
+							if role.Annotations["role/purpose"] != "leader-election" {
+								t.Errorf("expected annotation 'role/purpose'='leader-election'")
+							}
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"role/purpose": "leader-election",
+				}
+			},
+		},
+		{
+			name: "rolebinding with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if rb, ok := obj.(*rbacv1.RoleBinding); ok {
+						// Verify annotations are applied
+						if rb.Annotations != nil {
+							if rb.Annotations["binding/scope"] != "namespace" {
+								t.Errorf("expected annotation 'binding/scope'='namespace'")
+							}
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"binding/scope": "namespace",
+				}
+			},
+		},
+		{
+			name: "rbac resources filter reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					switch obj := obj.(type) {
+					case *rbacv1.ClusterRole, *rbacv1.ClusterRoleBinding, *rbacv1.Role, *rbacv1.RoleBinding:
+						// Verify reserved prefixes were filtered
+						metaObj := obj.(client.Object)
+						annotations := metaObj.GetAnnotations()
+						if _, exists := annotations["openshift.io/test"]; exists {
+							t.Error("reserved prefix 'openshift.io/' should have been filtered")
+						}
+						if annotations["allowed-rbac"] != "value" {
+							t.Errorf("expected 'allowed-rbac' annotation")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-rbac":      "value",
+					"openshift.io/test": "filtered",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

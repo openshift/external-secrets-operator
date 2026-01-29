@@ -59,6 +59,15 @@ func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalS
 		validatingWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
 		common.UpdateResourceLabels(validatingWebhook, resourceLabels)
+
+		// Apply custom annotations from ControllerConfig
+		if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+			annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+			if len(annotationsMap) > 0 {
+				common.UpdateResourceAnnotations(validatingWebhook, annotationsMap)
+			}
+		}
+
 		if err := updateValidatingWebhookAnnotation(esc, validatingWebhook); err != nil {
 			return nil, fmt.Errorf("failed to update validatingWebhook resource for %s external secrets: %s", esc.GetName(), err.Error())
 		}

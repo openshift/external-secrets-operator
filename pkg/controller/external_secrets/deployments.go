@@ -5,8 +5,10 @@ import (
 	"os"
 	"unsafe"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
@@ -103,6 +105,15 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	common.UpdateResourceLabels(deployment, resourceLabels)
 	updatePodTemplateLabels(deployment, resourceLabels)
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(deployment, annotationsMap)
+			updatePodTemplateAnnotations(deployment, annotationsMap)
+		}
+	}
+
 	image := os.Getenv(externalsecretsImageEnvVarName)
 	if image == "" {
 		return nil, common.NewIrrecoverableError(fmt.Errorf("%s environment variable with externalsecrets image not set", externalsecretsImageEnvVarName), "failed to update image in %s deployment object", deployment.GetName())
@@ -158,6 +169,44 @@ func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]st
 		l[k] = v
 	}
 	deployment.Spec.Template.SetLabels(l)
+}
+
+// validateAndFilterAnnotations validates annotations using Kubernetes validation and filters out reserved domains using the common utility function.
+func validateAndFilterAnnotations(annotations map[string]string, logger logr.Logger) map[string]string {
+	if len(annotations) == 0 {
+		return annotations
+	}
+
+	// Validate annotations using Kubernetes built-in validation
+	if errs := apivalidation.ValidateAnnotations(annotations, field.NewPath("annotations")); len(errs) > 0 {
+		logger.Error(errs.ToAggregate(), "invalid annotations detected, skipping all annotations")
+		return make(map[string]string)
+	}
+
+	// Filter reserved domains kubernetes.io/*, *.kubernetes.io/*, openshift.io/*, *.openshift.io/*, etc.
+	filtered := common.FilterReservedAnnotations(annotations)
+
+	if len(filtered) < len(annotations) {
+		for key := range annotations {
+			if _, exists := filtered[key]; !exists {
+				logger.V(1).Info("filtered annotation with reserved domain", "key", key)
+			}
+		}
+	}
+
+	return filtered
+}
+
+// updatePodTemplateAnnotations sets annotations on the pod template spec.
+func updatePodTemplateAnnotations(deployment *appsv1.Deployment, annotations map[string]string) {
+	a := deployment.Spec.Template.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string, len(annotations))
+	}
+	for k, v := range annotations {
+		a[k] = v
+	}
+	deployment.Spec.Template.SetAnnotations(a)
 }
 
 func updateContainerSecurityContext(container *corev1.Container) {

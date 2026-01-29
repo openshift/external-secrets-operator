@@ -53,6 +53,14 @@ func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.Externa
 	updateNamespace(service, esc)
 	common.UpdateResourceLabels(service, resourceLabels)
 
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			common.UpdateResourceAnnotations(service, annotationsMap)
+		}
+	}
+
 	serviceName := fmt.Sprintf("%s/%s", service.GetNamespace(), service.GetName())
 	r.log.V(4).Info("Reconciling service", "name", serviceName)
 

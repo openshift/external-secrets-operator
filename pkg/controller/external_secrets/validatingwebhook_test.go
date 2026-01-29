@@ -20,9 +20,10 @@ var (
 
 func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 	tests := []struct {
-		name    string
-		preReq  func(*Reconciler, *fakes.FakeCtrlClient)
-		wantErr string
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(*v1alpha1.ExternalSecretsConfig)
+		wantErr                     string
 	}{
 		{
 			name: "validatingWebhookConfiguration reconciliation successful",
@@ -97,6 +98,61 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 				})
 			},
 		},
+		{
+			name: "validatingWebhookConfiguration with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if vwc, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
+						// Verify annotations are applied
+						if vwc.Annotations == nil {
+							t.Error("validatingwebhook annotations should not be nil")
+							return nil
+						}
+						if vwc.Annotations["monitoring/enabled"] != "true" {
+							t.Errorf("expected annotation 'monitoring/enabled'='true', got '%s'", 
+								vwc.Annotations["monitoring/enabled"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"monitoring/enabled": "true",
+					"team/owner":         "platform",
+				}
+			},
+		},
+		{
+			name: "validatingWebhookConfiguration filters reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if vwc, ok := obj.(*webhook.ValidatingWebhookConfiguration); ok {
+						// Verify only allowed annotation is present
+						if vwc.Annotations["custom-key"] != "custom-value" {
+							t.Errorf("expected 'custom-key' annotation")
+						}
+						// Verify reserved prefixes were filtered
+						if _, exists := vwc.Annotations["kubernetes.io/test"]; exists {
+							t.Error("reserved prefix 'kubernetes.io/' should have been filtered")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"custom-key":         "custom-value",
+					"kubernetes.io/test": "filtered",
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,10 +161,13 @@ func TestCreateOrApplyValidatingWebhookConfiguration(t *testing.T) {
 			if tt.preReq != nil {
 				tt.preReq(r, mock)
 			}
-			r.CtrlClient = mock
-			externalSecretsForValidateWebhook := testExternalSecretsForValidateWebhookConfiguration()
+		r.CtrlClient = mock
+		externalSecretsForValidateWebhook := testExternalSecretsForValidateWebhookConfiguration()
+		if tt.updateExternalSecretsConfig != nil {
+			tt.updateExternalSecretsConfig(externalSecretsForValidateWebhook)
+		}
 
-			err := r.createOrApplyValidatingWebhookConfiguration(externalSecretsForValidateWebhook, controllerDefaultResourceLabels, false)
+		err := r.createOrApplyValidatingWebhookConfiguration(externalSecretsForValidateWebhook, controllerDefaultResourceLabels, false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyValidatingWebhookConfiguration() err: %v, wantErr: %v", err, tt.wantErr)
 			}

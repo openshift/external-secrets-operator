@@ -441,6 +441,87 @@ func TestCreateOrApplyCertificates(t *testing.T) {
 			},
 			recon: false,
 		},
+		{
+			name: "certificate with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if ns.Name == "test-issuer" {
+						return true, nil
+					}
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if cert, ok := obj.(*certmanagerv1.Certificate); ok {
+						// Verify annotations are applied
+						if cert.Annotations == nil {
+							t.Error("certificate annotations should not be nil")
+							return nil
+						}
+						if cert.Annotations["cert-manager.io/issue-temporary-certificate"] != "true" {
+							t.Errorf("expected annotation 'cert-manager.io/issue-temporary-certificate'='true', got '%s'",
+								cert.Annotations["cert-manager.io/issue-temporary-certificate"])
+						}
+					}
+					return nil
+				})
+				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
+					if ns.Name == "test-issuer" {
+						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
+						return nil
+					}
+					return fmt.Errorf("object not found")
+				})
+			},
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"cert-manager.io/issue-temporary-certificate": "true",
+					"team/owner": "security",
+				}
+			},
+			recon: false,
+		},
+		{
+			name: "certificate filters reserved annotation prefixes",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if ns.Name == "test-issuer" {
+						return true, nil
+					}
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if cert, ok := obj.(*certmanagerv1.Certificate); ok {
+						// Verify only allowed annotation is present
+						if cert.Annotations["allowed-cert-annotation"] != "value" {
+							t.Errorf("expected 'allowed-cert-annotation'")
+						}
+						// Verify reserved prefixes were filtered
+						if _, exists := cert.Annotations["app.kubernetes.io/component"]; exists {
+							t.Error("reserved prefix 'app.kubernetes.io/' should have been filtered")
+						}
+					}
+					return nil
+				})
+				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
+					if ns.Name == "test-issuer" {
+						testIssuer().DeepCopyInto(obj.(*certmanagerv1.Issuer))
+						return nil
+					}
+					return fmt.Errorf("object not found")
+				})
+			},
+			esc: func(esc *v1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
+				esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = "test-issuer"
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-cert-annotation":      "value",
+					"app.kubernetes.io/component":  "filtered",
+				}
+			},
+			recon: false,
+		},
 	}
 
 	for _, tt := range tests {

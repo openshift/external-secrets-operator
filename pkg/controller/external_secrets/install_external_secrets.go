@@ -118,8 +118,17 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 	namespace := getNamespace(esc)
 	obj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
+			Name:   namespace,
+			Labels: resourceLabels,
 		},
+	}
+
+	// Apply annotations from ControllerConfig
+	if len(esc.Spec.ControllerConfig.Annotations) > 0 {
+		annotationsMap := validateAndFilterAnnotations(esc.Spec.ControllerConfig.Annotations, r.log)
+		if len(annotationsMap) > 0 {
+			obj.Annotations = annotationsMap
+		}
 	}
 
 	if err := r.Create(r.ctx, obj); err != nil {
