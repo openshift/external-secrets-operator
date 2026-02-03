@@ -1325,6 +1325,7 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 		name          string
 		assetName     string
 		wantComponent v1alpha1.ComponentName
+		wantContainer string
 		wantErr       bool
 		errContains   string
 	}{
@@ -1332,30 +1333,35 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 			name:          "valid controller deployment asset",
 			assetName:     controllerDeploymentAssetName,
 			wantComponent: v1alpha1.CoreController,
+			wantContainer: "external-secrets",
 			wantErr:       false,
 		},
 		{
 			name:          "valid webhook deployment asset",
 			assetName:     webhookDeploymentAssetName,
 			wantComponent: v1alpha1.Webhook,
+			wantContainer: "webhook",
 			wantErr:       false,
 		},
 		{
 			name:          "valid cert controller deployment asset",
 			assetName:     certControllerDeploymentAssetName,
 			wantComponent: v1alpha1.CertController,
+			wantContainer: "cert-controller",
 			wantErr:       false,
 		},
 		{
 			name:          "valid bitwarden deployment asset",
 			assetName:     bitwardenDeploymentAssetName,
 			wantComponent: v1alpha1.BitwardenSDKServer,
+			wantContainer: "bitwarden-sdk-server",
 			wantErr:       false,
 		},
 		{
 			name:          "invalid asset name returns error",
 			assetName:     "invalid-asset-name.yml",
 			wantComponent: "",
+			wantContainer: "",
 			wantErr:       true,
 			errContains:   "unknown deployment asset name",
 		},
@@ -1363,6 +1369,7 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 			name:          "empty asset name returns error",
 			assetName:     "",
 			wantComponent: "",
+			wantContainer: "",
 			wantErr:       true,
 			errContains:   "unknown deployment asset name",
 		},
@@ -1370,6 +1377,7 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 			name:          "random string returns error",
 			assetName:     "some-random-deployment.yml",
 			wantComponent: "",
+			wantContainer: "",
 			wantErr:       true,
 			errContains:   "unknown deployment asset name",
 		},
@@ -1377,7 +1385,7 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotComponent, err := getComponentNameFromAsset(tt.assetName)
+			gotComponent, gotContainer, err := getComponentNameFromAsset(tt.assetName)
 
 			if tt.wantErr {
 				if err == nil {
@@ -1390,13 +1398,329 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 				if gotComponent != "" {
 					t.Errorf("getComponentNameFromAsset() on error should return empty component, got %v", gotComponent)
 				}
+				if gotContainer != "" {
+					t.Errorf("getComponentNameFromAsset() on error should return empty container, got %v", gotContainer)
+				}
 			} else {
 				if err != nil {
 					t.Errorf("getComponentNameFromAsset() unexpected error = %v", err)
 					return
 				}
 				if gotComponent != tt.wantComponent {
-					t.Errorf("getComponentNameFromAsset() = %v, want %v", gotComponent, tt.wantComponent)
+					t.Errorf("getComponentNameFromAsset() component = %v, want %v", gotComponent, tt.wantComponent)
+				}
+				if gotContainer != tt.wantContainer {
+					t.Errorf("getComponentNameFromAsset() container = %v, want %v", gotContainer, tt.wantContainer)
+				}
+			}
+		})
+	}
+}
+
+func TestMergeEnvVars(t *testing.T) {
+	tests := []struct {
+		name        string
+		existingEnv []corev1.EnvVar
+		overrideEnv []corev1.EnvVar
+		expectedEnv []corev1.EnvVar
+	}{
+		{
+			name:        "empty container env, add new env vars",
+			existingEnv: nil,
+			overrideEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+				{Name: "TIMEOUT", Value: "30s"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+				{Name: "TIMEOUT", Value: "30s"},
+			},
+		},
+		{
+			name: "override existing env var",
+			existingEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "info"},
+				{Name: "OTHER_VAR", Value: "value"},
+			},
+			overrideEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+				{Name: "OTHER_VAR", Value: "value"},
+			},
+		},
+		{
+			name: "add new env var to existing ones",
+			existingEnv: []corev1.EnvVar{
+				{Name: "EXISTING_VAR", Value: "existing"},
+			},
+			overrideEnv: []corev1.EnvVar{
+				{Name: "NEW_VAR", Value: "new"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "EXISTING_VAR", Value: "existing"},
+				{Name: "NEW_VAR", Value: "new"},
+			},
+		},
+		{
+			name: "mix of override and new env vars",
+			existingEnv: []corev1.EnvVar{
+				{Name: "VAR_A", Value: "old_a"},
+				{Name: "VAR_B", Value: "old_b"},
+			},
+			overrideEnv: []corev1.EnvVar{
+				{Name: "VAR_A", Value: "new_a"},
+				{Name: "VAR_C", Value: "new_c"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "VAR_A", Value: "new_a"},
+				{Name: "VAR_B", Value: "old_b"},
+				{Name: "VAR_C", Value: "new_c"},
+			},
+		},
+		{
+			name:        "empty override env vars does nothing",
+			existingEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+			},
+			overrideEnv: []corev1.EnvVar{},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+			},
+		},
+		{
+			name: "override env var with ValueFrom",
+			existingEnv: []corev1.EnvVar{
+				{Name: "SECRET_VAR", Value: "plaintext"},
+			},
+			overrideEnv: []corev1.EnvVar{
+				{
+					Name: "SECRET_VAR",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+							Key:                  "password",
+						},
+					},
+				},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{
+					Name: "SECRET_VAR",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+							Key:                  "password",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			container := &corev1.Container{
+				Name: "test-container",
+				Env:  tt.existingEnv,
+			}
+
+			mergeEnvVars(container, tt.overrideEnv)
+
+			if len(container.Env) != len(tt.expectedEnv) {
+				t.Errorf("mergeEnvVars() got %d env vars, want %d", len(container.Env), len(tt.expectedEnv))
+				return
+			}
+
+			for i, expected := range tt.expectedEnv {
+				found := false
+				for _, actual := range container.Env {
+					if actual.Name == expected.Name {
+						found = true
+						if expected.ValueFrom != nil {
+							if actual.ValueFrom == nil {
+								t.Errorf("mergeEnvVars() env var %s expected ValueFrom but got Value", expected.Name)
+							}
+						} else if actual.Value != expected.Value {
+							t.Errorf("mergeEnvVars() env var %s = %v, want %v", expected.Name, actual.Value, expected.Value)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("mergeEnvVars() missing env var %s at index %d", expected.Name, i)
+				}
+			}
+		})
+	}
+}
+
+func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
+	tests := []struct {
+		name            string
+		assetName       string
+		containerName   string
+		componentConfig v1alpha1.ComponentConfig
+		existingEnv     []corev1.EnvVar
+		expectedEnv     []corev1.EnvVar
+	}{
+		{
+			name:          "apply override env to core controller",
+			assetName:     controllerDeploymentAssetName,
+			containerName: "external-secrets",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.CoreController,
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "LOG_LEVEL", Value: "debug"},
+				},
+			},
+			existingEnv: []corev1.EnvVar{},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+			},
+		},
+		{
+			name:          "apply override env to webhook",
+			assetName:     webhookDeploymentAssetName,
+			containerName: "webhook",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.Webhook,
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "TIMEOUT", Value: "60s"},
+				},
+			},
+			existingEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+				{Name: "TIMEOUT", Value: "60s"},
+			},
+		},
+		{
+			name:          "apply override env to cert controller",
+			assetName:     certControllerDeploymentAssetName,
+			containerName: "cert-controller",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.CertController,
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "CERT_DURATION", Value: "8760h"},
+				},
+			},
+			existingEnv: []corev1.EnvVar{},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "CERT_DURATION", Value: "8760h"},
+			},
+		},
+		{
+			name:          "apply override env to bitwarden",
+			assetName:     bitwardenDeploymentAssetName,
+			containerName: "bitwarden-sdk-server",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.BitwardenSDKServer,
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "API_URL", Value: "https://api.bitwarden.com"},
+				},
+			},
+			existingEnv: []corev1.EnvVar{},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "API_URL", Value: "https://api.bitwarden.com"},
+			},
+		},
+		{
+			name:          "no override env does not modify container",
+			assetName:     controllerDeploymentAssetName,
+			containerName: "external-secrets",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.CoreController,
+				OverrideEnv:   nil,
+			},
+			existingEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+			},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "EXISTING", Value: "value"},
+			},
+		},
+		{
+			name:          "both revision history and override env",
+			assetName:     controllerDeploymentAssetName,
+			containerName: "external-secrets",
+			componentConfig: v1alpha1.ComponentConfig{
+				ComponentName: v1alpha1.CoreController,
+				DeploymentConfigs: &v1alpha1.DeploymentConfig{
+					RevisionHistoryLimit: ptr.To(int32(5)),
+				},
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "LOG_LEVEL", Value: "debug"},
+				},
+			},
+			existingEnv: []corev1.EnvVar{},
+			expectedEnv: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "debug"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Reconciler{}
+			deployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: tt.containerName,
+									Env:  tt.existingEnv,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			esc := &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ControllerConfig: v1alpha1.ControllerConfig{
+						ComponentConfigs: []v1alpha1.ComponentConfig{tt.componentConfig},
+					},
+				},
+			}
+
+			err := r.applyUserDeploymentConfigs(deployment, esc, tt.assetName)
+			if err != nil {
+				t.Errorf("applyUserDeploymentConfigs() unexpected error: %v", err)
+				return
+			}
+
+			container := &deployment.Spec.Template.Spec.Containers[0]
+			if len(container.Env) != len(tt.expectedEnv) {
+				t.Errorf("applyUserDeploymentConfigs() got %d env vars, want %d. Got: %v", len(container.Env), len(tt.expectedEnv), container.Env)
+				return
+			}
+
+			for _, expected := range tt.expectedEnv {
+				found := false
+				for _, actual := range container.Env {
+					if actual.Name == expected.Name && actual.Value == expected.Value {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("applyUserDeploymentConfigs() missing env var %s=%s", expected.Name, expected.Value)
+				}
+			}
+
+			// Verify revision history limit if set
+			if tt.componentConfig.DeploymentConfigs != nil && tt.componentConfig.DeploymentConfigs.RevisionHistoryLimit != nil {
+				if deployment.Spec.RevisionHistoryLimit == nil {
+					t.Error("applyUserDeploymentConfigs() RevisionHistoryLimit should be set")
+				} else if *deployment.Spec.RevisionHistoryLimit != *tt.componentConfig.DeploymentConfigs.RevisionHistoryLimit {
+					t.Errorf("applyUserDeploymentConfigs() RevisionHistoryLimit = %d, want %d",
+						*deployment.Spec.RevisionHistoryLimit, *tt.componentConfig.DeploymentConfigs.RevisionHistoryLimit)
 				}
 			}
 		})

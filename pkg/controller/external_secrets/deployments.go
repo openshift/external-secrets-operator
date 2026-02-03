@@ -661,7 +661,7 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 
 // applyUserDeploymentConfigs updates the deployment resource spec with user specified configurations.
 func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
-	componentName, err := getComponentNameFromAsset(assetName)
+	componentName, containerName, err := getComponentNameFromAsset(assetName)
 	if err != nil {
 		return err
 	}
@@ -672,6 +672,16 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 			if i.DeploymentConfigs != nil && i.DeploymentConfigs.RevisionHistoryLimit != nil {
 				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
 			}
+
+			// Apply OverrideEnv if set
+			if len(i.OverrideEnv) > 0 {
+				for j := range deployment.Spec.Template.Spec.Containers {
+					if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
+						mergeEnvVars(&deployment.Spec.Template.Spec.Containers[j], i.OverrideEnv)
+						break
+					}
+				}
+			}
 			break
 		}
 	}
@@ -679,18 +689,39 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 	return nil
 }
 
-// getComponentNameFromAsset maps asset file names to ComponentName enum values.
-func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName, error) {
+// mergeEnvVars merges user-defined environment variables into a container, User-defined values take precedence over existing values.
+func mergeEnvVars(container *corev1.Container, overrideEnv []corev1.EnvVar) {
+	if container.Env == nil {
+		container.Env = []corev1.EnvVar{}
+	}
+
+	for _, override := range overrideEnv {
+		found := false
+		for i, existing := range container.Env {
+			if existing.Name == override.Name {
+				container.Env[i] = override // User-defined value takes precedence
+				found = true
+				break
+			}
+		}
+		if !found {
+			container.Env = append(container.Env, override)
+		}
+	}
+}
+
+// getComponentNameFromAsset maps asset file names to ComponentName enum values and container names.
+func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName, string, error) {
 	switch assetName {
 	case controllerDeploymentAssetName:
-		return operatorv1alpha1.CoreController, nil
+		return operatorv1alpha1.CoreController, controllerContainerName, nil
 	case webhookDeploymentAssetName:
-		return operatorv1alpha1.Webhook, nil
+		return operatorv1alpha1.Webhook, webhookContainerName, nil
 	case certControllerDeploymentAssetName:
-		return operatorv1alpha1.CertController, nil
+		return operatorv1alpha1.CertController, certControllerContainerName, nil
 	case bitwardenDeploymentAssetName:
-		return operatorv1alpha1.BitwardenSDKServer, nil
+		return operatorv1alpha1.BitwardenSDKServer, bitwardenContainerName, nil
 	default:
-		return "", fmt.Errorf("unknown deployment asset name: %s", assetName)
+		return "", "", fmt.Errorf("unknown deployment asset name: %s", assetName)
 	}
 }

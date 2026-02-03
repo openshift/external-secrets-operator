@@ -110,6 +110,12 @@ const (
 	controllerDeploymentAssetName                 = "external-secrets/resources/deployment_external-secrets.yml"
 	certControllerDeploymentAssetName             = "external-secrets/resources/deployment_external-secrets-cert-controller.yml"
 	webhookDeploymentAssetName                    = "external-secrets/resources/deployment_external-secrets-webhook.yml"
+
+	// Container names for each component deployment
+	controllerContainerName     = "external-secrets"
+	webhookContainerName        = "webhook"
+	certControllerContainerName = "cert-controller"
+	bitwardenContainerName      = "bitwarden-sdk-server"
 	controllerRoleLeaderElectionAssetName         = "external-secrets/resources/role_external-secrets-leaderelection.yml"
 	controllerRoleBindingLeaderElectionAssetName  = "external-secrets/resources/rolebinding_external-secrets-leaderelection.yml"
 	webhookTLSSecretAssetName                     = "external-secrets/resources/secret_external-secrets-webhook.yml"
