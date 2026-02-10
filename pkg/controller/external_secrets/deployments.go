@@ -681,6 +681,10 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 						break
 					}
 				}
+				// Apply to all init containers in the deployment without name filtering,
+				for j := range deployment.Spec.Template.Spec.InitContainers {
+					mergeEnvVars(&deployment.Spec.Template.Spec.InitContainers[j], i.OverrideEnv)
+				}
 			}
 			break
 		}
