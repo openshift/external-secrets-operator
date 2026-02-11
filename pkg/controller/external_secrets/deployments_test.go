@@ -1480,7 +1480,7 @@ func TestMergeEnvVars(t *testing.T) {
 			},
 		},
 		{
-			name:        "empty override env vars does nothing",
+			name: "empty override env vars does nothing",
 			existingEnv: []corev1.EnvVar{
 				{Name: "EXISTING", Value: "value"},
 			},
