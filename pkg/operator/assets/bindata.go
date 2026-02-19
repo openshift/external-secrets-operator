@@ -354,6 +354,8 @@ spec:
         operator: In
         values:
           - external-secrets
+          - external-secrets-webhook
+          - external-secrets-cert-controller
           - bitwarden-sdk-server
   egress:
     - to:
