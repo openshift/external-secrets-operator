@@ -163,6 +163,7 @@ rules:
   - networkpolicies
   verbs:
   - create
+  - delete
   - get
   - list
   - update

@@ -421,6 +421,196 @@ func TestGetPodSelectorForComponent(t *testing.T) {
 	}
 }
 
+func TestDeleteStaleCustomNetworkPolicies(t *testing.T) {
+	tests := []struct {
+		name                        string
+		preReq                      func(*Reconciler, *fakes.FakeCtrlClient)
+		updateExternalSecretsConfig func(*operatorv1alpha1.ExternalSecretsConfig)
+		wantErr                     string
+		wantDeleteCount             int
+	}{
+		{
+			name: "no stale policies to delete",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ListCalls(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					npList := list.(*networkingv1.NetworkPolicyList)
+					npList.Items = []networkingv1.NetworkPolicy{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "keep-policy",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
+					{
+						Name:          "keep-policy",
+						ComponentName: operatorv1alpha1.CoreController,
+						Egress:        []networkingv1.NetworkPolicyEgressRule{},
+					},
+				}
+			},
+			wantDeleteCount: 0,
+		},
+		{
+			name: "stale policy deleted successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ListCalls(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					npList := list.(*networkingv1.NetworkPolicyList)
+					npList.Items = []networkingv1.NetworkPolicy{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "keep-policy",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "stale-policy",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+					}
+					return nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.NetworkPolicies = []operatorv1alpha1.NetworkPolicy{
+					{
+						Name:          "keep-policy",
+						ComponentName: operatorv1alpha1.CoreController,
+						Egress:        []networkingv1.NetworkPolicyEgressRule{},
+					},
+				}
+			},
+			wantDeleteCount: 1,
+		},
+		{
+			name: "all custom policies deleted when spec is empty",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ListCalls(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					npList := list.(*networkingv1.NetworkPolicyList)
+					npList.Items = []networkingv1.NetworkPolicy{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "old-policy-1",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "old-policy-2",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+					}
+					return nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return nil
+				})
+			},
+			wantDeleteCount: 2,
+		},
+		{
+			name: "list fails",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ListCalls(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					return commontest.TestClientError
+				})
+			},
+			wantErr: "failed to list custom network policies in namespace external-secrets: test client error",
+		},
+		{
+			name: "delete fails",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ListCalls(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					npList := list.(*networkingv1.NetworkPolicyList)
+					npList.Items = []networkingv1.NetworkPolicy{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "stale-policy",
+								Namespace: externalsecretsDefaultNamespace,
+								Labels: map[string]string{
+									customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+									requestEnqueueLabelKey:      requestEnqueueLabelValue,
+								},
+							},
+						},
+					}
+					return nil
+				})
+				m.DeleteCalls(func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+					return commontest.TestClientError
+				})
+			},
+			wantErr: "failed to delete stale network policy external-secrets/stale-policy: test client error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := testReconciler(t)
+			mock := &fakes.FakeCtrlClient{}
+			r.CtrlClient = mock
+			if tt.preReq != nil {
+				tt.preReq(r, mock)
+			}
+
+			esc := commontest.TestExternalSecretsConfig()
+			if tt.updateExternalSecretsConfig != nil {
+				tt.updateExternalSecretsConfig(esc)
+			}
+
+			// Build desired names
+			desiredNames := make(map[string]struct{})
+			for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
+				desiredNames[npConfig.Name] = struct{}{}
+			}
+
+			err := r.deleteStaleCustomNetworkPolicies(esc, desiredNames)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if tt.wantDeleteCount > 0 && mock.DeleteCallCount() != tt.wantDeleteCount {
+				t.Errorf("Expected %d delete calls, got %d", tt.wantDeleteCount, mock.DeleteCallCount())
+			}
+		})
+	}
+}
+
 func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -450,7 +640,8 @@ func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 					np.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] == "external-secrets" &&
 					len(np.Spec.Egress) == 1 &&
 					len(np.Spec.PolicyTypes) == 1 &&
-					np.Spec.PolicyTypes[0] == networkingv1.PolicyTypeEgress
+					np.Spec.PolicyTypes[0] == networkingv1.PolicyTypeEgress &&
+					np.Labels[customNetworkPolicyLabelKey] == customNetworkPolicyLabelValue
 			},
 		},
 		{

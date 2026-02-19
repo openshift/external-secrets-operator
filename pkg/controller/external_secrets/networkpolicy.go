@@ -6,11 +6,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
+)
+
+const (
+	// customNetworkPolicyLabelKey is the label key applied to custom network policies
+	// created from the ExternalSecretsConfig API to distinguish them from static policies.
+	customNetworkPolicyLabelKey = "operator.openshift.io/custom-network-policy"
+
+	// customNetworkPolicyLabelValue is the label value for custom network policies.
+	customNetworkPolicyLabelValue = "true"
 )
 
 // createOrApplyNetworkPolicies handles creation of both static network policies from manifests
@@ -75,9 +85,21 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 	return nil
 }
 
-// createOrApplyCustomNetworkPolicies applies custom network policies defined in the ExternalSecretsConfig spec.
+// createOrApplyCustomNetworkPolicies applies custom network policies defined in the ExternalSecretsConfig spec
+// and removes any stale custom network policies that are no longer in the spec.
 func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
-	if esc.Spec.ControllerConfig.NetworkPolicies == nil {
+	// Build a set of desired custom network policy names for stale cleanup
+	desiredNames := make(map[string]struct{})
+	for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
+		desiredNames[npConfig.Name] = struct{}{}
+	}
+
+	// Clean up stale custom network policies that are no longer in the spec
+	if err := r.deleteStaleCustomNetworkPolicies(esc, desiredNames); err != nil {
+		return err
+	}
+
+	if len(esc.Spec.ControllerConfig.NetworkPolicies) == 0 {
 		r.log.V(4).Info("No custom network policies configured in ControllerConfig")
 		return nil
 	}
@@ -85,6 +107,39 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.Ex
 	for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
 		if err := r.createOrApplyCustomNetworkPolicy(esc, npConfig, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// deleteStaleCustomNetworkPolicies lists all custom network policies in the namespace and deletes
+// those that are no longer present in the ExternalSecretsConfig spec.
+func (r *Reconciler) deleteStaleCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, desiredNames map[string]struct{}) error {
+	namespace := getNamespace(esc)
+
+	// List all custom network policies (identified by the custom label)
+	existingList := &networkingv1.NetworkPolicyList{}
+	labelSelector := labels.SelectorFromSet(labels.Set{
+		customNetworkPolicyLabelKey: customNetworkPolicyLabelValue,
+		requestEnqueueLabelKey:      requestEnqueueLabelValue,
+	})
+	if err := r.List(r.ctx, existingList, &client.ListOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+	}); err != nil {
+		return common.FromClientError(err, "failed to list custom network policies in namespace %s", namespace)
+	}
+
+	for i := range existingList.Items {
+		np := &existingList.Items[i]
+		if _, desired := desiredNames[np.Name]; !desired {
+			networkPolicyName := fmt.Sprintf("%s/%s", np.Namespace, np.Name)
+			r.log.V(1).Info("Deleting stale custom network policy", "name", networkPolicyName)
+			if err := r.Delete(r.ctx, np); err != nil {
+				return common.FromClientError(err, "failed to delete stale network policy %s", networkPolicyName)
+			}
+			r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Stale NetworkPolicy %s deleted", networkPolicyName)
 		}
 	}
 
@@ -179,12 +234,18 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 		return nil, fmt.Errorf("failed to determine pod selector for network policy %s: %w", npConfig.Name, err)
 	}
 
-	// Build the NetworkPolicy object
+	// Build the NetworkPolicy object with custom label for lifecycle management
+	npLabels := make(map[string]string, len(resourceLabels)+1)
+	for k, v := range resourceLabels {
+		npLabels[k] = v
+	}
+	npLabels[customNetworkPolicyLabelKey] = customNetworkPolicyLabelValue
+
 	networkPolicy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      npConfig.Name,
 			Namespace: namespace,
-			Labels:    resourceLabels,
+			Labels:    npLabels,
 		},
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: podSelector,
