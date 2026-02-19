@@ -216,10 +216,10 @@ type CertProvidersConfig struct {
 type ComponentName string
 
 const (
-	// CoreController represents the external-secrets component
+	// ExternalSecretsCoreController represents the external-secrets core controller component.
 	CoreController ComponentName = "ExternalSecretsCoreController"
 
-	// BitwardenSDKServer represents the bitwarden-sdk-server component
+	// BitwardenSDKServer represents the bitwarden-sdk-server component.
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
 )
 
@@ -228,8 +228,11 @@ const (
 type NetworkPolicy struct {
 	// name is a unique identifier for this network policy configuration.
 	// This name will be used as part of the generated NetworkPolicy resource name.
+	// The value must be a valid DNS subdomain name consisting of lowercase alphanumeric characters or '-',
+	// starting and ending with an alphanumeric character.
 	// +kubebuilder:validation:MinLength:=1
 	// +kubebuilder:validation:MaxLength:=253
+	// +kubebuilder:validation:Pattern:=`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
@@ -238,14 +241,12 @@ type NetworkPolicy struct {
 	// +kubebuilder:validation:Required
 	ComponentName ComponentName `json:"componentName"`
 
-	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
-	// is allowed if there are no NetworkPolicies selecting the pod (and cluster policy
-	// otherwise allows the traffic), OR if the traffic matches at least one egress rule
-	// across all the NetworkPolicy objects whose podSelector matches the pod. If
-	// this field is empty then this NetworkPolicy limits all outgoing traffic (and serves
-	// solely to ensure that the pods it selects are isolated by default).
-	// The operator will automatically handle ingress rules based on the current running ports.
+	// egress is a list of egress rules to be applied to the selected component pods.
+	// The operator generates a Kubernetes NetworkPolicy targeting the component specified by componentName,
+	// using the egress rules provided here. If this list is empty, the generated NetworkPolicy will deny
+	// all outgoing traffic for the component (default-deny egress).
+	// The operator will automatically handle ingress rules based on the component's required ports.
 	// +kubebuilder:validation:Required
-	//+listType=atomic
-	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
+	// +listType=atomic
+	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress"`
 }
