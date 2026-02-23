@@ -11,14 +11,14 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
-func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, recon bool) error {
 	// secrets are only created if isCertManagerConfig is not enabled
 	if isCertManagerConfigEnabled(esc) {
 		r.log.V(4).Info("cert-manager config is enabled, skipping webhook component secret resource creation")
 		return nil
 	}
 
-	desired := r.getSecretObject(esc, resourceLabels)
+	desired := r.getSecretObject(esc, resourceMetadata)
 	secretName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 	r.log.V(4).Info("reconciling secret resource", "name", secretName)
 	fetched := &corev1.Secret{}
@@ -32,8 +32,9 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s secret resource already exists, maybe from previous installation", secretName)
 	}
 
-	if exist && common.ObjectMetadataModified(desired, fetched) {
+	if exist && common.ObjectMetadataModified(desired, fetched, &resourceMetadata) {
 		r.log.V(1).Info("secret has been modified, updating to desired state", "name", secretName)
+		common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 			return common.FromClientError(err, "failed to update %s secret resource", secretName)
 		}
@@ -51,10 +52,11 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-func (r *Reconciler) getSecretObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) *corev1.Secret {
+func (r *Reconciler) getSecretObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) *corev1.Secret {
 	secret := common.DecodeSecretObjBytes(assets.MustAsset(webhookTLSSecretAssetName))
 
 	updateNamespace(secret, esc)
-	common.UpdateResourceLabels(secret, resourceLabels)
+	common.ApplyResourceMetadata(secret, resourceMetadata)
+
 	return secret
 }

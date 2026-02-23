@@ -121,6 +121,66 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 			},
 			wantErr: "failed to create serviceaccount external-secrets/external-secrets: test client error",
 		},
+		{
+			name: "serviceaccount with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if sa, ok := obj.(*corev1.ServiceAccount); ok {
+						// Verify annotations are applied
+						if sa.Annotations == nil {
+							t.Error("serviceaccount annotations should not be nil")
+							return nil
+						}
+						if sa.Annotations["vault.hashicorp.com/agent-inject"] != "true" {
+							t.Errorf("expected annotation 'vault.hashicorp.com/agent-inject'='true', got '%s'",
+								sa.Annotations["vault.hashicorp.com/agent-inject"])
+						}
+						if sa.Annotations["team/owner"] != "platform" {
+							t.Errorf("expected annotation 'team/owner'='platform', got '%s'",
+								sa.Annotations["team/owner"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"vault.hashicorp.com/agent-inject": "true",
+					"team/owner":                       "platform",
+				}
+			},
+		},
+		{
+			name: "serviceaccount tracks managed annotations",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if sa, ok := obj.(*corev1.ServiceAccount); ok {
+						if sa.Annotations == nil {
+							t.Error("serviceaccount annotations should not be nil")
+							return nil
+						}
+
+						// Verify all annotations from spec are present
+						if sa.Annotations["allowed-annotation"] != "value" {
+							t.Errorf("expected 'allowed-annotation', got '%s'",
+								sa.Annotations["allowed-annotation"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-annotation": "value",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -137,7 +197,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyServiceAccounts(esc, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyServiceAccounts(esc, testResourceMetadata(esc), false)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)

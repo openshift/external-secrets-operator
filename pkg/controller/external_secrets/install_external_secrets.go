@@ -3,6 +3,7 @@ package external_secrets
 import (
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
@@ -50,60 +51,73 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 		}
 	}
 	maps.Copy(resourceLabels, controllerDefaultResourceLabels)
+	managedKeys := common.SortedAnnotationKeys(esc.Spec.ControllerConfig.Annotations)
+	prevManagedKeys := common.GetManagedAnnotationKeys(esc)
 
-	if err := r.createOrApplyNamespace(esc, resourceLabels); err != nil {
+	resourceMetadata := common.ResourceMetadata{
+		Labels:                     resourceLabels,
+		Annotations:                esc.Spec.ControllerConfig.Annotations,
+		CurrentlyManagedAnnotKeys:  managedKeys,
+		PreviouslyManagedAnnotKeys: prevManagedKeys,
+	}
+
+	if err := r.createOrApplyNamespace(esc, resourceMetadata); err != nil {
 		r.log.Error(err, "failed to create namespace")
 		return err
 	}
 
-	if err := r.createOrApplyNetworkPolicies(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyNetworkPolicies(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile network policy resource")
 		return err
 	}
 
-	if err := r.createOrApplyServiceAccounts(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServiceAccounts(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile serviceaccount resource")
 		return err
 	}
 
-	if err := r.createOrApplyCertificates(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyCertificates(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile certificates resource")
 		return err
 	}
 
-	if err := r.createOrApplySecret(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplySecret(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile secret resource")
 		return err
 	}
 
-	if err := r.ensureTrustedCABundleConfigMap(esc, resourceLabels); err != nil {
+	if err := r.ensureTrustedCABundleConfigMap(esc, resourceMetadata); err != nil {
 		r.log.Error(err, "failed to ensure trusted CA bundle ConfigMap")
 		return err
 	}
 
-	if err := r.createOrApplyRBACResource(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyRBACResource(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile rbac resources")
 		return err
 	}
 
-	if err := r.createOrApplyServices(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServices(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile service resource")
 		return err
 	}
 
-	if err := r.createOrApplyDeployments(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyDeployments(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile deployment resource")
 		return err
 	}
 
-	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err
 	}
 
-	if addProcessedAnnotation(esc) {
+	// Update managed annotations tracking and processed annotation on the ESC CR metadata
+	common.SetManagedAnnotationsTracking(esc, esc.Spec.ControllerConfig.Annotations)
+	escNeedsUpdate := addProcessedAnnotation(esc)
+	// Always update if tracking annotation changed or processed annotation was added
+	if escNeedsUpdate || !reflect.DeepEqual(managedKeys, prevManagedKeys) {
 		if err := r.UpdateWithRetry(r.ctx, esc); err != nil {
-			return fmt.Errorf("failed to update processed annotation to %s: %w", esc.GetName(), err)
+			return fmt.Errorf("failed to update annotations on %s: %w", esc.GetName(), err)
 		}
 	}
 
@@ -116,15 +130,18 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 // the labels if they have changed. Unlike other resources, namespaces may be pre-created
 // by users with their own labels, so we only add/update our desired labels without
 // removing existing ones.
-func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
+func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) error {
 	namespaceName := getNamespace(esc)
 
 	desired := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   namespaceName,
-			Labels: resourceLabels,
+			Labels: resourceMetadata.Labels,
 		},
 	}
+
+	// Apply managed annotations from ResourceMetadata
+	common.SetManagedAnnotations(desired, resourceMetadata.Annotations)
 
 	fetched := &corev1.Namespace{}
 	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
@@ -139,13 +156,22 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 			return fmt.Errorf("failed to create namespace %s: %w", namespaceName, err)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s created", namespaceName)
-	case exists && namespaceLabelsNeedUpdate(fetched, resourceLabels):
+	case exists && namespaceLabelsNeedUpdate(fetched, resourceMetadata.Labels):
 		r.log.V(1).Info("Namespace labels changed, updating", "name", namespaceName)
 		// Merge existing labels with desired labels (desired labels take precedence)
 		if fetched.Labels == nil {
 			fetched.Labels = make(map[string]string)
 		}
-		maps.Copy(fetched.Labels, resourceLabels)
+		maps.Copy(fetched.Labels, resourceMetadata.Labels)
+		if err := r.UpdateWithRetry(r.ctx, fetched); err != nil {
+			return fmt.Errorf("failed to update namespace %s: %w", namespaceName, err)
+		}
+		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s updated", namespaceName)
+	case exists && namespaceAnnotationsNeedUpdate(fetched, resourceMetadata.Annotations):
+		r.log.V(1).Info("Namespace labels changed, updating", "name", namespaceName)
+		if fetched.Annotations == nil {
+			fetched.Annotations = make(map[string]string)
+		}
 		if err := r.UpdateWithRetry(r.ctx, fetched); err != nil {
 			return fmt.Errorf("failed to update namespace %s: %w", namespaceName, err)
 		}
@@ -169,5 +195,20 @@ func namespaceLabelsNeedUpdate(existing *corev1.Namespace, desiredLabels map[str
 			return true
 		}
 	}
+	return false
+}
+
+// namespaceAnnotationsNeedUpdate
+func namespaceAnnotationsNeedUpdate(existing *corev1.Namespace, desiredAnnots map[string]string) bool {
+	if existing.Annotations == nil && len(desiredAnnots) > 0 {
+		return true
+	}
+
+	for k, v := range desiredAnnots {
+		if existing.Annotations[k] != v {
+			return true
+		}
+	}
+
 	return false
 }

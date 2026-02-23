@@ -12,7 +12,7 @@ import (
 )
 
 // createOrApplyServiceAccounts ensures required service Account resources exist and are correctly configured.
-func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	serviceAccountsToCreate := []struct {
 		assetName string
 		condition bool
@@ -42,7 +42,7 @@ func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.External
 
 		desired := common.DecodeServiceAccountObjBytes(assets.MustAsset(serviceAccount.assetName))
 		updateNamespace(desired, esc)
-		common.UpdateResourceLabels(desired, resourceLabels)
+		common.ApplyResourceMetadata(desired, resourceMetadata)
 
 		serviceAccountName := fmt.Sprintf("%s/%s", desired.GetNamespace(), desired.GetName())
 		r.log.V(4).Info("reconciling serviceaccount resource", "name", serviceAccountName)
@@ -57,7 +57,16 @@ func (r *Reconciler) createOrApplyServiceAccounts(esc *operatorv1alpha1.External
 			if externalSecretsConfigCreateRecon {
 				r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s serviceaccount already exists, possibly from a previous install", serviceAccountName)
 			}
-			r.log.V(4).Info("serviceaccount exists", "name", serviceAccountName)
+			if common.HasObjectChanged(desired, fetched, &resourceMetadata) {
+				r.log.V(1).Info("ServiceAccount modified, updating", "name", serviceAccountName)
+				common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
+				if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
+					return common.FromClientError(err, "failed to update serviceaccount %s", serviceAccountName)
+				}
+				r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "ServiceAccount %s updated", serviceAccountName)
+			} else {
+				r.log.V(4).Info("serviceaccount already up-to-date", "name", serviceAccountName)
+			}
 		} else {
 			if err := r.Create(r.ctx, desired); err != nil {
 				return common.FromClientError(err, "failed to create serviceaccount %s", serviceAccountName)

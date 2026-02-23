@@ -23,6 +23,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,15 +131,6 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		By("Waiting for ExternalSecretsConfig to be Ready (with Degraded=False)")
 		Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute)).To(Succeed(),
 			"ExternalSecretsConfig should have Ready=True and Degraded=False conditions")
-	})
-
-	AfterAll(func() {
-		By("Deleting the externalsecrets.openshift.operator.io/cluster CR")
-		loader.DeleteFromFile(testassets.ReadFile, externalSecretsFile, "")
-
-		By("Deleting the test namespace")
-		Expect(clientset.CoreV1().Namespaces().Delete(ctx, testNamespace, metav1.DeleteOptions{})).
-			NotTo(HaveOccurred(), "failed to delete test namespace")
 	})
 
 	BeforeEach(func() {
@@ -462,5 +454,153 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(certControllerLimit), "revisionHistoryLimit should be %d for cert-controller", certControllerLimit)
 			}, time.Minute, 5*time.Second).Should(Succeed())
 		})
+	})
+
+	Context("Annotations", func() {
+		It("should apply and remove custom annotations to created resources", func() {
+			// Define test annotations
+			testAnnotations := map[string]string{
+				"example.com/custom-annotation": "test-value",
+				"mycompany.io/owner":            "platform-team",
+			}
+
+			By("Updating ExternalSecretsConfig with custom annotations")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, existingCR); err != nil {
+					return err
+				}
+
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig.Annotations = testAnnotations
+
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig with annotations")
+
+			defer func() {
+				By("Removing test annotations from ExternalSecretsConfig CR")
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					currentCR := &operatorv1alpha1.ExternalSecretsConfig{}
+					if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, currentCR); err != nil {
+						return err
+					}
+					for key := range testAnnotations {
+						delete(currentCR.Spec.ControllerConfig.Annotations, key)
+					}
+					return runtimeClient.Update(ctx, currentCR)
+				})
+				Expect(err).NotTo(HaveOccurred(), "should remove test annotations from ExternalSecretsConfig")
+			}()
+
+			By("Waiting for external-secrets operand pods to be ready")
+			Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{
+				operandCoreControllerPodPrefix,
+				operandCertControllerPodPrefix,
+				operandWebhookPodPrefix,
+			})).To(Succeed())
+
+			// Verify annotations are applied to each resource type
+			for _, resourceType := range getResourceTypesToVerify() {
+				By(fmt.Sprintf("Verifying annotations are applied to %s resources", resourceType.name))
+				Eventually(func(g Gomega) {
+					objects, err := resourceType.listFunc(ctx, clientset, operandNamespace, g)
+					g.Expect(err).NotTo(HaveOccurred(), "should list %s in %s namespace", resourceType.name, operandNamespace)
+
+					for _, obj := range objects {
+						if !strings.HasPrefix(obj.GetName(), "external-secrets") {
+							continue
+						}
+
+						annotations := obj.GetAnnotations()
+						for key, value := range testAnnotations {
+							g.Expect(annotations).To(HaveKeyWithValue(key, value),
+								"%s %s should have annotation %s=%s", resourceType.name, obj.GetName(), key, value)
+						}
+
+						if resourceType.checkPodSpec {
+							deployment := asDeployment(obj)
+							templateAnnotations := deployment.Spec.Template.Annotations
+							for key, value := range testAnnotations {
+								g.Expect(templateAnnotations).To(HaveKeyWithValue(key, value),
+									"deployment %s pod template should have annotation %s=%s", deployment.Name, key, value)
+							}
+						}
+					}
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+			}
+
+			By("Removing test annotations from ExternalSecretsConfig CR")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				currentCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, currentCR); err != nil {
+					return err
+				}
+				for key := range testAnnotations {
+					delete(currentCR.Spec.ControllerConfig.Annotations, key)
+				}
+				return runtimeClient.Update(ctx, currentCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should remove test annotations from ExternalSecretsConfig")
+
+			// Verify annotations are removed from each resource type
+			for _, resourceType := range getResourceTypesToVerify() {
+				By(fmt.Sprintf("Verifying annotations are removed from %s resources", resourceType.name))
+				Eventually(func(g Gomega) {
+					objects, err := resourceType.listFunc(ctx, clientset, operandNamespace, g)
+					g.Expect(err).NotTo(HaveOccurred(), "should list %s in %s namespace", resourceType.name, operandNamespace)
+
+					for _, obj := range objects {
+						if !strings.HasPrefix(obj.GetName(), "external-secrets") {
+							continue
+						}
+
+						annotations := obj.GetAnnotations()
+						for key := range testAnnotations {
+							g.Expect(annotations).NotTo(HaveKey(key),
+								"%s %s should NOT have annotation %s after removal", resourceType.name, obj.GetName(), key)
+						}
+
+						if resourceType.checkPodSpec {
+							deployment := asDeployment(obj)
+							templateAnnotations := deployment.Spec.Template.Annotations
+							for key := range testAnnotations {
+								g.Expect(templateAnnotations).NotTo(HaveKey(key),
+									"deployment %s pod template should NOT have annotation %s after removal", deployment.Name, key)
+							}
+						}
+					}
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+			}
+		})
+
+		It("should not allow updating annotations with reserved domain prefix", func() {
+			By("Getting the existing ExternalSecretsConfig CR")
+			existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+			err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, existingCR)
+			Expect(err).NotTo(HaveOccurred(), "should get ExternalSecretsConfig CR")
+
+			By("Attempting to update with a reserved domain annotation")
+			updatedCR := existingCR.DeepCopy()
+			if updatedCR.Spec.ControllerConfig.Annotations == nil {
+				updatedCR.Spec.ControllerConfig.Annotations = make(map[string]string)
+			}
+
+			// Add two reserved annotations that should be rejected
+			updatedCR.Spec.ControllerConfig.Annotations["deployment.kubernetes.io/revision"] = "9"
+			updatedCR.Spec.ControllerConfig.Annotations["k8s.io/not-allowed"] = "denied"
+
+			err = runtimeClient.Update(ctx, updatedCR)
+			Expect(err).To(HaveOccurred(), "update with reserved domain annotations should fail")
+		})
+	})
+
+	AfterAll(func() {
+		By("Deleting the externalsecrets.openshift.operator.io/cluster CR")
+		loader.DeleteFromFile(testassets.ReadFile, externalSecretsFile, "")
+
+		By("Deleting the test namespace")
+		Expect(clientset.CoreV1().Namespaces().Delete(ctx, testNamespace, metav1.DeleteOptions{})).
+			NotTo(HaveOccurred(), "failed to delete test namespace")
 	})
 })

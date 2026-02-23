@@ -677,7 +677,7 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			}
 			t.Setenv("RELATED_IMAGE_BITWARDEN_SDK_SERVER", commontest.TestBitwardenImageName)
 
-			err := r.createOrApplyDeployments(externalsecrets, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyDeployments(externalsecrets, testResourceMetadata(externalsecrets), false)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyDeployments() err: %v, wantErr: %v", err, tt.wantErr)
 			}

@@ -21,7 +21,7 @@ import (
 )
 
 // createOrApplyDeployments ensures required Deployment resources exist and are correctly configured.
-func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	// Define all Deployment assets to apply based on conditions.
 	deployments := []struct {
 		assetName string
@@ -50,7 +50,7 @@ func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecr
 		if !d.condition {
 			continue
 		}
-		if err := r.createOrApplyDeploymentFromAsset(esc, d.assetName, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+		if err := r.createOrApplyDeploymentFromAsset(esc, d.assetName, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -62,10 +62,10 @@ func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecr
 	return nil
 }
 
-func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string,
+func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceMetadata common.ResourceMetadata,
 	externalSecretsConfigCreateRecon bool,
 ) error {
-	deployment, err := r.getDeploymentObject(assetName, esc, resourceLabels)
+	deployment, err := r.getDeploymentObject(assetName, esc, resourceMetadata)
 	if err != nil {
 		return err
 	}
@@ -80,8 +80,10 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s deployment resource already exists", deploymentName)
 	}
 	switch {
-	case exist && common.HasObjectChanged(deployment, fetched):
+	case exist && common.HasObjectChanged(deployment, fetched, &resourceMetadata):
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
+		common.MergeFetchedAnnotations(deployment, fetched, &resourceMetadata)
+		common.MergeFetchedPodTemplateAnnotations(deployment, fetched, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
@@ -98,11 +100,14 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	return nil
 }
 
-func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) (*appsv1.Deployment, error) {
+func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) (*appsv1.Deployment, error) {
 	deployment := common.DecodeDeploymentObjBytes(assets.MustAsset(assetName))
 	updateNamespace(deployment, esc)
-	common.UpdateResourceLabels(deployment, resourceLabels)
-	updatePodTemplateLabels(deployment, resourceLabels)
+	common.ApplyResourceMetadata(deployment, resourceMetadata)
+	updatePodTemplateLabels(deployment, resourceMetadata.Labels)
+
+	// Apply managed annotations on pod template
+	common.SetPodTemplateManagedAnnotations(deployment, resourceMetadata.Annotations)
 
 	image := os.Getenv(externalsecretsImageEnvVarName)
 	if image == "" {

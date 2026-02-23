@@ -27,6 +27,10 @@ const (
 
 	// ExternalSecretsOperatorCommonName is the name commonly used for labelling resources.
 	ExternalSecretsOperatorCommonName = "external-secrets-operator"
+
+	// ManagedAnnotationsKey is the annotation key used to track which annotation keys
+	// are managed by the operator. The value is a base64-encoded JSON array of annotation keys.
+	ManagedAnnotationsKey = "externalsecretsconfig.operator.openshift.io/managed-annotations"
 )
 
 var (

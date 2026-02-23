@@ -1,6 +1,8 @@
 package external_secrets
 
 import (
+	"maps"
+
 	webhook "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -10,8 +12,8 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
-func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, recon bool) error {
-	desiredWebhooks := r.getValidatingWebhookObjects(esc, resourceLabels)
+func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, recon bool) error {
+	desiredWebhooks := r.getValidatingWebhookObjects(esc, resourceMetadata)
 
 	for _, desired := range desiredWebhooks {
 		validatingWebhookName := desired.GetName()
@@ -25,8 +27,9 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 		if exist && recon {
 			r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s validatingWebhook resource already exists, maybe from previous installation", validatingWebhookName)
 		}
-		if exist && common.HasObjectChanged(desired, fetched) {
+		if exist && common.HasObjectChanged(desired, fetched, &resourceMetadata) {
 			r.log.V(1).Info("validatingWebhook has been modified", "updating to desired state", "name", validatingWebhookName)
+			common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
 			if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 				return common.FromClientError(err, "failed to update %s validatingWebhook resource with desired state", validatingWebhookName)
 			}
@@ -45,33 +48,37 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 	return nil
 }
 
-func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) []*webhook.ValidatingWebhookConfiguration {
+func (r *Reconciler) getValidatingWebhookObjects(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) []*webhook.ValidatingWebhookConfiguration {
 	assetNames := []string{validatingWebhookExternalSecretCRDAssetName, validatingWebhookSecretStoreCRDAssetName}
 	webhooks := make([]*webhook.ValidatingWebhookConfiguration, 0, len(assetNames))
 
+	// Include cert-manager inject annotation in managed metadata so it's
+	// tracked by the managed-annotations key. This ensures toggling
+	// cert-manager on/off is detected by ObjectMetadataModified and
+	// MergeFetchedAnnotations won't reintroduce a stale value.
 	for _, assetName := range assetNames {
 		validatingWebhook := common.DecodeValidatingWebhookConfigurationObjBytes(assets.MustAsset(assetName))
 
-		common.UpdateResourceLabels(validatingWebhook, resourceLabels)
-		updateValidatingWebhookAnnotation(esc, validatingWebhook)
+		common.ApplyResourceMetadata(validatingWebhook, withCertManagerAnnotation(esc, resourceMetadata))
+
 		webhooks = append(webhooks, validatingWebhook)
 	}
 
 	return webhooks
 }
 
-func updateValidatingWebhookAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, webhook *webhook.ValidatingWebhookConfiguration) {
+// withCertManagerAnnotation returns a copy of resourceMetadata with the
+// cert-manager inject annotation included when cert-manager is enabled.
+// The annotation is added to the managed set so it's properly tracked
+// for add/remove lifecycle.
+func withCertManagerAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, metadata common.ResourceMetadata) common.ResourceMetadata {
+	annotations := make(map[string]string, len(metadata.Annotations)+1)
+	maps.Copy(annotations, metadata.Annotations)
+
 	if common.IsInjectCertManagerAnnotationEnabled(esc) {
-		if webhook.Annotations == nil {
-			webhook.Annotations = map[string]string{}
-		}
-		webhook.Annotations[common.CertManagerInjectCAFromAnnotation] = common.CertManagerInjectCAFromAnnotationValue
-		return
+		annotations[common.CertManagerInjectCAFromAnnotation] = common.CertManagerInjectCAFromAnnotationValue
 	}
-	if webhook.Annotations != nil {
-		delete(webhook.Annotations, common.CertManagerInjectCAFromAnnotation)
-		if len(webhook.Annotations) == 0 {
-			webhook.Annotations = nil
-		}
-	}
+
+	metadata.Annotations = annotations
+	return metadata
 }
