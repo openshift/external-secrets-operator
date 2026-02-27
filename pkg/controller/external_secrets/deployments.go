@@ -673,17 +673,13 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
 			}
 
-			// Apply OverrideEnv if set
+			// Apply OverrideEnv only to the target component container.
 			if len(i.OverrideEnv) > 0 {
 				for j := range deployment.Spec.Template.Spec.Containers {
 					if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
 						mergeEnvVars(&deployment.Spec.Template.Spec.Containers[j], i.OverrideEnv)
 						break
 					}
-				}
-				// Apply to all init containers in the deployment without name filtering,
-				for j := range deployment.Spec.Template.Spec.InitContainers {
-					mergeEnvVars(&deployment.Spec.Template.Spec.InitContainers[j], i.OverrideEnv)
 				}
 			}
 			break

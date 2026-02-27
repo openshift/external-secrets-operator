@@ -249,11 +249,16 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 	})
 
 	Context("Environment Variables", func() {
-		// Map component names to deployment names
+		// Map component names to deployment names and target container names
 		componentToDeployment := map[string]string{
 			"ExternalSecretsCoreController": "external-secrets",
 			"Webhook":                       "external-secrets-webhook",
 			"CertController":                "external-secrets-cert-controller",
+		}
+		componentToContainer := map[string]string{
+			"ExternalSecretsCoreController": "external-secrets",
+			"Webhook":                       "webhook",
+			"CertController":                "cert-controller",
 		}
 
 		// Define test env vars
@@ -261,7 +266,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			{
 				ComponentName: "ExternalSecretsCoreController",
 				OverrideEnv: []corev1.EnvVar{
-					{Name: "GOMAXPROCS", Value: "4"},
+					{Name: "LOG_LEVEL", Value: "debug"},
 					{Name: "TEST_CONTROLLER_VAR", Value: "controller-value"},
 				},
 			},
@@ -309,27 +314,24 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				By(fmt.Sprintf("Verifying custom environment variables in %s deployment", config.ComponentName))
 
 				deploymentName := componentToDeployment[string(config.ComponentName)]
+				targetContainerName := componentToContainer[string(config.ComponentName)]
 				Eventually(func(g Gomega) {
 					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, deploymentName, metav1.GetOptions{})
 					g.Expect(err).NotTo(HaveOccurred(), "should get %s deployment", deploymentName)
 
-					// Collect env vars from all containers and initContainers
-					envMap := make(map[string]string)
+					// Verify env vars on the target container specifically
 					for _, container := range deployment.Spec.Template.Spec.Containers {
+						if container.Name != targetContainerName {
+							continue
+						}
+						envMap := make(map[string]string)
 						for _, env := range container.Env {
 							envMap[env.Name] = env.Value
 						}
-					}
-					for _, initContainer := range deployment.Spec.Template.Spec.InitContainers {
-						for _, env := range initContainer.Env {
-							envMap[env.Name] = env.Value
+						for _, expectedEnv := range config.OverrideEnv {
+							g.Expect(envMap).To(HaveKeyWithValue(expectedEnv.Name, expectedEnv.Value),
+								"container %s in %s should have env var %s=%s", targetContainerName, deploymentName, expectedEnv.Name, expectedEnv.Value)
 						}
-					}
-
-					// Verify all expected env vars are present
-					for _, expectedEnv := range config.OverrideEnv {
-						g.Expect(envMap).To(HaveKeyWithValue(expectedEnv.Name, expectedEnv.Value),
-							"%s should have env var %s=%s", deploymentName, expectedEnv.Name, expectedEnv.Value)
 					}
 				}, time.Minute, 5*time.Second).Should(Succeed(), "env vars should be set for %s", config.ComponentName)
 			}
@@ -360,30 +362,27 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			})).To(Succeed())
 
 			for _, config := range envConfigs {
-				By(fmt.Sprintf("Verifying custom environment variables in %s deployment", config.ComponentName))
+				By(fmt.Sprintf("Verifying custom environment variables removed from %s deployment", config.ComponentName))
 
 				deploymentName := componentToDeployment[string(config.ComponentName)]
+				targetContainerName := componentToContainer[string(config.ComponentName)]
 				Eventually(func(g Gomega) {
 					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, deploymentName, metav1.GetOptions{})
 					g.Expect(err).NotTo(HaveOccurred(), "should get %s deployment", deploymentName)
 
-					// Collect env var names from all containers and initContainers
-					envNames := make(map[string]bool)
+					// Verify env vars are removed from the target container
 					for _, container := range deployment.Spec.Template.Spec.Containers {
+						if container.Name != targetContainerName {
+							continue
+						}
+						envNames := make(map[string]bool)
 						for _, env := range container.Env {
 							envNames[env.Name] = true
 						}
-					}
-					for _, initContainer := range deployment.Spec.Template.Spec.InitContainers {
-						for _, env := range initContainer.Env {
-							envNames[env.Name] = true
+						for _, expectedEnv := range config.OverrideEnv {
+							g.Expect(envNames).NotTo(HaveKey(expectedEnv.Name),
+								"container %s in %s should not have env var %s after removal", targetContainerName, deploymentName, expectedEnv.Name)
 						}
-					}
-
-					// Verify custom env vars are removed
-					for _, expectedEnv := range config.OverrideEnv {
-						g.Expect(envNames).NotTo(HaveKey(expectedEnv.Name),
-							"%s should not have env var %s after removal", deploymentName, expectedEnv.Name)
 					}
 				}, time.Minute, 5*time.Second).Should(Succeed(), "env vars should be removed from %s", config.ComponentName)
 			}

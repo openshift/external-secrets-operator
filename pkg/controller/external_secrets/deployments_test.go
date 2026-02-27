@@ -1558,14 +1558,12 @@ func TestMergeEnvVars(t *testing.T) {
 
 func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 	tests := []struct {
-		name                     string
-		assetName                string
-		containerName            string
-		componentConfig          v1alpha1.ComponentConfig
-		existingEnv              []corev1.EnvVar
-		expectedEnv              []corev1.EnvVar
-		initContainers           []corev1.Container
-		expectedInitContainerEnv map[string][]corev1.EnvVar // init container name -> expected env vars
+		name            string
+		assetName       string
+		containerName   string
+		componentConfig v1alpha1.ComponentConfig
+		existingEnv     []corev1.EnvVar
+		expectedEnv     []corev1.EnvVar
 	}{
 		{
 			name:          "apply override env to core controller",
@@ -1664,7 +1662,7 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 			},
 		},
 		{
-			name:          "override env applied to init containers",
+			name:          "override env does not apply to init containers",
 			assetName:     controllerDeploymentAssetName,
 			containerName: "external-secrets",
 			componentConfig: v1alpha1.ComponentConfig{
@@ -1679,123 +1677,20 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 				{Name: "LOG_LEVEL", Value: "debug"},
 				{Name: "TIMEOUT", Value: "30s"},
 			},
-			initContainers: []corev1.Container{
-				{Name: "init-setup"},
-			},
-			expectedInitContainerEnv: map[string][]corev1.EnvVar{
-				"init-setup": {
-					{Name: "LOG_LEVEL", Value: "debug"},
-					{Name: "TIMEOUT", Value: "30s"},
-				},
-			},
-		},
-		{
-			name:          "override env merges with existing init container env vars",
-			assetName:     webhookDeploymentAssetName,
-			containerName: "webhook",
-			componentConfig: v1alpha1.ComponentConfig{
-				ComponentName: v1alpha1.Webhook,
-				OverrideEnv: []corev1.EnvVar{
-					{Name: "LOG_LEVEL", Value: "debug"},
-					{Name: "EXISTING_VAR", Value: "overridden"},
-				},
-			},
-			existingEnv: []corev1.EnvVar{
-				{Name: "EXISTING", Value: "value"},
-			},
-			expectedEnv: []corev1.EnvVar{
-				{Name: "EXISTING", Value: "value"},
-				{Name: "LOG_LEVEL", Value: "debug"},
-				{Name: "EXISTING_VAR", Value: "overridden"},
-			},
-			initContainers: []corev1.Container{
-				{
-					Name: "init-migration",
-					Env: []corev1.EnvVar{
-						{Name: "EXISTING_VAR", Value: "original"},
-						{Name: "KEEP_VAR", Value: "keep"},
-					},
-				},
-			},
-			expectedInitContainerEnv: map[string][]corev1.EnvVar{
-				"init-migration": {
-					{Name: "EXISTING_VAR", Value: "overridden"},
-					{Name: "KEEP_VAR", Value: "keep"},
-					{Name: "LOG_LEVEL", Value: "debug"},
-				},
-			},
-		},
-		{
-			name:          "override env applied to multiple init containers",
-			assetName:     controllerDeploymentAssetName,
-			containerName: "external-secrets",
-			componentConfig: v1alpha1.ComponentConfig{
-				ComponentName: v1alpha1.CoreController,
-				OverrideEnv: []corev1.EnvVar{
-					{Name: "LOG_LEVEL", Value: "debug"},
-				},
-			},
-			existingEnv: []corev1.EnvVar{},
-			expectedEnv: []corev1.EnvVar{
-				{Name: "LOG_LEVEL", Value: "debug"},
-			},
-			initContainers: []corev1.Container{
-				{Name: "init-setup"},
-				{
-					Name: "init-migration",
-					Env: []corev1.EnvVar{
-						{Name: "EXISTING", Value: "value"},
-					},
-				},
-			},
-			expectedInitContainerEnv: map[string][]corev1.EnvVar{
-				"init-setup": {
-					{Name: "LOG_LEVEL", Value: "debug"},
-				},
-				"init-migration": {
-					{Name: "EXISTING", Value: "value"},
-					{Name: "LOG_LEVEL", Value: "debug"},
-				},
-			},
-		},
-		{
-			name:          "no override env does not modify init containers",
-			assetName:     controllerDeploymentAssetName,
-			containerName: "external-secrets",
-			componentConfig: v1alpha1.ComponentConfig{
-				ComponentName: v1alpha1.CoreController,
-				OverrideEnv:   nil,
-			},
-			existingEnv: []corev1.EnvVar{
-				{Name: "EXISTING", Value: "value"},
-			},
-			expectedEnv: []corev1.EnvVar{
-				{Name: "EXISTING", Value: "value"},
-			},
-			initContainers: []corev1.Container{
-				{
-					Name: "init-setup",
-					Env: []corev1.EnvVar{
-						{Name: "INIT_VAR", Value: "init-value"},
-					},
-				},
-			},
-			expectedInitContainerEnv: map[string][]corev1.EnvVar{
-				"init-setup": {
-					{Name: "INIT_VAR", Value: "init-value"},
-				},
-			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Reconciler{}
+			initEnv := []corev1.EnvVar{{Name: "INIT_ONLY_VAR", Value: "init-value"}}
 			deployment := &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							InitContainers: tt.initContainers,
+							InitContainers: []corev1.Container{
+								{Name: "init-setup", Env: initEnv},
+							},
 							Containers: []corev1.Container{
 								{
 									Name: tt.containerName,
@@ -1840,16 +1735,12 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 				}
 			}
 
-			// Verify init container env vars
-			for initContainerName, expectedEnvVars := range tt.expectedInitContainerEnv {
-				initContainer := findContainer(deployment, initContainerName)
-				if initContainer == nil {
-					t.Errorf("applyUserDeploymentConfigs() init container %s not found", initContainerName)
-					continue
-				}
-				if !reflect.DeepEqual(initContainer.Env, expectedEnvVars) {
-					t.Errorf("applyUserDeploymentConfigs() init container %s env vars mismatch.\nExpected: %+v\nActual: %+v",
-						initContainerName, expectedEnvVars, initContainer.Env)
+			// Verify init containers are NOT modified by OverrideEnv
+			if len(deployment.Spec.Template.Spec.InitContainers) > 0 {
+				initContainer := &deployment.Spec.Template.Spec.InitContainers[0]
+				if !reflect.DeepEqual(initContainer.Env, initEnv) {
+					t.Errorf("applyUserDeploymentConfigs() should not modify init container env.\nExpected: %+v\nActual: %+v",
+						initEnv, initContainer.Env)
 				}
 			}
 

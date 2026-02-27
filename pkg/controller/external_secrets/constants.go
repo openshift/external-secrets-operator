@@ -75,6 +75,12 @@ const (
 	httpProxyEnvVarLowercase  = "http_proxy"
 	httpsProxyEnvVarLowercase = "https_proxy"
 	noProxyEnvVarLowercase    = "no_proxy"
+
+	// specific containers when applying OverrideEnv configurations.
+	controllerContainerName     = "external-secrets"
+	webhookContainerName        = "webhook"
+	certControllerContainerName = "cert-controller"
+	bitwardenContainerName      = "bitwarden-sdk-server"
 )
 
 var (
@@ -110,31 +116,25 @@ const (
 	controllerDeploymentAssetName                 = "external-secrets/resources/deployment_external-secrets.yml"
 	certControllerDeploymentAssetName             = "external-secrets/resources/deployment_external-secrets-cert-controller.yml"
 	webhookDeploymentAssetName                    = "external-secrets/resources/deployment_external-secrets-webhook.yml"
-
-	// Container names for each component deployment
-	controllerContainerName                      = "external-secrets"
-	webhookContainerName                         = "webhook"
-	certControllerContainerName                  = "cert-controller"
-	bitwardenContainerName                       = "bitwarden-sdk-server"
-	controllerRoleLeaderElectionAssetName        = "external-secrets/resources/role_external-secrets-leaderelection.yml"
-	controllerRoleBindingLeaderElectionAssetName = "external-secrets/resources/rolebinding_external-secrets-leaderelection.yml"
-	webhookTLSSecretAssetName                    = "external-secrets/resources/secret_external-secrets-webhook.yml"
-	bitwardenServiceAssetName                    = "external-secrets/resources/service_bitwarden-sdk-server.yml"
-	webhookServiceAssetName                      = "external-secrets/resources/service_external-secrets-webhook.yml"
-	metricsServiceAssetName                      = "external-secrets/resources/service_external-secrets-metrics.yml"
-	certControllerMetricsServiceAssetName        = "external-secrets/resources/service_external-secrets-cert-controller-metrics.yml"
-	controllerServiceAccountAssetName            = "external-secrets/resources/serviceaccount_external-secrets.yml"
-	bitwardenServiceAccountAssetName             = "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml"
-	certControllerServiceAccountAssetName        = "external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml"
-	webhookServiceAccountAssetName               = "external-secrets/resources/serviceaccount_external-secrets-webhook.yml"
-	validatingWebhookExternalSecretCRDAssetName  = "external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml"
-	validatingWebhookSecretStoreCRDAssetName     = "external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml"
-	denyAllNetworkPolicyAssetName                = "external-secrets/networkpolicy_deny-all.yaml"
-	allowMainControllerTrafficAssetName          = "external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml"
-	allowWebhookTrafficAssetName                 = "external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml"
-	allowCertControllerTrafficAssetName          = "external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml"
-	allowBitwardenServerTrafficAssetName         = "external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml"
-	allowDnsTrafficAsserName                     = "external-secrets/networkpolicy_allow-dns.yaml"
+	controllerRoleLeaderElectionAssetName         = "external-secrets/resources/role_external-secrets-leaderelection.yml"
+	controllerRoleBindingLeaderElectionAssetName  = "external-secrets/resources/rolebinding_external-secrets-leaderelection.yml"
+	webhookTLSSecretAssetName                     = "external-secrets/resources/secret_external-secrets-webhook.yml"
+	bitwardenServiceAssetName                     = "external-secrets/resources/service_bitwarden-sdk-server.yml"
+	webhookServiceAssetName                       = "external-secrets/resources/service_external-secrets-webhook.yml"
+	metricsServiceAssetName                       = "external-secrets/resources/service_external-secrets-metrics.yml"
+	certControllerMetricsServiceAssetName         = "external-secrets/resources/service_external-secrets-cert-controller-metrics.yml"
+	controllerServiceAccountAssetName             = "external-secrets/resources/serviceaccount_external-secrets.yml"
+	bitwardenServiceAccountAssetName              = "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml"
+	certControllerServiceAccountAssetName         = "external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml"
+	webhookServiceAccountAssetName                = "external-secrets/resources/serviceaccount_external-secrets-webhook.yml"
+	validatingWebhookExternalSecretCRDAssetName   = "external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml"
+	validatingWebhookSecretStoreCRDAssetName      = "external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml"
+	denyAllNetworkPolicyAssetName                 = "external-secrets/networkpolicy_deny-all.yaml"
+	allowMainControllerTrafficAssetName           = "external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml"
+	allowWebhookTrafficAssetName                  = "external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml"
+	allowCertControllerTrafficAssetName           = "external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml"
+	allowBitwardenServerTrafficAssetName          = "external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml"
+	allowDnsTrafficAsserName                      = "external-secrets/networkpolicy_allow-dns.yaml"
 )
 
 var (
