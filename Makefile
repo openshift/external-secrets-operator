@@ -93,7 +93,7 @@ endif
 CONTAINER_TOOL ?= podman
 
 # GO_PACKAGE is the Go module path (used for ldflags to embed version info).
-GO_PACKAGE ?= $(shell go list -m)
+GO_PACKAGE ?= github.com/openshift/external-secrets-operator
 
 # Version information for ldflags injection.
 SOURCE_GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
@@ -178,6 +178,9 @@ manifests: $(CONTROLLER_GEN) ## Generate WebhookConfiguration, ClusterRole and C
 generate: $(CONTROLLER_GEN) ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+# Targets that need Go workspace mode (CI sets GOFLAGS=-mod=vendor which conflicts with go.work)
+fmt vet test test-unit test-e2e run update-vendor update-dep: GOFLAGS=
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	@echo "Running go formatter..."
@@ -188,35 +191,29 @@ vet: ## Run go vet against code.
 	@echo "Running go vet..."
 	@go vet ./...
 
-##@ Testing
-
 .PHONY: test
 test: $(ENVTEST) manifests generate fmt vet test-apis test-unit ## Run all tests.
 
 .PHONY: test-unit
 test-unit: vet ## Run unit tests.
 	@echo "Running go unit tests..."
-	@go test $$(go list ./... | grep -vE 'test/(e2e|apis|utils)') -coverprofile cover.out
+	go test $$(go list ./... | grep -vE 'test/(e2e|apis|utils)') -coverprofile cover.out
 
 # E2E_TIMEOUT is the timeout for e2e tests.
 E2E_TIMEOUT ?= 1h
 # E2E_GINKGO_LABEL_FILTER is ginkgo label query for selecting tests. See
 # https://onsi.github.io/ginkgo/#spec-labels. The default is to run tests on the AWS platform.
 E2E_GINKGO_LABEL_FILTER ?= "Platform: isSubsetOf {AWS}"
-
 .PHONY: test-e2e
 test-e2e: ## Run e2e tests against a cluster.
 	@echo "Running go e2e tests..."
-	@go test -C ./test/e2e \
-	-timeout $(E2E_TIMEOUT) \
-	-count 1 \
-	-v \
-	-p 1 \
-	-tags e2e \
-	. \
-	-ginkgo.v \
-	-ginkgo.show-node-events \
-	-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
+	@go test -C $(PROJECT_ROOT)/test \
+		-timeout $(E2E_TIMEOUT) \
+		-count 1 -v -p 1 \
+		-tags e2e ./e2e \
+		-ginkgo.v \
+		-ginkgo.show-node-events \
+		-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
 
 .PHONY: test-apis
 test-apis: $(ENVTEST) $(GINKGO) ## Run API integration tests.
@@ -451,7 +448,7 @@ catalog-push: ## Push a catalog image.
 ##@ Verification
 
 .PHONY: verify
-verify: vet fmt verify-bindata verify-bindata-assets verify-generated govulncheck check-git-diff ## Verify the changes are working as expected.
+verify: vet fmt verify-deps verify-bindata verify-bindata-assets verify-generated govulncheck check-git-diff ## Verify the changes are working as expected.
 
 .PHONY: check-git-diff
 check-git-diff: update ## Check for any uncommitted changes including untracked files.
@@ -471,6 +468,36 @@ update: generate manifests update-operand-manifests update-bindata bundle docs #
 update-operand-manifests: $(HELM) $(YQ) ## Update external-secrets operand manifests from upstream helm charts.
 	@echo "Updating external-secrets operand manifests..."
 	@hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
+
+.PHONY: update-vendor
+update-vendor: ## Update vendor directory for all modules in the workspace.
+	@echo "Updating vendor directory for all modules..."
+	@go mod tidy -C $(PROJECT_ROOT)/cmd/external-secrets-operator
+	@go mod tidy -C $(PROJECT_ROOT)/test
+	@go mod tidy -C $(PROJECT_ROOT)/tools
+	@go mod tidy
+	@go work sync
+	@go work vendor
+
+PKG ?=
+.PHONY: update-dep
+update-dep: ## Update a dependency across all modules. Usage: make update-dep PKG=k8s.io/api@v0.35.0
+	@if [ -z "$(PKG)" ]; then echo "Usage: make update-dep PKG=package@version"; exit 1; fi
+	@echo "Updating $(PKG) in main module..."
+	@go get $(PKG)
+	@echo "Updating $(PKG) in cmd module..."
+	@-cd cmd/external-secrets-operator && go get $(PKG)
+	@echo "Updating $(PKG) in tools module..."
+	@-cd tools && go get $(PKG)
+	@echo "Updating $(PKG) in test module..."
+	@-cd test && go get $(PKG)
+	@echo "Running update-vendor..."
+	@$(MAKE) update-vendor
+
+.PHONY: verify-deps
+verify-deps: ## Verify go.mod dependencies are consistent.
+	@echo "Verifying go.mod dependencies..."
+	@hack/verify-deps.sh
 
 .PHONY: docs
 docs: $(REFERENCE_DOC_GENERATOR) ## Generate API reference documentation.
