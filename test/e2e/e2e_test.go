@@ -28,13 +28,19 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/test/utils"
 )
 
@@ -43,9 +49,9 @@ var testassets embed.FS
 
 const (
 	// test bindata
-	externalSecretsFile                 = "testdata/external_secret.yaml"
+	externalSecretsFile                  = "testdata/external_secret.yaml"
 	externalSecretsFileWithRevisionLimit = "testdata/external_secret_with_revision_limits.yaml"
-	expectedSecretValueFile             = "testdata/expected_value.yaml"
+	expectedSecretValueFile              = "testdata/expected_value.yaml"
 )
 
 const (
@@ -73,6 +79,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 	var (
 		clientset     *kubernetes.Clientset
 		dynamicClient *dynamic.DynamicClient
+		runtimeClient client.Client
 		loader        utils.DynamicResourceLoader
 		awsSecretName string
 		testNamespace string
@@ -86,6 +93,14 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		Expect(err).Should(BeNil())
 
 		dynamicClient, err = dynamic.NewForConfig(cfg)
+		Expect(err).Should(BeNil())
+
+		// Create scheme and register types
+		scheme := runtime.NewScheme()
+		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+		utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
+
+		runtimeClient, err = client.New(cfg, client.Options{Scheme: scheme})
 		Expect(err).Should(BeNil())
 
 		awsSecretName = fmt.Sprintf("eso-e2e-secret-%s", utils.GetRandomString(5))
@@ -230,6 +245,147 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 				g.Expect(val).To(Equal(expectedSecretValue), "%s does not match expected value", keyNameInSecret)
 			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Environment Variables", func() {
+		// Map component names to deployment names and target container names
+		componentToDeployment := map[string]string{
+			"ExternalSecretsCoreController": "external-secrets",
+			"Webhook":                       "external-secrets-webhook",
+			"CertController":                "external-secrets-cert-controller",
+		}
+		componentToContainer := map[string]string{
+			"ExternalSecretsCoreController": "external-secrets",
+			"Webhook":                       "webhook",
+			"CertController":                "cert-controller",
+		}
+
+		// Define test env vars
+		envConfigs := []operatorv1alpha1.ComponentConfig{
+			{
+				ComponentName: "ExternalSecretsCoreController",
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "LOG_LEVEL", Value: "debug"},
+					{Name: "TEST_CONTROLLER_VAR", Value: "controller-value"},
+				},
+			},
+			{
+				ComponentName: "Webhook",
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "TLS_MIN_VERSION", Value: "1.2"},
+					{Name: "TEST_WEBHOOK_VAR", Value: "webhook-value"},
+				},
+			},
+			{
+				ComponentName: "CertController",
+				OverrideEnv: []corev1.EnvVar{
+					{Name: "TEST_CERT_VAR", Value: "cert-value"},
+					{Name: "FOO", Value: "bar"},
+				},
+			},
+		}
+
+		It("should set custom environment variables for all component deployments", func() {
+			By("Updating ExternalSecretsConfig with custom env vars")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, existingCR); err != nil {
+					return err
+				}
+
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig = operatorv1alpha1.ControllerConfig{
+					ComponentConfigs: envConfigs,
+				}
+
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig with custom env vars")
+
+			By("Waiting for pods to be ready after config update")
+			Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{
+				operandCoreControllerPodPrefix,
+				operandCertControllerPodPrefix,
+				operandWebhookPodPrefix,
+			})).To(Succeed())
+
+			for _, config := range envConfigs {
+				By(fmt.Sprintf("Verifying custom environment variables in %s deployment", config.ComponentName))
+
+				deploymentName := componentToDeployment[string(config.ComponentName)]
+				targetContainerName := componentToContainer[string(config.ComponentName)]
+				Eventually(func(g Gomega) {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, deploymentName, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred(), "should get %s deployment", deploymentName)
+
+					// Verify env vars on the target container specifically
+					for _, container := range deployment.Spec.Template.Spec.Containers {
+						if container.Name != targetContainerName {
+							continue
+						}
+						envMap := make(map[string]string)
+						for _, env := range container.Env {
+							envMap[env.Name] = env.Value
+						}
+						for _, expectedEnv := range config.OverrideEnv {
+							g.Expect(envMap).To(HaveKeyWithValue(expectedEnv.Name, expectedEnv.Value),
+								"container %s in %s should have env var %s=%s", targetContainerName, deploymentName, expectedEnv.Name, expectedEnv.Value)
+						}
+					}
+				}, time.Minute, 5*time.Second).Should(Succeed(), "env vars should be set for %s", config.ComponentName)
+			}
+		})
+
+		It("should remove custom environment variables when config is cleared", func() {
+			By("Removing custom env vars from ExternalSecretsConfig")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, existingCR); err != nil {
+					return err
+				}
+
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig = operatorv1alpha1.ControllerConfig{
+					ComponentConfigs: nil,
+				}
+
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig to remove custom env vars")
+
+			By("Waiting for pods to be ready after config update")
+			Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{
+				operandCoreControllerPodPrefix,
+				operandCertControllerPodPrefix,
+				operandWebhookPodPrefix,
+			})).To(Succeed())
+
+			for _, config := range envConfigs {
+				By(fmt.Sprintf("Verifying custom environment variables removed from %s deployment", config.ComponentName))
+
+				deploymentName := componentToDeployment[string(config.ComponentName)]
+				targetContainerName := componentToContainer[string(config.ComponentName)]
+				Eventually(func(g Gomega) {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, deploymentName, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred(), "should get %s deployment", deploymentName)
+
+					// Verify env vars are removed from the target container
+					for _, container := range deployment.Spec.Template.Spec.Containers {
+						if container.Name != targetContainerName {
+							continue
+						}
+						envNames := make(map[string]bool)
+						for _, env := range container.Env {
+							envNames[env.Name] = true
+						}
+						for _, expectedEnv := range config.OverrideEnv {
+							g.Expect(envNames).NotTo(HaveKey(expectedEnv.Name),
+								"container %s in %s should not have env var %s after removal", targetContainerName, deploymentName, expectedEnv.Name)
+						}
+					}
+				}, time.Minute, 5*time.Second).Should(Succeed(), "env vars should be removed from %s", config.ComponentName)
+			}
 		})
 	})
 

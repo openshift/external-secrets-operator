@@ -75,6 +75,12 @@ const (
 	httpProxyEnvVarLowercase  = "http_proxy"
 	httpsProxyEnvVarLowercase = "https_proxy"
 	noProxyEnvVarLowercase    = "no_proxy"
+
+	// specific containers when applying OverrideEnv configurations.
+	controllerContainerName     = "external-secrets"
+	webhookContainerName        = "webhook"
+	certControllerContainerName = "cert-controller"
+	bitwardenContainerName      = "bitwarden-sdk-server"
 )
 
 var (
