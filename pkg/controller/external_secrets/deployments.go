@@ -82,8 +82,8 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	switch {
 	case exist && common.HasObjectChanged(deployment, fetched, &resourceMetadata):
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
-		common.MergeFetchedAnnotations(deployment, fetched, &resourceMetadata)
-		common.MergeFetchedPodTemplateAnnotations(deployment, fetched, resourceMetadata)
+		common.RemoveObsoleteAnnotations(deployment, resourceMetadata)
+		common.RemoveObsoleteAnnotationsInPodSpec(deployment, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
@@ -105,9 +105,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	updateNamespace(deployment, esc)
 	common.ApplyResourceMetadata(deployment, resourceMetadata)
 	updatePodTemplateLabels(deployment, resourceMetadata.Labels)
-
-	// Apply managed annotations on pod template
-	common.SetPodTemplateManagedAnnotations(deployment, resourceMetadata.Annotations)
+	updatePodTemplateAnnotations(deployment, resourceMetadata.Annotations)
 
 	image := os.Getenv(externalsecretsImageEnvVarName)
 	if image == "" {
@@ -162,9 +160,31 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 
 // updatePodTemplateLabels sets labels on the pod template spec.
 func updatePodTemplateLabels(deployment *appsv1.Deployment, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+
 	l := deployment.Spec.Template.GetLabels()
+	if len(l) == 0 {
+		l = make(map[string]string)
+	}
+
 	maps.Copy(l, labels)
 	deployment.Spec.Template.SetLabels(l)
+}
+
+func updatePodTemplateAnnotations(deployment *appsv1.Deployment, annotations map[string]string) {
+	if len(annotations) == 0 {
+		return
+	}
+
+	l := deployment.Spec.Template.GetAnnotations()
+	if len(l) == 0 {
+		l = make(map[string]string)
+	}
+
+	maps.Copy(l, annotations)
+	deployment.Spec.Template.SetAnnotations(l)
 }
 
 func updateContainerSecurityContext(container *corev1.Container) {

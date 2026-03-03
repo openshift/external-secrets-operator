@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
-	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -70,18 +69,13 @@ type ResourceMetadata struct {
 	Labels      map[string]string
 	Annotations map[string]string
 
-	// CurrentlyManagedAnnotKeys is the sorted list of managed annotation keys
-	// - desired state.
-	CurrentlyManagedAnnotKeys []string
-	// PreviouslyManagedAnnotKeys is the list of previously managed annotation keys
-	// - current state.
-	PreviouslyManagedAnnotKeys []string
+	DeletedAnnotationKeys []string
 }
 
 // ApplyResourceMetadata applies both labels and managed annotations to a resource object.
 func ApplyResourceMetadata(obj client.Object, metadata ResourceMetadata) {
 	UpdateResourceLabels(obj, metadata.Labels)
-	SetManagedAnnotations(obj, metadata.Annotations)
+	UpdateResourceAnnotations(obj, metadata.Annotations)
 }
 
 func UpdateResourceLabels(obj client.Object, labels map[string]string) {
@@ -93,10 +87,10 @@ func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 	obj.SetLabels(l)
 }
 
-// SetManagedAnnotations merges userAnnotations into the object's existing annotations.
+// UpdateResourceAnnotations merges userAnnotations into the object's existing annotations.
 // The tracking of which keys are managed is handled separately on the ExternalSecretsConfig CR
 // via SetManagedAnnotationsTracking.
-func SetManagedAnnotations(obj client.Object, userAnnotations map[string]string) {
+func UpdateResourceAnnotations(obj client.Object, userAnnotations map[string]string) {
 	a := obj.GetAnnotations()
 	if a == nil {
 		a = make(map[string]string)
@@ -107,41 +101,9 @@ func SetManagedAnnotations(obj client.Object, userAnnotations map[string]string)
 	obj.SetAnnotations(a)
 }
 
-// SetManagedAnnotationsTracking encodes the keys of userAnnotations as a base64-encoded JSON array
-// and sets the tracking annotation ManagedAnnotationsKey on the ExternalSecretsConfig CR's metadata.
-func SetManagedAnnotationsTracking(esc *operatorv1alpha1.ExternalSecretsConfig, userAnnotations map[string]string) {
-	a := esc.GetAnnotations()
-	if a == nil {
-		a = make(map[string]string)
-	}
-
-	// Collect and sort keys for deterministic encoding
-	keys := make([]string, 0, len(userAnnotations))
-	for k := range userAnnotations {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Encode keys as JSON array then base64
-	jsonBytes, _ := json.Marshal(keys)
-	a[ManagedAnnotationsKey] = base64.StdEncoding.EncodeToString(jsonBytes)
-
-	esc.SetAnnotations(a)
-}
-
-// SortedAnnotationKeys returns the sorted keys from an annotations map.
-func SortedAnnotationKeys(annotations map[string]string) []string {
-	keys := make([]string, 0, len(annotations))
-	for k := range annotations {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 // GetManagedAnnotationKeys reads the ManagedAnnotationsKey tracking annotation from the
 // ExternalSecretsConfig CR, base64-decodes and JSON-unmarshals it, and returns the list
-// of managed annotation keys. Returns nil if the annotation is missing or cannot be decoded.
+// of managed annotation kGetManagedAnnotationKeyseys. Returns nil if the annotation is missing or cannot be decoded.
 func GetManagedAnnotationKeys(esc *operatorv1alpha1.ExternalSecretsConfig) []string {
 	annotations := esc.GetAnnotations()
 	if annotations == nil {
@@ -160,44 +122,6 @@ func GetManagedAnnotationKeys(esc *operatorv1alpha1.ExternalSecretsConfig) []str
 		return nil
 	}
 	return keys
-}
-
-// mergeNonManagedAnnotations copies annotations from fetchedAnnotations into desiredAnnotations,
-// skipping any keys that are in currentlyManagedKeys or previouslyManagedKeys.
-// Returns the merged annotations map.
-func mergeNonManagedAnnotations(desiredAnnotations, fetchedAnnotations map[string]string, currentlyManagedKeys, previouslyManagedKeys []string) map[string]string {
-	managedSet := make(map[string]bool, len(currentlyManagedKeys)+len(previouslyManagedKeys))
-	for _, k := range currentlyManagedKeys {
-		managedSet[k] = true
-	}
-	for _, k := range previouslyManagedKeys {
-		managedSet[k] = true
-	}
-
-	if len(fetchedAnnotations) == 0 {
-		return desiredAnnotations
-	}
-
-	if desiredAnnotations == nil {
-		desiredAnnotations = make(map[string]string)
-	}
-
-	for k, v := range fetchedAnnotations {
-		if !managedSet[k] {
-			desiredAnnotations[k] = v
-		}
-	}
-	return desiredAnnotations
-}
-
-// MergeFetchedAnnotations copies non-managed annotations from fetched into desired,
-// preserving annotations set by external actors (e.g., cert-manager, CNO).
-// Managed keys are determined from the ResourceMetadata (sourced from the ExternalSecretsConfig CR).
-// Any previously-managed keys that are no longer in the current managed set
-// are intentionally not copied, effectively removing them.
-func MergeFetchedAnnotations(desired, fetched client.Object, metaState *ResourceMetadata) {
-	merged := mergeNonManagedAnnotations(desired.GetAnnotations(), fetched.GetAnnotations(), metaState.CurrentlyManagedAnnotKeys, metaState.PreviouslyManagedAnnotKeys)
-	desired.SetAnnotations(merged)
 }
 
 func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
@@ -386,47 +310,26 @@ func ObjectMetadataModified(desired, fetched client.Object, metaState *ResourceM
 
 	// Compare only managed annotation keys to avoid infinite reconcile loops caused by
 	// annotations managed by external controllers.
-	return managedAnnotationsModified(desired, fetched, metaState.CurrentlyManagedAnnotKeys, metaState.PreviouslyManagedAnnotKeys)
+	return annotationMapsModified(desired.GetAnnotations(), fetched.GetAnnotations(), metaState.DeletedAnnotationKeys)
 }
 
-// managedAnnotationsModified compares only the operator-managed annotation keys between
-// desired and fetched objects. Returns true if any managed annotation differs, or if
-// previously-managed keys (present in fetched but no longer in desired) need removal.
-// managedKeys and prevManagedKeys are sourced from the ExternalSecretsConfig CR's tracking annotation.
 // annotationMapsModified checks whether managed annotation keys differ between two annotation maps.
-// It returns true if any currently-managed key has a different value or presence, or if any
+// It returns true if any desired key is missing or has a different value in fetchedAnnotations, or if any
 // previously-managed key still exists in fetchedAnnotations but is no longer in the current set.
-func annotationMapsModified(desiredAnnotations, fetchedAnnotations map[string]string, currentlyManagedKeys, previouslyManagedKeys []string) bool {
-	if len(currentlyManagedKeys) == 0 && len(previouslyManagedKeys) == 0 {
-		return false
-	}
-
-	compareKeys := make(map[string]bool, len(currentlyManagedKeys))
-	for _, k := range currentlyManagedKeys {
-		compareKeys[k] = true
-	}
-
-	for k := range compareKeys {
-		dv, dok := desiredAnnotations[k]
-		fv, fok := fetchedAnnotations[k]
-		if dok != fok || dv != fv {
+// Extra annotations in fetchedAnnotations that are not in desiredAnnotations (e.g. added by
+// external controllers like deployment.kubernetes.io/revision) are intentionally ignored.
+func annotationMapsModified(desiredAnnotations, fetchedAnnotations map[string]string, deletedAnnotationKeys []string) bool {
+	for k, v := range desiredAnnotations {
+		if fetchedAnnotations[k] != v {
 			return true
 		}
 	}
-
-	for _, k := range previouslyManagedKeys {
-		if !compareKeys[k] {
-			if _, exists := fetchedAnnotations[k]; exists {
-				return true
-			}
+	for _, k := range deletedAnnotationKeys {
+		if _, exists := fetchedAnnotations[k]; exists {
+			return true
 		}
 	}
-
 	return false
-}
-
-func managedAnnotationsModified(desired, fetched client.Object, currentlyManagedKeys, previouslyManagedKeys []string) bool {
-	return annotationMapsModified(desired.GetAnnotations(), fetched.GetAnnotations(), currentlyManagedKeys, previouslyManagedKeys)
 }
 
 func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
@@ -454,7 +357,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 	}
 
 	// Check pod template annotations using managed-keys comparison
-	if podTemplateAnnotationsModified(desired, fetched, metaState.CurrentlyManagedAnnotKeys, metaState.PreviouslyManagedAnnotKeys) {
+	if annotationMapsModified(desired.Spec.Template.Annotations, fetched.Spec.Template.Annotations, metaState.DeletedAnnotationKeys) {
 		return true
 	}
 
@@ -518,32 +421,6 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 	}
 
 	return false
-}
-
-// SetPodTemplateManagedAnnotations sets managed annotations on a deployment's pod template.
-// The tracking of which keys are managed is handled on the ExternalSecretsConfig CR.
-func SetPodTemplateManagedAnnotations(deployment *appsv1.Deployment, userAnnotations map[string]string) {
-	a := deployment.Spec.Template.GetAnnotations()
-	if a == nil {
-		a = make(map[string]string)
-	}
-
-	maps.Copy(a, userAnnotations)
-	deployment.Spec.Template.SetAnnotations(a)
-}
-
-// MergeFetchedPodTemplateAnnotations copies non-managed annotations from the fetched deployment's
-// pod template into the desired deployment's pod template.
-// Managed keys are determined from the ResourceMetadata (sourced from the ExternalSecretsConfig CR).
-func MergeFetchedPodTemplateAnnotations(desired, fetched *appsv1.Deployment, metadata ResourceMetadata) {
-	merged := mergeNonManagedAnnotations(desired.Spec.Template.GetAnnotations(), fetched.Spec.Template.Annotations, metadata.CurrentlyManagedAnnotKeys, metadata.PreviouslyManagedAnnotKeys)
-	desired.Spec.Template.SetAnnotations(merged)
-}
-
-// podTemplateAnnotationsModified compares pod template annotations using the managed-keys approach.
-// managedKeys and prevManagedKeys are sourced from the ExternalSecretsConfig CR's tracking annotation.
-func podTemplateAnnotationsModified(desired, fetched *appsv1.Deployment, managedKeys, prevManagedKeys []string) bool {
-	return annotationMapsModified(desired.Spec.Template.Annotations, fetched.Spec.Template.Annotations, managedKeys, prevManagedKeys)
 }
 
 func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container) bool {
@@ -849,4 +726,28 @@ func (n *Now) Reset() {
 	defer n.Unlock()
 
 	n.done.Store(0)
+}
+
+func RemoveObsoleteAnnotations(obj client.Object, resourceMetadata ResourceMetadata) {
+	if len(resourceMetadata.DeletedAnnotationKeys) == 0 {
+		return
+	}
+	annotations := obj.GetAnnotations()
+	obj.SetAnnotations(removeObsoleteAnnotations(annotations, resourceMetadata.DeletedAnnotationKeys))
+}
+
+func RemoveObsoleteAnnotationsInPodSpec(obj *appsv1.Deployment, resourceMetadata ResourceMetadata) {
+	if len(resourceMetadata.DeletedAnnotationKeys) == 0 {
+		return
+	}
+	obj.Spec.Template = obj.Spec.DeepCopy().Template
+	updatedAnnotations := removeObsoleteAnnotations(obj.Spec.Template.Annotations, resourceMetadata.DeletedAnnotationKeys)
+	obj.Spec.Template.Annotations = updatedAnnotations
+}
+
+func removeObsoleteAnnotations(annotations map[string]string, deletedAnnots []string) map[string]string {
+	for _, k := range deletedAnnots {
+		delete(annotations, k)
+	}
+	return annotations
 }

@@ -34,7 +34,7 @@ func (r *Reconciler) createOrApplySecret(esc *operatorv1alpha1.ExternalSecretsCo
 
 	if exist && common.ObjectMetadataModified(desired, fetched, &resourceMetadata) {
 		r.log.V(1).Info("secret has been modified, updating to desired state", "name", secretName)
-		common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(desired, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 			return common.FromClientError(err, "failed to update %s secret resource", secretName)
 		}

@@ -68,7 +68,7 @@ func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.Externa
 	switch {
 	case exists && common.HasObjectChanged(service, fetched, &resourceMetadata):
 		r.log.V(1).Info("Service modified, updating", "name", serviceName)
-		common.MergeFetchedAnnotations(service, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(service, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, service); err != nil {
 			return common.FromClientError(err, "failed to update service %s", serviceName)
 		}

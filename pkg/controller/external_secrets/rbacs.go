@@ -116,7 +116,7 @@ func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecr
 	}
 	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("clusterrole has been modified, updating to desired state", "name", clusterRoleName)
-		common.MergeFetchedAnnotations(obj, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s clusterrole resource", clusterRoleName)
 		}
@@ -162,7 +162,7 @@ func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.Exter
 	}
 	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("clusterrolebinding has been modified, updating to desired state", "name", clusterRoleBindingName)
-		common.MergeFetchedAnnotations(obj, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s clusterrolebinding resource", clusterRoleBindingName)
 		}
@@ -206,7 +206,7 @@ func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConf
 	}
 	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("role has been modified, updating to desired state", "name", roleName)
-		common.MergeFetchedAnnotations(obj, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s role resource", roleName)
 		}
@@ -249,7 +249,7 @@ func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecr
 	}
 	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("rolebinding has been modified, updating to desired state", "name", roleBindingName)
-		common.MergeFetchedAnnotations(obj, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s rolebinding resource", roleBindingName)
 		}

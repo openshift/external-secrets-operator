@@ -29,7 +29,7 @@ func (r *Reconciler) createOrApplyValidatingWebhookConfiguration(esc *operatorv1
 		}
 		if exist && common.HasObjectChanged(desired, fetched, &resourceMetadata) {
 			r.log.V(1).Info("validatingWebhook has been modified", "updating to desired state", "name", validatingWebhookName)
-			common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
+			common.RemoveObsoleteAnnotations(desired, resourceMetadata)
 			if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 				return common.FromClientError(err, "failed to update %s validatingWebhook resource with desired state", validatingWebhookName)
 			}

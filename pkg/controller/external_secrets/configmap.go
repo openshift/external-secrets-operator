@@ -40,8 +40,8 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 		},
 	}
 
-	// Apply managed annotations from ResourceMetadata
-	common.SetManagedAnnotations(desiredConfigMap, resourceMetadata.Annotations)
+	// Apply managed annotations from ResourceMetadataAnnotations
+	common.ApplyResourceMetadata(desiredConfigMap, resourceMetadata)
 
 	configMapName := fmt.Sprintf("%s/%s", desiredConfigMap.GetNamespace(), desiredConfigMap.GetName())
 	r.log.V(4).Info("reconciling trusted CA bundle ConfigMap resource", "name", configMapName)
@@ -70,7 +70,7 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 		// Preserve data from existing ConfigMap (managed by CNO)
 		desiredConfigMap.Data = existingConfigMap.Data
 		desiredConfigMap.BinaryData = existingConfigMap.BinaryData
-		common.MergeFetchedAnnotations(desiredConfigMap, existingConfigMap, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(desiredConfigMap, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, desiredConfigMap); err != nil {
 			return common.FromClientError(err, "failed to update %s trusted CA bundle ConfigMap resource", configMapName)
 		}

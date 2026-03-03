@@ -115,7 +115,7 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.Exte
 	switch {
 	case exists && common.HasObjectChanged(networkPolicy, fetched, &resourceMetadata):
 		r.log.V(1).Info("NetworkPolicy modified, updating", "name", networkPolicyName)
-		common.MergeFetchedAnnotations(networkPolicy, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(networkPolicy, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, networkPolicy); err != nil {
 			return common.FromClientError(err, "failed to update network policy %s", networkPolicyName)
 		}
@@ -154,7 +154,7 @@ func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.E
 	switch {
 	case exists && common.HasObjectChanged(networkPolicy, fetched, &resourceMetadata):
 		r.log.V(1).Info("NetworkPolicy modified, updating", "name", networkPolicyName)
-		common.MergeFetchedAnnotations(networkPolicy, fetched, &resourceMetadata)
+		common.RemoveObsoleteAnnotations(networkPolicy, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, networkPolicy); err != nil {
 			return common.FromClientError(err, "failed to update network policy %s", networkPolicyName)
 		}
@@ -186,7 +186,6 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      npConfig.Name,
 			Namespace: namespace,
-			Labels:    resourceMetadata.Labels,
 		},
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: podSelector,
@@ -196,7 +195,7 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 			Egress: npConfig.Egress,
 		},
 	}
-
+	common.ApplyResourceMetadata(networkPolicy, resourceMetadata)
 	return networkPolicy, nil
 }
 

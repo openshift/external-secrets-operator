@@ -23,6 +23,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -464,6 +465,24 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				"mycompany.io/owner":            "platform-team",
 			}
 
+			// Capture original annotations so we can restore them and avoid test pollution
+			existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+			Expect(runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, existingCR)).To(Succeed(), "should get ExternalSecretsConfig to capture initial state")
+			originalAnnotations := maps.Clone(existingCR.Spec.ControllerConfig.Annotations)
+
+			defer func() {
+				By("Restoring original annotations on ExternalSecretsConfig CR")
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					currentCR := &operatorv1alpha1.ExternalSecretsConfig{}
+					if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, currentCR); err != nil {
+						return err
+					}
+					currentCR.Spec.ControllerConfig.Annotations = originalAnnotations
+					return runtimeClient.Update(ctx, currentCR)
+				})
+				Expect(err).NotTo(HaveOccurred(), "should restore annotations on ExternalSecretsConfig")
+			}()
+
 			By("Updating ExternalSecretsConfig with custom annotations")
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
@@ -472,26 +491,16 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				}
 
 				updatedCR := existingCR.DeepCopy()
-				updatedCR.Spec.ControllerConfig.Annotations = testAnnotations
+				merged := make(map[string]string)
+				if originalAnnotations != nil {
+					maps.Copy(merged, originalAnnotations)
+				}
+				maps.Copy(merged, testAnnotations)
+				updatedCR.Spec.ControllerConfig.Annotations = merged
 
 				return runtimeClient.Update(ctx, updatedCR)
 			})
 			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig with annotations")
-
-			defer func() {
-				By("Removing test annotations from ExternalSecretsConfig CR")
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					currentCR := &operatorv1alpha1.ExternalSecretsConfig{}
-					if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, currentCR); err != nil {
-						return err
-					}
-					for key := range testAnnotations {
-						delete(currentCR.Spec.ControllerConfig.Annotations, key)
-					}
-					return runtimeClient.Update(ctx, currentCR)
-				})
-				Expect(err).NotTo(HaveOccurred(), "should remove test annotations from ExternalSecretsConfig")
-			}()
 
 			By("Waiting for external-secrets operand pods to be ready")
 			Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operandNamespace, []string{

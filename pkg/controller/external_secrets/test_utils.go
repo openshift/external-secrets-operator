@@ -26,13 +26,11 @@ import (
 // testResourceMetadata returns a ResourceMetadata with the default labels and
 // annotations from the given ExternalSecretsConfig.
 func testResourceMetadata(esc *operatorv1alpha1.ExternalSecretsConfig) common.ResourceMetadata {
-	managedKeys := common.SortedAnnotationKeys(esc.Spec.ControllerConfig.Annotations)
-	prevManagedKeys := common.GetManagedAnnotationKeys(esc)
+
 	return common.ResourceMetadata{
-		Labels:                     controllerDefaultResourceLabels,
-		Annotations:                esc.Spec.ControllerConfig.Annotations,
-		CurrentlyManagedAnnotKeys:  managedKeys,
-		PreviouslyManagedAnnotKeys: prevManagedKeys,
+		Labels:                controllerDefaultResourceLabels,
+		Annotations:           esc.Spec.ControllerConfig.Annotations,
+		DeletedAnnotationKeys: []string{},
 	}
 }
 

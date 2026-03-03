@@ -285,11 +285,13 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if cr, ok := obj.(*rbacv1.ClusterRole); ok {
 						// Verify annotations are applied
-						if cr.Annotations != nil {
-							if cr.Annotations["rbac/managed-by"] != "operator" {
-								t.Errorf("expected annotation 'rbac/managed-by'='operator', got '%s'",
-									cr.Annotations["rbac/managed-by"])
-							}
+						if cr.Annotations == nil {
+							t.Errorf("expected ClusterRole annotations to be set, got nil")
+							return nil
+						}
+						if cr.Annotations["rbac/managed-by"] != "operator" {
+							t.Errorf("expected annotation 'rbac/managed-by'='operator', got '%s'",
+								cr.Annotations["rbac/managed-by"])
 						}
 					}
 					return nil
@@ -311,10 +313,12 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if crb, ok := obj.(*rbacv1.ClusterRoleBinding); ok {
 						// Verify annotations are applied
-						if crb.Annotations != nil {
-							if crb.Annotations["binding/type"] != "cluster" {
-								t.Errorf("expected annotation 'binding/type'='cluster'")
-							}
+						if crb.Annotations == nil {
+							t.Errorf("expected ClusterRoleBinding annotations to be set, got nil")
+							return nil
+						}
+						if crb.Annotations["binding/type"] != "cluster" {
+							t.Errorf("expected annotation 'binding/type'='cluster'")
 						}
 					}
 					return nil
@@ -335,10 +339,12 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if role, ok := obj.(*rbacv1.Role); ok {
 						// Verify annotations are applied
-						if role.Annotations != nil {
-							if role.Annotations["role/purpose"] != "leader-election" {
-								t.Errorf("expected annotation 'role/purpose'='leader-election'")
-							}
+						if role.Annotations == nil {
+							t.Errorf("expected Role annotations to be set, got nil")
+							return nil
+						}
+						if role.Annotations["role/purpose"] != "leader-election" {
+							t.Errorf("expected annotation 'role/purpose'='leader-election'")
 						}
 					}
 					return nil
@@ -359,10 +365,12 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 					if rb, ok := obj.(*rbacv1.RoleBinding); ok {
 						// Verify annotations are applied
-						if rb.Annotations != nil {
-							if rb.Annotations["binding/scope"] != "namespace" {
-								t.Errorf("expected annotation 'binding/scope'='namespace'")
-							}
+						if rb.Annotations == nil {
+							t.Errorf("expected RoleBinding annotations to be set, got nil")
+							return nil
+						}
+						if rb.Annotations["binding/scope"] != "namespace" {
+							t.Errorf("expected annotation 'binding/scope'='namespace'")
 						}
 					}
 					return nil
