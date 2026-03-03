@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"regexp"
 	"time"
 )
 
@@ -35,4 +36,9 @@ const (
 
 var (
 	ExternalSecretsOperatorVersion = os.Getenv("OPERATOR_IMAGE_VERSION")
+
+	// DisallowedLabelMatcher restricts labels that cannot be applied to managed resources.
+	// Matches app.kubernetes.io/, external-secrets.io/, rbac.authorization.k8s.io/,
+	// servicebinding.io/controller, and app labels.
+	DisallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
 )

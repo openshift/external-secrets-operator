@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -20,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/go-logr/logr"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
@@ -89,7 +92,7 @@ func UpdateResourceLabels(obj client.Object, labels map[string]string) {
 
 // UpdateResourceAnnotations merges userAnnotations into the object's existing annotations.
 // The tracking of which keys are managed is handled separately on the ExternalSecretsConfig CR
-// via SetManagedAnnotationsTracking.
+// via UpdateResourceAnnotations.
 func UpdateResourceAnnotations(obj client.Object, userAnnotations map[string]string) {
 	a := obj.GetAnnotations()
 	if a == nil {
@@ -103,7 +106,7 @@ func UpdateResourceAnnotations(obj client.Object, userAnnotations map[string]str
 
 // GetManagedAnnotationKeys reads the ManagedAnnotationsKey tracking annotation from the
 // ExternalSecretsConfig CR, base64-decodes and JSON-unmarshals it, and returns the list
-// of managed annotation kGetManagedAnnotationKeyseys. Returns nil if the annotation is missing or cannot be decoded.
+// of managed annotation. Returns nil if the annotation is missing or cannot be decoded.
 func GetManagedAnnotationKeys(esc *operatorv1alpha1.ExternalSecretsConfig) []string {
 	annotations := esc.GetAnnotations()
 	if annotations == nil {
@@ -750,4 +753,143 @@ func removeObsoleteAnnotations(annotations map[string]string, deletedAnnots []st
 		delete(annotations, k)
 	}
 	return annotations
+}
+
+// GetResourceMetadata builds the labels and annotations to apply to all operand resources,
+// and computes which annotation keys were previously managed but are no longer in spec
+// (DeletedAnnotationKeys) so downstream logic can remove them from resources.
+func GetResourceMetadata(log logr.Logger, esm *operatorv1alpha1.ExternalSecretsManager, esc *operatorv1alpha1.ExternalSecretsConfig, defaultLabels map[string]string) (ResourceMetadata, error) {
+	resourceMetadata := ResourceMetadata{}
+	GetResourceLabels(log, esm, esc, &resourceMetadata, defaultLabels)
+	if err := GetResourceAnnotations(esc, &resourceMetadata); err != nil {
+		return resourceMetadata, err
+	}
+	return resourceMetadata, nil
+}
+
+// GetResourceLabels builds the labels map for all operand resources. Labels defined in
+// ExternalSecretsManager have the lowest priority, followed by ExternalSecretsConfig labels,
+// and defaultLabels have the highest priority. Labels matching DisallowedLabelMatcher are skipped.
+func GetResourceLabels(log logr.Logger, esm *operatorv1alpha1.ExternalSecretsManager, esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata *ResourceMetadata, defaultLabels map[string]string) {
+	resourceMetadata.Labels = make(map[string]string)
+	if !IsESMSpecEmpty(esm) && esm != nil && esm.Spec.GlobalConfig != nil {
+		for k, v := range esm.Spec.GlobalConfig.Labels {
+			if DisallowedLabelMatcher.MatchString(k) {
+				log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
+				continue
+			}
+			resourceMetadata.Labels[k] = v
+		}
+	}
+	if len(esc.Spec.ControllerConfig.Labels) != 0 {
+		for k, v := range esc.Spec.ControllerConfig.Labels {
+			if DisallowedLabelMatcher.MatchString(k) {
+				log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
+				continue
+			}
+			resourceMetadata.Labels[k] = v
+		}
+	}
+	maps.Copy(resourceMetadata.Labels, defaultLabels)
+}
+
+// GetResourceAnnotations copies the current ControllerConfig.Annotations into resourceMetadata
+// and populates DeletedAnnotationKeys with any keys that were previously managed (stored in
+// the CR's ManagedAnnotationsKey annotation) but are no longer in spec, so callers can remove
+// them from child resources.
+func GetResourceAnnotations(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata *ResourceMetadata) error {
+	resourceMetadata.Annotations = make(map[string]string)
+	if esc.Spec.ControllerConfig.Annotations != nil {
+		for k, v := range esc.Spec.ControllerConfig.Annotations {
+			resourceMetadata.Annotations[k] = v
+		}
+	}
+	previousAnnotations, err := GetPreviouslyAppliedAnnotationKeys(esc.GetAnnotations())
+	if err != nil {
+		return err
+	}
+	for _, k := range previousAnnotations {
+		if _, ok := resourceMetadata.Annotations[k]; !ok {
+			resourceMetadata.DeletedAnnotationKeys = append(resourceMetadata.DeletedAnnotationKeys, k)
+		}
+	}
+	return nil
+}
+
+// AddManagedMetadataAnnotation updates the CR's ManagedAnnotationsKey annotation to the
+// current list of ControllerConfig.Annotations keys (base64-encoded JSON). It reads the
+// previously stored keys to detect changes, then writes the new keys and returns whether
+// the CR needs to be updated (so the caller can call UpdateWithRetry at the end of reconcile).
+func AddManagedMetadataAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata ResourceMetadata) (bool, error) {
+	a := esc.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string)
+	}
+
+	userAnnotations := esc.Spec.ControllerConfig.Annotations
+	keys := make([]string, 0, len(userAnnotations))
+	for k := range userAnnotations {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	existingAnnotationKeys, err := GetPreviouslyAppliedAnnotationKeys(a)
+	if err != nil {
+		return false, err
+	}
+
+	a[ManagedAnnotationsKey], err = EncodeDataToB64Json(keys)
+	if err != nil {
+		return false, err
+	}
+	esc.SetAnnotations(a)
+
+	needsUpdate := len(existingAnnotationKeys) != len(userAnnotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0
+	return needsUpdate, nil
+}
+
+// GetPreviouslyAppliedAnnotationKeys returns the list of annotation keys stored in the CR's
+// ManagedAnnotationsKey annotation (base64-encoded JSON) which were applied in previous
+// reconciliation. Returns nil, nil when the annotation is missing or empty.
+func GetPreviouslyAppliedAnnotationKeys(annotations map[string]string) ([]string, error) {
+	if annotations == nil {
+		return nil, nil
+	}
+
+	val, ok := annotations[ManagedAnnotationsKey]
+	if !ok || val == "" {
+		return nil, nil
+	}
+	data, err := DecodeDataFromB64Json([]byte(val))
+	if err != nil {
+		return nil, err
+	}
+	var keys []string
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+// EncodeDataToB64Json marshals the given value to JSON and returns its base64-encoded string.
+// Used for the ManagedAnnotationsKey annotation value (list of managed annotation keys).
+func EncodeDataToB64Json(data any) (string, error) {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(jsonBytes), nil
+}
+
+// DecodeDataFromB64Json decodes base64-encoded data and returns the raw bytes. Used to read the
+// ManagedAnnotationsKey annotation value before JSON-unmarshaling the list of keys.
+// The destination slice must be pre-allocated with at least DecodedLen(len(data)) bytes
+// so base64.Decode can write into it; otherwise Decode writes nothing and returns empty.
+func DecodeDataFromB64Json(data []byte) ([]byte, error) {
+	decodedData := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+	n, err := base64.StdEncoding.Decode(decodedData, data)
+	if err != nil {
+		return nil, err
+	}
+	return decodedData[:n], nil
 }
