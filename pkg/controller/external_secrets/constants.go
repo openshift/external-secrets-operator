@@ -89,7 +89,7 @@ var (
 )
 
 var (
-	// controllerDefaultResourceLabels is default set of labels added to all resources
+	// controllerDefaultResourceLabels is the default set of labels added to all resources
 	// created for external-secrets deployment.
 	controllerDefaultResourceLabels = map[string]string{
 		"app":                          externalsecretsCommonName,

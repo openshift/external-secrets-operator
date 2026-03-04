@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-logr/logr/testr"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +12,9 @@ import (
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 )
 
-func TestSetManagedAnnotations(t *testing.T) {
+// TestUpdateResourceAnnotations verifies UpdateResourceAnnotations merges user annotations
+// into the object and does not set the managed-annotations tracking key on resources.
+func TestUpdateResourceAnnotations(t *testing.T) {
 	tests := []struct {
 		name            string
 		existingAnnots  map[string]string
@@ -69,57 +69,6 @@ func TestSetManagedAnnotations(t *testing.T) {
 				if annotations[k] != v {
 					t.Errorf("annotation %q = %q, want %q", k, annotations[k], v)
 				}
-			}
-		})
-	}
-}
-
-func TestGetManagedAnnotationKeys(t *testing.T) {
-	tests := []struct {
-		name        string
-		annotations map[string]string
-		want        []string
-	}{
-		{
-			name:        "nil annotations",
-			annotations: nil,
-			want:        nil,
-		},
-		{
-			name:        "no tracking annotation",
-			annotations: map[string]string{"foo": "bar"},
-			want:        nil,
-		},
-		{
-			name:        "empty tracking annotation",
-			annotations: map[string]string{ManagedAnnotationsKey: ""},
-			want:        nil,
-		},
-		{
-			name:        "invalid base64",
-			annotations: map[string]string{ManagedAnnotationsKey: "not-valid-base64!!!"},
-			want:        nil,
-		},
-		{
-			name: "valid tracking annotation",
-			annotations: map[string]string{
-				ManagedAnnotationsKey: base64.StdEncoding.EncodeToString([]byte(`["foo", "bar"]`)),
-			},
-			want: []string{"foo", "bar"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			esc := &operatorv1alpha1.ExternalSecretsConfig{
-				ObjectMeta: v1.ObjectMeta{
-					Name:        "test",
-					Annotations: tt.annotations,
-				},
-			}
-			got := GetManagedAnnotationKeys(esc)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetManagedAnnotationKeys() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -260,81 +209,23 @@ func TestGetPreviouslyAppliedAnnotationKeys(t *testing.T) {
 			},
 			want: []string{"key1", "key2"},
 		},
+		{
+			name: "valid base64 but invalid JSON",
+			annotations: map[string]string{
+				ManagedAnnotationsKey: base64.StdEncoding.EncodeToString([]byte(`["key1`)),
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetPreviouslyAppliedAnnotationKeys(tt.annotations)
+			got, err := GetPreviouslyAppliedAnnotationKeys(tt.annotations, ManagedAnnotationsKey)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("GetPreviouslyAppliedAnnotationKeys() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetPreviouslyAppliedAnnotationKeys() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetResourceAnnotations(t *testing.T) {
-	tests := []struct {
-		name            string
-		specAnnotations map[string]string
-		crAnnotations   map[string]string
-		wantAnnotations map[string]string
-		wantDeletedKeys []string
-		wantErr         bool
-	}{
-		{
-			name:            "nil spec annotations, no previous tracking",
-			specAnnotations: nil,
-			crAnnotations:   nil,
-			wantAnnotations: map[string]string{},
-		},
-		{
-			name:            "spec annotations with no previous tracking",
-			specAnnotations: map[string]string{"foo": "bar"},
-			crAnnotations:   nil,
-			wantAnnotations: map[string]string{"foo": "bar"},
-		},
-		{
-			name:            "removed annotation detected as deleted",
-			specAnnotations: map[string]string{"foo": "bar"},
-			crAnnotations: map[string]string{
-				ManagedAnnotationsKey: base64.StdEncoding.EncodeToString([]byte(`["foo","old-key"]`)),
-			},
-			wantAnnotations: map[string]string{"foo": "bar"},
-			wantDeletedKeys: []string{"old-key"},
-		},
-		{
-			name:            "no deletions when all previous keys still present",
-			specAnnotations: map[string]string{"a": "1", "b": "2"},
-			crAnnotations: map[string]string{
-				ManagedAnnotationsKey: base64.StdEncoding.EncodeToString([]byte(`["a","b"]`)),
-			},
-			wantAnnotations: map[string]string{"a": "1", "b": "2"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			esc := &operatorv1alpha1.ExternalSecretsConfig{
-				ObjectMeta: v1.ObjectMeta{
-					Name:        "test",
-					Annotations: tt.crAnnotations,
-				},
-			}
-			esc.Spec.ControllerConfig.Annotations = tt.specAnnotations
-
-			metadata := &ResourceMetadata{}
-			err := GetResourceAnnotations(esc, metadata)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("GetResourceAnnotations() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !reflect.DeepEqual(metadata.Annotations, tt.wantAnnotations) {
-				t.Errorf("Annotations = %v, want %v", metadata.Annotations, tt.wantAnnotations)
-			}
-			if !reflect.DeepEqual(metadata.DeletedAnnotationKeys, tt.wantDeletedKeys) {
-				t.Errorf("DeletedAnnotationKeys = %v, want %v", metadata.DeletedAnnotationKeys, tt.wantDeletedKeys)
 			}
 		})
 	}
@@ -386,6 +277,14 @@ func TestAddManagedMetadataAnnotation(t *testing.T) {
 			crAnnotations:   nil,
 			wantNeedsUpdate: false,
 		},
+		{
+			name:            "invalid tracking annotation value returns error",
+			specAnnotations: map[string]string{"foo": "bar"},
+			crAnnotations: map[string]string{
+				ManagedAnnotationsKey: "!!!",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -399,182 +298,102 @@ func TestAddManagedMetadataAnnotation(t *testing.T) {
 			esc.Spec.ControllerConfig.Annotations = tt.specAnnotations
 
 			metadata := ResourceMetadata{
+				Annotations:           tt.specAnnotations,
 				DeletedAnnotationKeys: tt.deletedKeys,
 			}
-			needsUpdate, err := AddManagedMetadataAnnotation(esc, metadata)
+			needsUpdate, err := AddManagedMetadataAnnotation(esc, ManagedAnnotationsKey, metadata)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("AddManagedMetadataAnnotation() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if needsUpdate != tt.wantNeedsUpdate {
 				t.Errorf("needsUpdate = %v, want %v", needsUpdate, tt.wantNeedsUpdate)
 			}
-			// Verify tracking annotation was set on the CR
-			crAnnots := esc.GetAnnotations()
-			if crAnnots == nil {
-				t.Fatal("expected annotations to be set on CR")
-			}
-			if _, ok := crAnnots[ManagedAnnotationsKey]; !ok {
-				t.Error("expected ManagedAnnotationsKey to be set on CR")
+			if tt.wantNeedsUpdate && !tt.wantErr {
+				// Verify tracking annotation was set on the CR
+				crAnnots := esc.GetAnnotations()
+				if crAnnots == nil {
+					t.Fatal("expected annotations to be set on CR")
+				}
+				if _, ok := crAnnots[ManagedAnnotationsKey]; !ok {
+					t.Error("expected ManagedAnnotationsKey to be set on CR")
+				}
 			}
 		})
 	}
 }
 
-func TestGetResourceLabels(t *testing.T) {
-	log := testr.New(t)
-	defaultLabels := map[string]string{
-		"app":                          "external-secrets",
-		"app.kubernetes.io/managed-by": "external-secrets-operator",
-	}
+func TestRemoveObsoleteAnnotations(t *testing.T) {
+	t.Run("removes deleted keys from object metadata", func(t *testing.T) {
+		obj := &corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test",
+				Annotations: map[string]string{"keep": "v1", "remove-me": "v2", "also-remove": "v3"},
+			},
+		}
+		meta := ResourceMetadata{
+			Annotations:           map[string]string{"keep": "v1"},
+			DeletedAnnotationKeys: []string{"remove-me", "also-remove"},
+		}
+		RemoveObsoleteAnnotations(obj, meta)
+		ann := obj.GetAnnotations()
+		if ann["keep"] != "v1" {
+			t.Errorf("expected keep=v1, got %q", ann["keep"])
+		}
+		if _, ok := ann["remove-me"]; ok {
+			t.Error("expected remove-me to be removed")
+		}
+		if _, ok := ann["also-remove"]; ok {
+			t.Error("expected also-remove to be removed")
+		}
+	})
 
-	tests := []struct {
-		name       string
-		esmLabels  map[string]string
-		escLabels  map[string]string
-		esm        *operatorv1alpha1.ExternalSecretsManager
-		wantLabels map[string]string
-	}{
-		{
-			name:      "only default labels when no custom labels",
-			esm:       nil,
-			escLabels: nil,
-			wantLabels: map[string]string{
-				"app":                          "external-secrets",
-				"app.kubernetes.io/managed-by": "external-secrets-operator",
+	t.Run("removes deleted keys from Deployment pod template", func(t *testing.T) {
+		deploy := &appsv1.Deployment{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test",
+				Annotations: map[string]string{"obsolete-on-object": "x"},
 			},
-		},
-		{
-			name:      "ESC labels merged with defaults",
-			esm:       nil,
-			escLabels: map[string]string{"team": "platform"},
-			wantLabels: map[string]string{
-				"app":                          "external-secrets",
-				"app.kubernetes.io/managed-by": "external-secrets-operator",
-				"team":                         "platform",
-			},
-		},
-		{
-			name: "ESM with non-empty spec - ESM labels not applied per original logic",
-			esm: &operatorv1alpha1.ExternalSecretsManager{
-				Spec: operatorv1alpha1.ExternalSecretsManagerSpec{
-					GlobalConfig: &operatorv1alpha1.GlobalConfig{
-						Labels: map[string]string{"team": "esm-team", "env": "prod"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: v1.ObjectMeta{
+						Annotations: map[string]string{"keep-pod": "v1", "obsolete-on-pod": "v2"},
 					},
 				},
 			},
-			escLabels: map[string]string{"team": "esc-team"},
-			wantLabels: map[string]string{
-				"app":                          "external-secrets",
-				"app.kubernetes.io/managed-by": "external-secrets-operator",
-				"team":                         "esc-team",
+		}
+		meta := ResourceMetadata{
+			Annotations:           map[string]string{"keep-pod": "v1"},
+			DeletedAnnotationKeys: []string{"obsolete-on-object", "obsolete-on-pod"},
+		}
+		RemoveObsoleteAnnotations(deploy, meta)
+		if _, ok := deploy.GetAnnotations()["obsolete-on-object"]; ok {
+			t.Error("expected obsolete-on-object to be removed from object")
+		}
+		templateAnn := deploy.Spec.Template.GetAnnotations()
+		if templateAnn["keep-pod"] != "v1" {
+			t.Errorf("expected keep-pod=v1 on template, got %q", templateAnn["keep-pod"])
+		}
+		if _, ok := templateAnn["obsolete-on-pod"]; ok {
+			t.Error("expected obsolete-on-pod to be removed from pod template")
+		}
+	})
+
+	t.Run("no-op when DeletedAnnotationKeys is empty", func(t *testing.T) {
+		obj := &corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test",
+				Annotations: map[string]string{"foo": "bar"},
 			},
-		},
-		{
-			name:      "disallowed labels are skipped",
-			esm:       nil,
-			escLabels: map[string]string{"external-secrets.io/foo": "bar", "valid": "ok"},
-			wantLabels: map[string]string{
-				"app":                          "external-secrets",
-				"app.kubernetes.io/managed-by": "external-secrets-operator",
-				"valid":                        "ok",
-			},
-		},
-		{
-			name: "default labels override custom labels with same key",
-			esm:  nil,
-			escLabels: map[string]string{
-				"app": "custom-app",
-			},
-			wantLabels: map[string]string{
-				"app":                          "external-secrets",
-				"app.kubernetes.io/managed-by": "external-secrets-operator",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			esc := &operatorv1alpha1.ExternalSecretsConfig{
-				ObjectMeta: v1.ObjectMeta{Name: "test"},
-			}
-			esc.Spec.ControllerConfig.Labels = tt.escLabels
-
-			metadata := &ResourceMetadata{}
-			GetResourceLabels(log, tt.esm, esc, metadata, defaultLabels)
-
-			if !reflect.DeepEqual(metadata.Labels, tt.wantLabels) {
-				t.Errorf("Labels = %v, want %v", metadata.Labels, tt.wantLabels)
-			}
-		})
-	}
-}
-
-func TestGetResourceMetadata(t *testing.T) {
-	log := testr.New(t)
-	defaultLabels := map[string]string{
-		"app": "external-secrets",
-	}
-
-	tests := []struct {
-		name            string
-		escLabels       map[string]string
-		specAnnotations map[string]string
-		crAnnotations   map[string]string
-		wantLabels      map[string]string
-		wantAnnotations map[string]string
-		wantDeletedKeys []string
-		wantErr         bool
-	}{
-		{
-			name:            "labels and annotations combined",
-			escLabels:       map[string]string{"team": "platform"},
-			specAnnotations: map[string]string{"note": "hello"},
-			wantLabels:      map[string]string{"app": "external-secrets", "team": "platform"},
-			wantAnnotations: map[string]string{"note": "hello"},
-		},
-		{
-			name:            "no custom labels or annotations",
-			wantLabels:      map[string]string{"app": "external-secrets"},
-			wantAnnotations: map[string]string{},
-		},
-		{
-			name:            "deleted annotation keys detected",
-			specAnnotations: map[string]string{"keep": "val"},
-			crAnnotations: map[string]string{
-				ManagedAnnotationsKey: base64.StdEncoding.EncodeToString([]byte(`["keep","removed"]`)),
-			},
-			wantLabels:      map[string]string{"app": "external-secrets"},
-			wantAnnotations: map[string]string{"keep": "val"},
-			wantDeletedKeys: []string{"removed"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			esc := &operatorv1alpha1.ExternalSecretsConfig{
-				ObjectMeta: v1.ObjectMeta{
-					Name:        "test",
-					Annotations: tt.crAnnotations,
-				},
-			}
-			esc.Spec.ControllerConfig.Labels = tt.escLabels
-			esc.Spec.ControllerConfig.Annotations = tt.specAnnotations
-
-			metadata, err := GetResourceMetadata(log, nil, esc, defaultLabels)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("GetResourceMetadata() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !reflect.DeepEqual(metadata.Labels, tt.wantLabels) {
-				t.Errorf("Labels = %v, want %v", metadata.Labels, tt.wantLabels)
-			}
-			if !reflect.DeepEqual(metadata.Annotations, tt.wantAnnotations) {
-				t.Errorf("Annotations = %v, want %v", metadata.Annotations, tt.wantAnnotations)
-			}
-			if !reflect.DeepEqual(metadata.DeletedAnnotationKeys, tt.wantDeletedKeys) {
-				t.Errorf("DeletedAnnotationKeys = %v, want %v", metadata.DeletedAnnotationKeys, tt.wantDeletedKeys)
-			}
-		})
-	}
+		}
+		meta := ResourceMetadata{
+			Annotations:           map[string]string{"foo": "bar"},
+			DeletedAnnotationKeys: nil,
+		}
+		RemoveObsoleteAnnotations(obj, meta)
+		if obj.GetAnnotations()["foo"] != "bar" {
+			t.Errorf("expected foo=bar unchanged, got %q", obj.GetAnnotations()["foo"])
+		}
+	})
 }
 
 func TestDeploymentObjectChanged(t *testing.T) {

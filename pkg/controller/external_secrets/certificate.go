@@ -63,7 +63,6 @@ func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecr
 	if exist && common.HasObjectChanged(desired, fetched, &resourceMetadata) {
 		r.log.V(1).Info("certificate has been modified, updating to desired state", "name", certificateName)
 		common.RemoveObsoleteAnnotations(desired, resourceMetadata)
-		//common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 			return common.FromClientError(err, "failed to update %s certificate resource", certificateName)
 		}
