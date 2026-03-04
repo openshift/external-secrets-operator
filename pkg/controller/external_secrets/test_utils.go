@@ -17,10 +17,22 @@ import (
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
+	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
+
+// testResourceMetadata returns a ResourceMetadata with the default labels and
+// annotations from the given ExternalSecretsConfig.
+func testResourceMetadata(esc *operatorv1alpha1.ExternalSecretsConfig) common.ResourceMetadata {
+
+	return common.ResourceMetadata{
+		Labels:                controllerDefaultResourceLabels,
+		Annotations:           esc.Spec.ControllerConfig.Annotations,
+		DeletedAnnotationKeys: []string{},
+	}
+}
 
 // testReconciler returns a sample Reconciler instance.
 func testReconciler(t *testing.T) *Reconciler {

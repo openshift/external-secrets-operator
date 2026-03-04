@@ -12,7 +12,7 @@ import (
 )
 
 // createOrApplyServices handles conditional and default creation of Services.
-func (r *Reconciler) createOrApplyServices(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServices(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	servicesToCreate := []struct {
 		assetName string
 		condition bool
@@ -39,7 +39,7 @@ func (r *Reconciler) createOrApplyServices(esc *operatorv1alpha1.ExternalSecrets
 		if !service.condition {
 			continue
 		}
-		if err := r.createOrApplyServiceFromAsset(esc, service.assetName, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+		if err := r.createOrApplyServiceFromAsset(esc, service.assetName, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -48,10 +48,10 @@ func (r *Reconciler) createOrApplyServices(esc *operatorv1alpha1.ExternalSecrets
 }
 
 // createOrApplyServiceFromAsset decodes a Service YAML asset and ensures it exists in the cluster.
-func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	service := common.DecodeServiceObjBytes(assets.MustAsset(assetName))
 	updateNamespace(service, esc)
-	common.UpdateResourceLabels(service, resourceLabels)
+	common.ApplyResourceMetadata(service, resourceMetadata)
 
 	serviceName := fmt.Sprintf("%s/%s", service.GetNamespace(), service.GetName())
 	r.log.V(4).Info("Reconciling service", "name", serviceName)
@@ -66,8 +66,9 @@ func (r *Reconciler) createOrApplyServiceFromAsset(esc *operatorv1alpha1.Externa
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s already exists", serviceName)
 	}
 	switch {
-	case exists && common.HasObjectChanged(service, fetched):
+	case exists && common.HasObjectChanged(service, fetched, &resourceMetadata):
 		r.log.V(1).Info("Service modified, updating", "name", serviceName)
+		common.RemoveObsoleteAnnotations(service, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, service); err != nil {
 			return common.FromClientError(err, "failed to update service %s", serviceName)
 		}

@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"regexp"
 	"time"
 )
 
@@ -27,8 +28,17 @@ const (
 
 	// ExternalSecretsOperatorCommonName is the name commonly used for labelling resources.
 	ExternalSecretsOperatorCommonName = "external-secrets-operator"
+
+	// ManagedAnnotationsKey is the annotation key used to track which annotation keys
+	// are managed by the operator. The value is a base64-encoded JSON array of annotation keys.
+	ManagedAnnotationsKey = "externalsecretsconfig.operator.openshift.io/managed-annotations"
 )
 
 var (
 	ExternalSecretsOperatorVersion = os.Getenv("OPERATOR_IMAGE_VERSION")
+
+	// DisallowedLabelMatcher restricts labels that cannot be applied to managed resources.
+	// Matches app.kubernetes.io/, external-secrets.io/, rbac.authorization.k8s.io/,
+	// servicebinding.io/controller, and app labels.
+	DisallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
 )

@@ -20,15 +20,15 @@ const (
 
 // createOrApplyRBACResource is for creating all the RBAC specific resources
 // required for installing external-secrets operand.
-func (r *Reconciler) createOrApplyRBACResource(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyRBACResource(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, recon bool) error {
 	serviceAccountName := common.DecodeServiceAccountObjBytes(assets.MustAsset(controllerServiceAccountAssetName)).GetName()
 
-	if err := r.createOrApplyControllerRBACResources(esc, serviceAccountName, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyControllerRBACResources(esc, serviceAccountName, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile controller rbac resources")
 		return err
 	}
 
-	if err := r.createOrApplyCertControllerRBACResources(esc, serviceAccountName, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyCertControllerRBACResources(esc, serviceAccountName, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile cert-controller rbac resources")
 		return err
 	}
@@ -38,35 +38,35 @@ func (r *Reconciler) createOrApplyRBACResource(esc *operatorv1alpha1.ExternalSec
 
 // createOrApplyControllerRBACResources is for creating all RBAC resources required by
 // the main external-secrets operand controller.
-func (r *Reconciler) createOrApplyControllerRBACResources(esc *operatorv1alpha1.ExternalSecretsConfig, serviceAccountName string, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyControllerRBACResources(esc *operatorv1alpha1.ExternalSecretsConfig, serviceAccountName string, resourceMetadata common.ResourceMetadata, recon bool) error {
 	for _, asset := range []string{
 		controllerClusterRoleAssetName,
 		controllerClusterRoleEditAssetName,
 		controllerClusterRoleServiceBindingsAssetName,
 		controllerClusterRoleViewAssetName,
 	} {
-		clusterRoleObj := r.getClusterRoleObject(asset, resourceLabels)
-		if err := r.createOrApplyClusterRole(esc, clusterRoleObj, recon); err != nil {
+		clusterRoleObj := r.getClusterRoleObject(esc, asset, resourceMetadata)
+		if err := r.createOrApplyClusterRole(esc, clusterRoleObj, resourceMetadata, recon); err != nil {
 			r.log.Error(err, "failed to reconcile controller clusterrole resources")
 			return err
 		}
 	}
 
 	clusterRoleName := common.DecodeClusterRoleObjBytes(assets.MustAsset(controllerClusterRoleAssetName)).GetName()
-	clusterRoleBindingObj := r.getClusterRoleBindingObject(esc, controllerClusterRoleBindingAssetName, clusterRoleName, serviceAccountName, resourceLabels)
-	if err := r.createOrApplyClusterRoleBinding(esc, clusterRoleBindingObj, recon); err != nil {
+	clusterRoleBindingObj := r.getClusterRoleBindingObject(esc, controllerClusterRoleBindingAssetName, clusterRoleName, serviceAccountName, resourceMetadata)
+	if err := r.createOrApplyClusterRoleBinding(esc, clusterRoleBindingObj, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile controller clusterrolebinding resources")
 		return err
 	}
 
-	roleObj := r.getRoleObject(esc, controllerRoleLeaderElectionAssetName, resourceLabels)
-	if err := r.createOrApplyRole(esc, roleObj, recon); err != nil {
+	roleObj := r.getRoleObject(esc, controllerRoleLeaderElectionAssetName, resourceMetadata)
+	if err := r.createOrApplyRole(esc, roleObj, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile controller role resources")
 		return err
 	}
 
-	roleBindingObj := r.getRoleBindingObject(esc, controllerRoleBindingLeaderElectionAssetName, roleObj.GetName(), serviceAccountName, resourceLabels)
-	if err := r.createOrApplyRoleBinding(esc, roleBindingObj, recon); err != nil {
+	roleBindingObj := r.getRoleBindingObject(esc, controllerRoleBindingLeaderElectionAssetName, roleObj.GetName(), serviceAccountName, resourceMetadata)
+	if err := r.createOrApplyRoleBinding(esc, roleBindingObj, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile controller rolebinding resources")
 		return err
 	}
@@ -76,20 +76,20 @@ func (r *Reconciler) createOrApplyControllerRBACResources(esc *operatorv1alpha1.
 
 // createOrApplyCertControllerRBACResources is for creating all RBAC resources required by
 // the main external-secrets operand cert-controller.
-func (r *Reconciler) createOrApplyCertControllerRBACResources(esc *operatorv1alpha1.ExternalSecretsConfig, serviceAccountName string, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyCertControllerRBACResources(esc *operatorv1alpha1.ExternalSecretsConfig, serviceAccountName string, resourceMetadata common.ResourceMetadata, recon bool) error {
 	if isCertManagerConfigEnabled(esc) {
 		r.log.V(4).Info("skipping cert-controller rbac resources reconciliation, as cert-manager config is enabled")
 		return nil
 	}
 
-	clusterRoleObj := r.getClusterRoleObject(certControllerClusterRoleAssetName, resourceLabels)
-	if err := r.createOrApplyClusterRole(esc, clusterRoleObj, recon); err != nil {
+	clusterRoleObj := r.getClusterRoleObject(esc, certControllerClusterRoleAssetName, resourceMetadata)
+	if err := r.createOrApplyClusterRole(esc, clusterRoleObj, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile cert-controller clusterrole resources")
 		return err
 	}
 
-	clusterRoleBindingObj := r.getClusterRoleBindingObject(esc, certControllerClusterRoleBindingAssetName, clusterRoleObj.GetName(), serviceAccountName, resourceLabels)
-	if err := r.createOrApplyClusterRoleBinding(esc, clusterRoleBindingObj, recon); err != nil {
+	clusterRoleBindingObj := r.getClusterRoleBindingObject(esc, certControllerClusterRoleBindingAssetName, clusterRoleObj.GetName(), serviceAccountName, resourceMetadata)
+	if err := r.createOrApplyClusterRoleBinding(esc, clusterRoleBindingObj, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile cert-controller clusterrolebinding resources")
 		return err
 	}
@@ -98,7 +98,7 @@ func (r *Reconciler) createOrApplyCertControllerRBACResources(esc *operatorv1alp
 }
 
 // createOrApplyClusterRole creates or updates given ClusterRole object.
-func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.ClusterRole, recon bool) error {
+func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.ClusterRole, resourceMetadata common.ResourceMetadata, recon bool) error {
 	var (
 		exist           bool
 		err             error
@@ -114,8 +114,9 @@ func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecr
 	if exist && recon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s clusterrole resource already exists, maybe from previous installation", clusterRoleName)
 	}
-	if exist && common.HasObjectChanged(obj, fetched) {
+	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("clusterrole has been modified, updating to desired state", "name", clusterRoleName)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s clusterrole resource", clusterRoleName)
 		}
@@ -135,14 +136,15 @@ func (r *Reconciler) createOrApplyClusterRole(esc *operatorv1alpha1.ExternalSecr
 
 // getClusterRoleObject is for obtaining the content of given ClusterRole static asset, and
 // then updating it with desired values.
-func (r *Reconciler) getClusterRoleObject(assetName string, resourceLabels map[string]string) *rbacv1.ClusterRole {
+func (r *Reconciler) getClusterRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceMetadata common.ResourceMetadata) *rbacv1.ClusterRole {
 	clusterRole := common.DecodeClusterRoleObjBytes(assets.MustAsset(assetName))
-	common.UpdateResourceLabels(clusterRole, resourceLabels)
+	common.ApplyResourceMetadata(clusterRole, resourceMetadata)
+
 	return clusterRole
 }
 
 // createOrApplyClusterRoleBinding creates or updates given ClusterRoleBinding object.
-func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.ClusterRoleBinding, recon bool) error {
+func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.ClusterRoleBinding, resourceMetadata common.ResourceMetadata, recon bool) error {
 	var (
 		exist                  bool
 		err                    error
@@ -158,8 +160,9 @@ func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.Exter
 	if exist && recon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s clusterrolebinding resource already exists, maybe from previous installation", clusterRoleBindingName)
 	}
-	if exist && common.HasObjectChanged(obj, fetched) {
+	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("clusterrolebinding has been modified, updating to desired state", "name", clusterRoleBindingName)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s clusterrolebinding resource", clusterRoleBindingName)
 		}
@@ -179,16 +182,17 @@ func (r *Reconciler) createOrApplyClusterRoleBinding(esc *operatorv1alpha1.Exter
 
 // getClusterRoleBindingObject is for obtaining the content of given ClusterRoleBinding static asset, and
 // then updating it with desired values.
-func (r *Reconciler) getClusterRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName, clusterRoleName, serviceAccountName string, resourceLabels map[string]string) *rbacv1.ClusterRoleBinding {
+func (r *Reconciler) getClusterRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName, clusterRoleName, serviceAccountName string, resourceMetadata common.ResourceMetadata) *rbacv1.ClusterRoleBinding {
 	clusterRoleBinding := common.DecodeClusterRoleBindingObjBytes(assets.MustAsset(assetName))
 	clusterRoleBinding.RoleRef.Name = clusterRoleName
-	common.UpdateResourceLabels(clusterRoleBinding, resourceLabels)
+	common.ApplyResourceMetadata(clusterRoleBinding, resourceMetadata)
+
 	updateServiceAccountNamespaceInRBACBindingObject[*rbacv1.ClusterRoleBinding](clusterRoleBinding, serviceAccountName, getNamespace(esc))
 	return clusterRoleBinding
 }
 
 // createOrApplyRole creates or updates given Role object.
-func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.Role, recon bool) error {
+func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.Role, resourceMetadata common.ResourceMetadata, recon bool) error {
 	roleName := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 	r.log.V(4).Info("reconciling role resource", "name", roleName)
 	fetched := &rbacv1.Role{}
@@ -200,8 +204,9 @@ func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConf
 	if exist && recon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s role resource already exists, maybe from previous installation", roleName)
 	}
-	if exist && common.HasObjectChanged(obj, fetched) {
+	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("role has been modified, updating to desired state", "name", roleName)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s role resource", roleName)
 		}
@@ -221,15 +226,16 @@ func (r *Reconciler) createOrApplyRole(esc *operatorv1alpha1.ExternalSecretsConf
 
 // getRoleObject is for obtaining the content of given Role static asset, and
 // then updating it with desired values.
-func (r *Reconciler) getRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string) *rbacv1.Role {
+func (r *Reconciler) getRoleObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceMetadata common.ResourceMetadata) *rbacv1.Role {
 	role := common.DecodeRoleObjBytes(assets.MustAsset(assetName))
 	updateNamespace(role, esc)
-	common.UpdateResourceLabels(role, resourceLabels)
+	common.ApplyResourceMetadata(role, resourceMetadata)
+
 	return role
 }
 
 // createOrApplyRoleBinding creates or updates given RoleBinding object.
-func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.RoleBinding, recon bool) error {
+func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecretsConfig, obj *rbacv1.RoleBinding, resourceMetadata common.ResourceMetadata, recon bool) error {
 	roleBindingName := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 	r.log.V(4).Info("reconciling rolebinding resource", "name", roleBindingName)
 	fetched := &rbacv1.RoleBinding{}
@@ -241,8 +247,9 @@ func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecr
 	if exist && recon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s rolebinding resource already exists, maybe from previous installation", roleBindingName)
 	}
-	if exist && common.HasObjectChanged(obj, fetched) {
+	if exist && common.HasObjectChanged(obj, fetched, &resourceMetadata) {
 		r.log.V(1).Info("rolebinding has been modified, updating to desired state", "name", roleBindingName)
+		common.RemoveObsoleteAnnotations(obj, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, obj); err != nil {
 			return common.FromClientError(err, "failed to update %s rolebinding resource", roleBindingName)
 		}
@@ -262,11 +269,12 @@ func (r *Reconciler) createOrApplyRoleBinding(esc *operatorv1alpha1.ExternalSecr
 
 // getRoleBindingObject is for obtaining the content of given RoleBinding static asset, and
 // then updating it with desired values.
-func (r *Reconciler) getRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName, roleName, serviceAccountName string, resourceLabels map[string]string) *rbacv1.RoleBinding {
+func (r *Reconciler) getRoleBindingObject(esc *operatorv1alpha1.ExternalSecretsConfig, assetName, roleName, serviceAccountName string, resourceMetadata common.ResourceMetadata) *rbacv1.RoleBinding {
 	roleBinding := common.DecodeRoleBindingObjBytes(assets.MustAsset(assetName))
 	roleBinding.RoleRef.Name = roleName
 	updateNamespace(roleBinding, esc)
-	common.UpdateResourceLabels(roleBinding, resourceLabels)
+	common.ApplyResourceMetadata(roleBinding, resourceMetadata)
+
 	updateServiceAccountNamespaceInRBACBindingObject[*rbacv1.RoleBinding](roleBinding, serviceAccountName, roleBinding.GetNamespace())
 	return roleBinding
 }

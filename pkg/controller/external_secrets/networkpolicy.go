@@ -15,14 +15,14 @@ import (
 
 // createOrApplyNetworkPolicies handles creation of both static network policies from manifests
 // and custom network policies configured in the ExternalSecretsConfig API.
-func (r *Reconciler) createOrApplyNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	// First, apply the static deny-all network policy
-	if err := r.createOrApplyStaticNetworkPolicies(esc, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+	if err := r.createOrApplyStaticNetworkPolicies(esc, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 		return err
 	}
 
 	// Then, apply custom network policies from the API spec
-	if err := r.createOrApplyCustomNetworkPolicies(esc, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+	if err := r.createOrApplyCustomNetworkPolicies(esc, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 		return err
 	}
 
@@ -30,7 +30,7 @@ func (r *Reconciler) createOrApplyNetworkPolicies(esc *operatorv1alpha1.External
 }
 
 // createOrApplyStaticNetworkPolicies applies the static network policy manifests from bindata.
-func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	// Define static network policy assets to apply
 	staticNetworkPolicies := []struct {
 		assetName string
@@ -67,7 +67,7 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 		if !np.condition {
 			continue
 		}
-		if err := r.createOrApplyNetworkPolicyFromAsset(esc, np.assetName, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+		if err := r.createOrApplyNetworkPolicyFromAsset(esc, np.assetName, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -76,14 +76,14 @@ func (r *Reconciler) createOrApplyStaticNetworkPolicies(esc *operatorv1alpha1.Ex
 }
 
 // createOrApplyCustomNetworkPolicies applies custom network policies defined in the ExternalSecretsConfig spec.
-func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	if esc.Spec.ControllerConfig.NetworkPolicies == nil {
 		r.log.V(4).Info("No custom network policies configured in ControllerConfig")
 		return nil
 	}
 
 	for _, npConfig := range esc.Spec.ControllerConfig.NetworkPolicies {
-		if err := r.createOrApplyCustomNetworkPolicy(esc, npConfig, resourceLabels, externalSecretsConfigCreateRecon); err != nil {
+		if err := r.createOrApplyCustomNetworkPolicy(esc, npConfig, resourceMetadata, externalSecretsConfigCreateRecon); err != nil {
 			return err
 		}
 	}
@@ -92,9 +92,9 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicies(esc *operatorv1alpha1.Ex
 }
 
 // createOrApplyCustomNetworkPolicy creates or updates a custom network policy based on API configuration.
-func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	// Build the NetworkPolicy object from the API spec
-	networkPolicy, err := r.buildNetworkPolicyFromConfig(esc, npConfig, resourceLabels)
+	networkPolicy, err := r.buildNetworkPolicyFromConfig(esc, npConfig, resourceMetadata)
 	if err != nil {
 		return err
 	}
@@ -113,8 +113,9 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.Exte
 	}
 
 	switch {
-	case exists && common.HasObjectChanged(networkPolicy, fetched):
+	case exists && common.HasObjectChanged(networkPolicy, fetched, &resourceMetadata):
 		r.log.V(1).Info("NetworkPolicy modified, updating", "name", networkPolicyName)
+		common.RemoveObsoleteAnnotations(networkPolicy, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, networkPolicy); err != nil {
 			return common.FromClientError(err, "failed to update network policy %s", networkPolicyName)
 		}
@@ -132,10 +133,10 @@ func (r *Reconciler) createOrApplyCustomNetworkPolicy(esc *operatorv1alpha1.Exte
 }
 
 // createOrApplyNetworkPolicyFromAsset decodes a NetworkPolicy YAML asset and ensures it exists in the cluster.
-func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceLabels map[string]string, externalSecretsConfigCreateRecon bool) error {
+func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.ExternalSecretsConfig, assetName string, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
 	networkPolicy := common.DecodeNetworkPolicyObjBytes(assets.MustAsset(assetName))
 	updateNamespace(networkPolicy, esc)
-	common.UpdateResourceLabels(networkPolicy, resourceLabels)
+	common.ApplyResourceMetadata(networkPolicy, resourceMetadata)
 
 	networkPolicyName := fmt.Sprintf("%s/%s", networkPolicy.GetNamespace(), networkPolicy.GetName())
 	r.log.V(4).Info("Reconciling static network policy", "name", networkPolicyName)
@@ -151,8 +152,9 @@ func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.E
 	}
 
 	switch {
-	case exists && common.HasObjectChanged(networkPolicy, fetched):
+	case exists && common.HasObjectChanged(networkPolicy, fetched, &resourceMetadata):
 		r.log.V(1).Info("NetworkPolicy modified, updating", "name", networkPolicyName)
+		common.RemoveObsoleteAnnotations(networkPolicy, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, networkPolicy); err != nil {
 			return common.FromClientError(err, "failed to update network policy %s", networkPolicyName)
 		}
@@ -170,7 +172,7 @@ func (r *Reconciler) createOrApplyNetworkPolicyFromAsset(esc *operatorv1alpha1.E
 }
 
 // buildNetworkPolicyFromConfig constructs a NetworkPolicy object from the API configuration.
-func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceLabels map[string]string) (*networkingv1.NetworkPolicy, error) {
+func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.ExternalSecretsConfig, npConfig operatorv1alpha1.NetworkPolicy, resourceMetadata common.ResourceMetadata) (*networkingv1.NetworkPolicy, error) {
 	namespace := getNamespace(esc)
 
 	// Determine pod selector based on component name
@@ -184,7 +186,6 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      npConfig.Name,
 			Namespace: namespace,
-			Labels:    resourceLabels,
 		},
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: podSelector,
@@ -194,7 +195,7 @@ func (r *Reconciler) buildNetworkPolicyFromConfig(esc *operatorv1alpha1.External
 			Egress: npConfig.Egress,
 		},
 	}
-
+	common.ApplyResourceMetadata(networkPolicy, resourceMetadata)
 	return networkPolicy, nil
 }
 

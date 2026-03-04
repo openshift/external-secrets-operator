@@ -10,21 +10,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
 func TestCreateOrApplyNamespace(t *testing.T) {
 	tests := []struct {
-		name           string
-		resourceLabels map[string]string
-		preReq         func(*Reconciler, *fakes.FakeCtrlClient)
-		wantErr        string
-		wantCreate     bool
-		wantUpdate     bool
+		name             string
+		resourceMetadata common.ResourceMetadata
+		preReq           func(*Reconciler, *fakes.FakeCtrlClient)
+		wantErr          string
+		wantCreate       bool
+		wantUpdate       bool
 	}{
 		{
-			name:           "namespace created successfully when it does not exist",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "namespace created successfully when it does not exist",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
@@ -49,8 +50,8 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			wantCreate: true,
 		},
 		{
-			name:           "namespace exists with same labels, no update needed",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "namespace exists with same labels, no update needed",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if namespace, ok := obj.(*corev1.Namespace); ok {
@@ -69,8 +70,8 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			wantUpdate: false,
 		},
 		{
-			name:           "namespace exists with different labels, update triggered",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "namespace exists with different labels, update triggered",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if namespace, ok := obj.(*corev1.Namespace); ok {
@@ -104,9 +105,9 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 		},
 		{
 			name: "existing labels are preserved while adding new labels",
-			resourceLabels: map[string]string{
+			resourceMetadata: common.ResourceMetadata{Labels: map[string]string{
 				"new-label": "new-value",
-			},
+			}},
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if namespace, ok := obj.(*corev1.Namespace); ok {
@@ -143,9 +144,9 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 		},
 		{
 			name: "resource labels override existing labels with same key",
-			resourceLabels: map[string]string{
+			resourceMetadata: common.ResourceMetadata{Labels: map[string]string{
 				"shared-label": "new-value",
-			},
+			}},
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if namespace, ok := obj.(*corev1.Namespace); ok {
@@ -177,8 +178,8 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			wantUpdate: true,
 		},
 		{
-			name:           "exists check fails",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "exists check fails",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, commontest.ErrTestClient
@@ -187,8 +188,8 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			wantErr: "failed to check if namespace external-secrets exists: test client error",
 		},
 		{
-			name:           "create fails",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "create fails",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					return false, nil
@@ -200,8 +201,8 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			wantErr: "failed to create namespace external-secrets: test client error",
 		},
 		{
-			name:           "update fails",
-			resourceLabels: controllerDefaultResourceLabels,
+			name:             "update fails",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if namespace, ok := obj.(*corev1.Namespace); ok {
@@ -234,7 +235,7 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 			r.CtrlClient = mock
 
 			esc := commontest.TestExternalSecretsConfig()
-			err := r.createOrApplyNamespace(esc, tt.resourceLabels)
+			err := r.createOrApplyNamespace(esc, tt.resourceMetadata)
 
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {

@@ -3,7 +3,6 @@ package external_secrets
 import (
 	"fmt"
 	"maps"
-	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,97 +12,80 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
-var (
-	// disallowedLabelMatcher is for restricting the labels defined to apply on all resources
-	// created for `external-secrets` operand deployment. Operator will just update required labels
-	// on the resources, and other labels will be carried as is from the static manifest, hence
-	// adding this rule to restrict users from updating one of aforementioned labels.
-	disallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
-)
-
+// reconcileExternalSecretsDeployment runs the full install/reconcile of the external-secrets
+// operand: it validates the config, updates managed metadata tracking on the CR, then creates
+// or updates resources in dependency order (namespace first, then RBAC, services, deployments,
+// webhook). At the end it updates the CR if the managed-annotations tracking or processed
+// annotation changed.
 func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.ExternalSecretsConfig, recon bool) error {
 	if err := r.validateExternalSecretsConfig(esc); err != nil {
 		return common.NewIrrecoverableError(err, "%s/%s configuration validation failed", esc.GetObjectKind().GroupVersionKind().String(), esc.GetName())
 	}
 
-	// if user has set custom labels to be added to all resources created by the controller
-	// merge it with the controller's own default labels. Labels defined in `ExternalSecretsManager`
-	// Spec will have the lowest priority, followed by the labels in `ExternalSecretsConfig` Spec and
-	// controllerDefaultResourceLabels will have the highest priority.
-	resourceLabels := make(map[string]string)
-	if !common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
-		for k, v := range r.esm.Spec.GlobalConfig.Labels {
-			if disallowedLabelMatcher.MatchString(k) {
-				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
-				continue
-			}
-			resourceLabels[k] = v
-		}
+	resourceMetadata, err := common.GetResourceMetadata(r.log, r.esm, esc, controllerDefaultResourceLabels)
+	if err != nil {
+		r.log.Error(err, "failed to get resource metadata")
+		return err
 	}
-	if len(esc.Spec.ControllerConfig.Labels) != 0 {
-		for k, v := range esc.Spec.ControllerConfig.Labels {
-			if disallowedLabelMatcher.MatchString(k) {
-				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
-				continue
-			}
-			resourceLabels[k] = v
-		}
+	resourceMetadataChanged, err := common.AddManagedMetadataAnnotation(esc, resourceMetadata)
+	if err != nil {
+		r.log.Error(err, "failed to add resource metadata annotation")
+		return err
 	}
-	maps.Copy(resourceLabels, controllerDefaultResourceLabels)
 
-	if err := r.createOrApplyNamespace(esc, resourceLabels); err != nil {
+	if err := r.createOrApplyNamespace(esc, resourceMetadata); err != nil {
 		r.log.Error(err, "failed to create namespace")
 		return err
 	}
 
-	if err := r.createOrApplyNetworkPolicies(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyNetworkPolicies(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile network policy resource")
 		return err
 	}
 
-	if err := r.createOrApplyServiceAccounts(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServiceAccounts(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile serviceaccount resource")
 		return err
 	}
 
-	if err := r.createOrApplyCertificates(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyCertificates(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile certificates resource")
 		return err
 	}
 
-	if err := r.createOrApplySecret(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplySecret(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile secret resource")
 		return err
 	}
 
-	if err := r.ensureTrustedCABundleConfigMap(esc, resourceLabels); err != nil {
+	if err := r.ensureTrustedCABundleConfigMap(esc, resourceMetadata); err != nil {
 		r.log.Error(err, "failed to ensure trusted CA bundle ConfigMap")
 		return err
 	}
 
-	if err := r.createOrApplyRBACResource(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyRBACResource(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile rbac resources")
 		return err
 	}
 
-	if err := r.createOrApplyServices(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyServices(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile service resource")
 		return err
 	}
 
-	if err := r.createOrApplyDeployments(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyDeployments(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile deployment resource")
 		return err
 	}
 
-	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceLabels, recon); err != nil {
+	if err := r.createOrApplyValidatingWebhookConfiguration(esc, resourceMetadata, recon); err != nil {
 		r.log.Error(err, "failed to reconcile validating webhook resource")
 		return err
 	}
 
-	if addProcessedAnnotation(esc) {
+	if addProcessedAnnotation(esc) || resourceMetadataChanged {
 		if err := r.UpdateWithRetry(r.ctx, esc); err != nil {
-			return fmt.Errorf("failed to update processed annotation to %s: %w", esc.GetName(), err)
+			return fmt.Errorf("failed to update annotations on %s: %w", esc.GetName(), err)
 		}
 	}
 
@@ -116,15 +98,16 @@ func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.Ex
 // the labels if they have changed. Unlike other resources, namespaces may be pre-created
 // by users with their own labels, so we only add/update our desired labels without
 // removing existing ones.
-func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
+func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) error {
 	namespaceName := getNamespace(esc)
 
 	desired := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   namespaceName,
-			Labels: resourceLabels,
+			Name: namespaceName,
 		},
 	}
+
+	common.ApplyResourceMetadata(desired, resourceMetadata)
 
 	fetched := &corev1.Namespace{}
 	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
@@ -139,22 +122,41 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 			return fmt.Errorf("failed to create namespace %s: %w", namespaceName, err)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s created", namespaceName)
-	case exists && namespaceLabelsNeedUpdate(fetched, resourceLabels):
-		r.log.V(1).Info("Namespace labels changed, updating", "name", namespaceName)
-		// Merge existing labels with desired labels (desired labels take precedence)
-		if fetched.Labels == nil {
-			fetched.Labels = make(map[string]string)
-		}
-		maps.Copy(fetched.Labels, resourceLabels)
+	case r.resourceMetadataNeedsUpdate(fetched, resourceMetadata):
 		if err := r.UpdateWithRetry(r.ctx, fetched); err != nil {
 			return fmt.Errorf("failed to update namespace %s: %w", namespaceName, err)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "Namespace %s updated", namespaceName)
 	default:
-		r.log.V(4).Info("Namespace already exists with correct labels", "name", namespaceName)
+		r.log.V(4).Info("Namespace already exists in desired state", "name", namespaceName)
 	}
 
 	return nil
+}
+
+func (r *Reconciler) resourceMetadataNeedsUpdate(existing *corev1.Namespace, resourceMetadata common.ResourceMetadata) bool {
+	needsUpdate := false
+	if namespaceLabelsNeedUpdate(existing, resourceMetadata.Labels) {
+		needsUpdate = true
+		r.log.V(1).Info("Namespace labels changed, updating", "name", existing.GetName())
+		// Merge existing labels with desired labels (desired labels take precedence)
+		if existing.Labels == nil {
+			existing.Labels = make(map[string]string)
+		}
+		maps.Copy(existing.Labels, resourceMetadata.Labels)
+	}
+
+	if namespaceAnnotationsNeedUpdate(existing, resourceMetadata.Annotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0 {
+		needsUpdate = true
+		r.log.V(1).Info("Namespace annotations changed, updating", "name", existing.GetName())
+		if existing.Annotations == nil {
+			existing.Annotations = make(map[string]string)
+		}
+		common.UpdateResourceAnnotations(existing, resourceMetadata.Annotations)
+		common.RemoveObsoleteAnnotations(existing, resourceMetadata)
+	}
+
+	return needsUpdate
 }
 
 // namespaceLabelsNeedUpdate checks if any of the desired labels are missing or different
@@ -169,5 +171,22 @@ func namespaceLabelsNeedUpdate(existing *corev1.Namespace, desiredLabels map[str
 			return true
 		}
 	}
+	return false
+}
+
+// namespaceAnnotationsNeedUpdate checks if any of the desired annotations are missing or different
+// in the existing namespace. This is different from ObjectMetadataModified because namespaces
+// may be pre-created by users with their own annotations that should be preserved.
+func namespaceAnnotationsNeedUpdate(existing *corev1.Namespace, desiredAnnots map[string]string) bool {
+	if existing.Annotations == nil && len(desiredAnnots) > 0 {
+		return true
+	}
+
+	for k, v := range desiredAnnots {
+		if existing.Annotations[k] != v {
+			return true
+		}
+	}
+
 	return false
 }

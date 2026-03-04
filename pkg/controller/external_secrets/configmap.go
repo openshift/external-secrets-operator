@@ -18,7 +18,7 @@ import (
 // for this label and injects the cluster's trusted CA bundle into the ConfigMap's data.
 // This function ensures the correct labels are present so that CNO can manage the CA bundle
 // content as expected.
-func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string) error {
+func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata) error {
 	proxyConfig := r.getProxyConfiguration(esc)
 
 	// Only create ConfigMap if proxy is configured
@@ -30,7 +30,7 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 	}
 
 	namespace := getNamespace(esc)
-	expectedLabels := getTrustedCABundleLabels(resourceLabels)
+	expectedLabels := getTrustedCABundleLabels(resourceMetadata.Labels)
 
 	desiredConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,6 +39,9 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 			Labels:    expectedLabels,
 		},
 	}
+
+	// Apply managed annotations from ResourceMetadataAnnotations
+	common.ApplyResourceMetadata(desiredConfigMap, resourceMetadata)
 
 	configMapName := fmt.Sprintf("%s/%s", desiredConfigMap.GetNamespace(), desiredConfigMap.GetName())
 	r.log.V(4).Info("reconciling trusted CA bundle ConfigMap resource", "name", configMapName)
@@ -59,18 +62,16 @@ func (r *Reconciler) ensureTrustedCABundleConfigMap(esc *operatorv1alpha1.Extern
 		return nil
 	}
 
-	// ConfigMap exists, ensure it has the correct labels
-	// Do not update the data of the ConfigMap since it is managed by CNO
-	// Check if metadata (labels) has been modified.
-	// NOTE: Currently ObjectMetadataModified only checks labels, but if it's extended
-	// in the future to check annotations as well, CNO may race with this update since
-	// CNO adds `openshift.io/owning-component: Networking / cluster-network-operator` annotations on this ConfigMap.
-	if exist && common.ObjectMetadataModified(desiredConfigMap, existingConfigMap) {
+	// ConfigMap exists, ensure it has the correct labels and annotations.
+	// Do not update the data of the ConfigMap since it is managed by CNO.
+	// MergeFetchedAnnotations preserves external annotations (e.g., CNO's openshift.io/owning-component).
+	if exist && common.ObjectMetadataModified(desiredConfigMap, existingConfigMap, &resourceMetadata) {
 		r.log.V(1).Info("trusted CA bundle ConfigMap has been modified, updating to desired state", "name", configMapName)
-		// Update the labels since
-		existingConfigMap.Labels = desiredConfigMap.Labels
-
-		if err := r.UpdateWithRetry(r.ctx, existingConfigMap); err != nil {
+		// Preserve data from existing ConfigMap (managed by CNO)
+		desiredConfigMap.Data = existingConfigMap.Data
+		desiredConfigMap.BinaryData = existingConfigMap.BinaryData
+		common.RemoveObsoleteAnnotations(desiredConfigMap, resourceMetadata)
+		if err := r.UpdateWithRetry(r.ctx, desiredConfigMap); err != nil {
 			return common.FromClientError(err, "failed to update %s trusted CA bundle ConfigMap resource", configMapName)
 		}
 		r.eventRecorder.Eventf(esc, corev1.EventTypeNormal, "Reconciled", "trusted CA bundle ConfigMap resource %s reconciled back to desired state", configMapName)

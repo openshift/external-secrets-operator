@@ -20,9 +20,9 @@ var (
 	serviceExternalSecretWebhookName = "external-secrets-webhook"
 )
 
-func (r *Reconciler) createOrApplyCertificates(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, recon bool) error {
+func (r *Reconciler) createOrApplyCertificates(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, recon bool) error {
 	if isCertManagerConfigEnabled(esc) {
-		if err := r.createOrApplyCertificate(esc, resourceLabels, webhookCertificateAssetName, recon); err != nil {
+		if err := r.createOrApplyCertificate(esc, resourceMetadata, webhookCertificateAssetName, recon); err != nil {
 			return err
 		}
 	}
@@ -36,15 +36,15 @@ func (r *Reconciler) createOrApplyCertificates(esc *operatorv1alpha1.ExternalSec
 			return common.NewIrrecoverableError(fmt.Errorf("invalid bitwardenSecretManagerProvider config"),
 				"either secretRef or certManagerConfig must be configured, when bitwardenSecretManagerProvider is enabled")
 		}
-		if err := r.createOrApplyCertificate(esc, resourceLabels, bitwardenCertificateAssetName, recon); err != nil {
+		if err := r.createOrApplyCertificate(esc, resourceMetadata, bitwardenCertificateAssetName, recon); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, fileName string, recon bool) error {
-	desired, err := r.getCertificateObject(esc, resourceLabels, fileName)
+func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, fileName string, recon bool) error {
+	desired, err := r.getCertificateObject(esc, resourceMetadata, fileName)
 	if err != nil {
 		return err
 	}
@@ -60,8 +60,10 @@ func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecr
 	if exist && recon {
 		r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "ResourceAlreadyExists", "%s certificate resource already exists, maybe from previous installation", certificateName)
 	}
-	if exist && common.HasObjectChanged(desired, fetched) {
+	if exist && common.HasObjectChanged(desired, fetched, &resourceMetadata) {
 		r.log.V(1).Info("certificate has been modified, updating to desired state", "name", certificateName)
+		common.RemoveObsoleteAnnotations(desired, resourceMetadata)
+		//common.MergeFetchedAnnotations(desired, fetched, &resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, desired); err != nil {
 			return common.FromClientError(err, "failed to update %s certificate resource", certificateName)
 		}
@@ -79,7 +81,7 @@ func (r *Reconciler) createOrApplyCertificate(esc *operatorv1alpha1.ExternalSecr
 	return nil
 }
 
-func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceLabels map[string]string, fileName string) (*certmanagerv1.Certificate, error) {
+func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, fileName string) (*certmanagerv1.Certificate, error) {
 	certificate := common.DecodeCertificateObjBytes(assets.MustAsset(fileName))
 
 	// update the secret name in the Certificate resource of the webhook component.
@@ -88,7 +90,7 @@ func (r *Reconciler) getCertificateObject(esc *operatorv1alpha1.ExternalSecretsC
 	}
 
 	updateNamespace(certificate, esc)
-	common.UpdateResourceLabels(certificate, resourceLabels)
+	common.ApplyResourceMetadata(certificate, resourceMetadata)
 
 	if err := r.updateCertificateParams(esc, certificate); err != nil {
 		return nil, common.NewIrrecoverableError(err, "failed to update certificate resource for %s/%s deployment", getNamespace(esc), esc.GetName())

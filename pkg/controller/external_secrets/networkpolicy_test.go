@@ -178,6 +178,56 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 			},
 			wantErr: "failed to update network policy external-secrets/deny-all-traffic: test client error",
 		},
+		{
+			name: "network policy with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if np, ok := obj.(*networkingv1.NetworkPolicy); ok {
+						// Verify annotations are applied
+						if np.Annotations == nil {
+							t.Error("networkpolicy annotations should not be nil")
+							return nil
+						}
+						if np.Annotations["security/policy-type"] != "deny-all" {
+							t.Errorf("expected annotation 'security/policy-type'='deny-all', got '%s'",
+								np.Annotations["security/policy-type"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"security/policy-type": "deny-all",
+					"team/owner":           "security",
+				}
+			},
+		},
+		{
+			name: "network policy tracks managed annotations",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if np, ok := obj.(*networkingv1.NetworkPolicy); ok {
+						// Verify all annotations from spec are present
+						if np.Annotations["custom-policy"] != "value" {
+							t.Errorf("expected 'custom-policy' annotation")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"custom-policy": "value",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -194,7 +244,7 @@ func TestCreateOrApplyStaticNetworkPolicies(t *testing.T) {
 				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyStaticNetworkPolicies(esc, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyStaticNetworkPolicies(esc, testResourceMetadata(esc), false)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)
@@ -349,7 +399,7 @@ func TestCreateOrApplyCustomNetworkPolicies(t *testing.T) {
 				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyCustomNetworkPolicies(esc, controllerDefaultResourceLabels, false)
+			err := r.createOrApplyCustomNetworkPolicies(esc, testResourceMetadata(esc), false)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)
@@ -480,7 +530,7 @@ func TestBuildNetworkPolicyFromConfig(t *testing.T) {
 			r := testReconciler(t)
 			esc := commontest.TestExternalSecretsConfig()
 
-			np, err := r.buildNetworkPolicyFromConfig(esc, tt.npConfig, controllerDefaultResourceLabels)
+			np, err := r.buildNetworkPolicyFromConfig(esc, tt.npConfig, testResourceMetadata(esc))
 
 			if tt.wantErr {
 				if err == nil {

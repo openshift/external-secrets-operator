@@ -276,6 +276,136 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 		{
 			name: "rolebindings creation successful",
 		},
+		{
+			name: "clusterrole with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if cr, ok := obj.(*rbacv1.ClusterRole); ok {
+						// Verify annotations are applied
+						if cr.Annotations == nil {
+							t.Errorf("expected ClusterRole annotations to be set, got nil")
+							return nil
+						}
+						if cr.Annotations["rbac/managed-by"] != "operator" {
+							t.Errorf("expected annotation 'rbac/managed-by'='operator', got '%s'",
+								cr.Annotations["rbac/managed-by"])
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"rbac/managed-by": "operator",
+					"team/owner":      "platform",
+				}
+			},
+		},
+		{
+			name: "clusterrolebinding with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if crb, ok := obj.(*rbacv1.ClusterRoleBinding); ok {
+						// Verify annotations are applied
+						if crb.Annotations == nil {
+							t.Errorf("expected ClusterRoleBinding annotations to be set, got nil")
+							return nil
+						}
+						if crb.Annotations["binding/type"] != "cluster" {
+							t.Errorf("expected annotation 'binding/type'='cluster'")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"binding/type": "cluster",
+				}
+			},
+		},
+		{
+			name: "role with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if role, ok := obj.(*rbacv1.Role); ok {
+						// Verify annotations are applied
+						if role.Annotations == nil {
+							t.Errorf("expected Role annotations to be set, got nil")
+							return nil
+						}
+						if role.Annotations["role/purpose"] != "leader-election" {
+							t.Errorf("expected annotation 'role/purpose'='leader-election'")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"role/purpose": "leader-election",
+				}
+			},
+		},
+		{
+			name: "rolebinding with custom annotations applied successfully",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					if rb, ok := obj.(*rbacv1.RoleBinding); ok {
+						// Verify annotations are applied
+						if rb.Annotations == nil {
+							t.Errorf("expected RoleBinding annotations to be set, got nil")
+							return nil
+						}
+						if rb.Annotations["binding/scope"] != "namespace" {
+							t.Errorf("expected annotation 'binding/scope'='namespace'")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"binding/scope": "namespace",
+				}
+			},
+		},
+		{
+			name: "rbac resources track managed annotations",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					return false, nil
+				})
+				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+					switch obj.(type) {
+					case *rbacv1.ClusterRole, *rbacv1.ClusterRoleBinding, *rbacv1.Role, *rbacv1.RoleBinding:
+						// Verify all annotations from spec are present
+						annotations := obj.(client.Object).GetAnnotations()
+						if annotations["allowed-rbac"] != "value" {
+							t.Errorf("expected 'allowed-rbac' annotation")
+						}
+					}
+					return nil
+				})
+			},
+			updateExternalSecretsConfig: func(esc *operatorv1alpha1.ExternalSecretsConfig) {
+				esc.Spec.ControllerConfig.Annotations = map[string]string{
+					"allowed-rbac": "value",
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -293,7 +423,7 @@ func TestCreateOrApplyRBACResource(t *testing.T) {
 				tt.updateExternalSecretsConfig(esc)
 			}
 
-			err := r.createOrApplyRBACResource(esc, controllerDefaultResourceLabels, true)
+			err := r.createOrApplyRBACResource(esc, testResourceMetadata(esc), true)
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("createOrApplyRBACResource() err: %v, wantErr: %v", err, tt.wantErr)
 			}
