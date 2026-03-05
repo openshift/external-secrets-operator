@@ -22,8 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/go-logr/logr"
-
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -41,6 +39,21 @@ type Now struct {
 	sync.Mutex
 
 	done atomic.Uint32
+}
+
+// ResourceMetadata holds the labels and annotations to apply to all managed resources,
+// and tracks which annotation keys were removed so they can be cleared from resources.
+type ResourceMetadata struct {
+	// Labels are applied to all managed resources (e.g. Deployments, Services).
+	// Includes default operator labels and any from ControllerConfig.
+	Labels map[string]string
+	// Annotations are applied to all managed resources. Built from ControllerConfig.Annotations
+	// with reserved prefixes (e.g. kubernetes.io/, openshift.io/) filtered out.
+	Annotations map[string]string
+	// DeletedAnnotationKeys lists annotation keys that were previously applied but are no
+	// longer in ControllerConfig.Annotations. Used to remove them from existing resources
+	// and to avoid losing track of removals across reconcile retries.
+	DeletedAnnotationKeys []string
 }
 
 func init() {
@@ -65,14 +78,6 @@ func init() {
 	if err := crdv1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
-}
-
-// ResourceMetadata holds the labels and annotations to apply to all managed resources.
-type ResourceMetadata struct {
-	Labels      map[string]string
-	Annotations map[string]string
-
-	DeletedAnnotationKeys []string
 }
 
 // ApplyResourceMetadata applies both labels and managed annotations to a resource object.
@@ -102,29 +107,6 @@ func UpdateResourceAnnotations(obj client.Object, userAnnotations map[string]str
 	// Merge user annotations
 	maps.Copy(a, userAnnotations)
 	obj.SetAnnotations(a)
-}
-
-// GetManagedAnnotationKeys reads the ManagedAnnotationsKey tracking annotation from the
-// ExternalSecretsConfig CR, base64-decodes and JSON-unmarshals it, and returns the list
-// of managed annotation. Returns nil if the annotation is missing or cannot be decoded.
-func GetManagedAnnotationKeys(esc *operatorv1alpha1.ExternalSecretsConfig) []string {
-	annotations := esc.GetAnnotations()
-	if annotations == nil {
-		return nil
-	}
-	encoded, ok := annotations[ManagedAnnotationsKey]
-	if !ok || encoded == "" {
-		return nil
-	}
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil
-	}
-	var keys []string
-	if err := json.Unmarshal(decoded, &keys); err != nil {
-		return nil
-	}
-	return keys
 }
 
 func DecodeCertificateObjBytes(objBytes []byte) *certmanagerv1.Certificate {
@@ -731,21 +713,26 @@ func (n *Now) Reset() {
 	n.done.Store(0)
 }
 
+// RemoveObsoleteAnnotations removes DeletedAnnotationKeys from the object's metadata and,
+// for types that have a pod template (e.g. Deployment), from the pod template as well.
+// Common behavior (object-level annotations) runs for all types; the switch adds type-specific
+// behavior (e.g. pod spec template) without duplicating the common path.
 func RemoveObsoleteAnnotations(obj client.Object, resourceMetadata ResourceMetadata) {
 	if len(resourceMetadata.DeletedAnnotationKeys) == 0 {
 		return
 	}
+
+	// Common: remove obsolete keys from object metadata for every type.
 	annotations := obj.GetAnnotations()
 	obj.SetAnnotations(removeObsoleteAnnotations(annotations, resourceMetadata.DeletedAnnotationKeys))
-}
 
-func RemoveObsoleteAnnotationsInPodSpec(obj *appsv1.Deployment, resourceMetadata ResourceMetadata) {
-	if len(resourceMetadata.DeletedAnnotationKeys) == 0 {
-		return
+	// Type-specific: also remove from pod template annotations where applicable.
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		template := &o.Spec.Template
+		annotations := template.GetAnnotations()
+		template.SetAnnotations(removeObsoleteAnnotations(annotations, resourceMetadata.DeletedAnnotationKeys))
 	}
-	obj.Spec.Template = obj.Spec.DeepCopy().Template
-	updatedAnnotations := removeObsoleteAnnotations(obj.Spec.Template.Annotations, resourceMetadata.DeletedAnnotationKeys)
-	obj.Spec.Template.Annotations = updatedAnnotations
 }
 
 func removeObsoleteAnnotations(annotations map[string]string, deletedAnnots []string) map[string]string {
@@ -755,118 +742,58 @@ func removeObsoleteAnnotations(annotations map[string]string, deletedAnnots []st
 	return annotations
 }
 
-// GetResourceMetadata builds the labels and annotations to apply to all operand resources,
-// and computes which annotation keys were previously managed but are no longer in spec
-// (DeletedAnnotationKeys) so downstream logic can remove them from resources.
-func GetResourceMetadata(log logr.Logger, esm *operatorv1alpha1.ExternalSecretsManager, esc *operatorv1alpha1.ExternalSecretsConfig, defaultLabels map[string]string) (ResourceMetadata, error) {
-	resourceMetadata := ResourceMetadata{}
-	GetResourceLabels(log, esm, esc, &resourceMetadata, defaultLabels)
-	if err := GetResourceAnnotations(esc, &resourceMetadata); err != nil {
-		return resourceMetadata, err
-	}
-	return resourceMetadata, nil
-}
-
-// GetResourceLabels builds the labels map for all operand resources. Labels defined in
-// ExternalSecretsManager have the lowest priority, followed by ExternalSecretsConfig labels,
-// and defaultLabels have the highest priority. Labels matching DisallowedLabelMatcher are skipped.
-func GetResourceLabels(log logr.Logger, esm *operatorv1alpha1.ExternalSecretsManager, esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata *ResourceMetadata, defaultLabels map[string]string) {
-	resourceMetadata.Labels = make(map[string]string)
-	if !IsESMSpecEmpty(esm) && esm != nil && esm.Spec.GlobalConfig != nil {
-		for k, v := range esm.Spec.GlobalConfig.Labels {
-			if DisallowedLabelMatcher.MatchString(k) {
-				log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
-				continue
-			}
-			resourceMetadata.Labels[k] = v
-		}
-	}
-	if len(esc.Spec.ControllerConfig.Labels) != 0 {
-		for k, v := range esc.Spec.ControllerConfig.Labels {
-			if DisallowedLabelMatcher.MatchString(k) {
-				log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
-				continue
-			}
-			resourceMetadata.Labels[k] = v
-		}
-	}
-	maps.Copy(resourceMetadata.Labels, defaultLabels)
-}
-
-// GetResourceAnnotations copies the current ControllerConfig.Annotations into resourceMetadata
-// and populates DeletedAnnotationKeys with any keys that were previously managed (stored in
-// the CR's ManagedAnnotationsKey annotation) but are no longer in spec, so callers can remove
-// them from child resources.
-func GetResourceAnnotations(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata *ResourceMetadata) error {
-	resourceMetadata.Annotations = make(map[string]string)
-	if esc.Spec.ControllerConfig.Annotations != nil {
-		for k, v := range esc.Spec.ControllerConfig.Annotations {
-			resourceMetadata.Annotations[k] = v
-		}
-	}
-	previousAnnotations, err := GetPreviouslyAppliedAnnotationKeys(esc.GetAnnotations())
-	if err != nil {
-		return err
-	}
-	for _, k := range previousAnnotations {
-		if _, ok := resourceMetadata.Annotations[k]; !ok {
-			resourceMetadata.DeletedAnnotationKeys = append(resourceMetadata.DeletedAnnotationKeys, k)
-		}
-	}
-	return nil
-}
-
 // AddManagedMetadataAnnotation updates the CR's ManagedAnnotationsKey annotation to the
 // current list of ControllerConfig.Annotations keys (base64-encoded JSON). It reads the
 // previously stored keys to detect changes, then writes the new keys and returns whether
 // the CR needs to be updated (so the caller can call UpdateWithRetry at the end of reconcile).
-func AddManagedMetadataAnnotation(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata ResourceMetadata) (bool, error) {
-	a := esc.GetAnnotations()
+func AddManagedMetadataAnnotation(obj client.Object, annotationKeyName string, resourceMetadata ResourceMetadata) (bool, error) {
+	a := obj.GetAnnotations()
 	if a == nil {
 		a = make(map[string]string)
 	}
 
-	userAnnotations := esc.Spec.ControllerConfig.Annotations
-	keys := make([]string, 0, len(userAnnotations))
-	for k := range userAnnotations {
+	keys := make([]string, 0, len(resourceMetadata.Annotations))
+	for k := range resourceMetadata.Annotations {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	existingAnnotationKeys, err := GetPreviouslyAppliedAnnotationKeys(a)
+	existingAnnotationKeys, err := GetPreviouslyAppliedAnnotationKeys(a, annotationKeyName)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to read previously applied annotation keys: %w", err)
 	}
 
-	a[ManagedAnnotationsKey], err = EncodeDataToB64Json(keys)
-	if err != nil {
-		return false, err
+	needsUpdate := len(existingAnnotationKeys) != len(resourceMetadata.Annotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0
+	if needsUpdate {
+		a[annotationKeyName], err = EncodeDataToB64Json(keys)
+		if err != nil {
+			return false, fmt.Errorf("failed to encode managed annotation keys: %w", err)
+		}
+		obj.SetAnnotations(a)
 	}
-	esc.SetAnnotations(a)
 
-	needsUpdate := len(existingAnnotationKeys) != len(userAnnotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0
 	return needsUpdate, nil
 }
 
 // GetPreviouslyAppliedAnnotationKeys returns the list of annotation keys stored in the CR's
 // ManagedAnnotationsKey annotation (base64-encoded JSON) which were applied in previous
 // reconciliation. Returns nil, nil when the annotation is missing or empty.
-func GetPreviouslyAppliedAnnotationKeys(annotations map[string]string) ([]string, error) {
+func GetPreviouslyAppliedAnnotationKeys(annotations map[string]string, annotationKeyName string) ([]string, error) {
 	if annotations == nil {
 		return nil, nil
 	}
 
-	val, ok := annotations[ManagedAnnotationsKey]
+	val, ok := annotations[annotationKeyName]
 	if !ok || val == "" {
 		return nil, nil
 	}
 	data, err := DecodeDataFromB64Json([]byte(val))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to base64-decode %q annotation value: %w", annotationKeyName, err)
 	}
 	var keys []string
 	if err := json.Unmarshal(data, &keys); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal %q annotation value as JSON list: %w", annotationKeyName, err)
 	}
 	return keys, nil
 }
@@ -876,7 +803,7 @@ func GetPreviouslyAppliedAnnotationKeys(annotations map[string]string) ([]string
 func EncodeDataToB64Json(data any) (string, error) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("json marshal: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(jsonBytes), nil
 }
@@ -889,7 +816,7 @@ func DecodeDataFromB64Json(data []byte) ([]byte, error) {
 	decodedData := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
 	n, err := base64.StdEncoding.Decode(decodedData, data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("base64 decode: %w", err)
 	}
 	return decodedData[:n], nil
 }

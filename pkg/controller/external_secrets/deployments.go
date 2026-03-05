@@ -83,7 +83,6 @@ func (r *Reconciler) createOrApplyDeploymentFromAsset(esc *operatorv1alpha1.Exte
 	case exist && common.HasObjectChanged(deployment, fetched, &resourceMetadata):
 		r.log.V(1).Info("deployment has been modified, updating to desired state", "name", deploymentName)
 		common.RemoveObsoleteAnnotations(deployment, resourceMetadata)
-		common.RemoveObsoleteAnnotationsInPodSpec(deployment, resourceMetadata)
 		if err := r.UpdateWithRetry(r.ctx, deployment); err != nil {
 			return common.FromClientError(err, "failed to update %s deployment resource", deploymentName)
 		}
