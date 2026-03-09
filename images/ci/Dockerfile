@@ -14,7 +14,7 @@ COPY . .
 
 RUN go build -tags $GO_BUILD_TAGS -o external-secrets-operator cmd/external-secrets-operator/main.go
 
-FROM registry.access.redhat.com/ubi9-minimal:9.4
+FROM registry.ci.openshift.org/rhcos-devel/ocp-4.21-10.1:4.21.0-ec.3-x86_64
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets-operator
 COPY --from=builder $SRC_DIR/external-secrets-operator /bin/external-secrets-operator
 USER 65534:65534
