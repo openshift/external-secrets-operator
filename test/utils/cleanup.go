@@ -22,6 +22,8 @@ package utils
 import (
 	"context"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,7 +62,10 @@ func CleanupESOOperandAndRelated(ctx context.Context, cfg *rest.Config) {
 	}
 
 	// 1. Delete all instances of operand CRDs (label app=external-secrets).
-	crdList, _ := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	crdList, err := extClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	if err != nil || crdList == nil {
+		crdList = &apiextensionsv1.CustomResourceDefinitionList{}
+	}
 	for i := range crdList.Items {
 		crd := &crdList.Items[i]
 		version := preferredVersion(crd)
@@ -99,17 +104,26 @@ func CleanupESOOperandAndRelated(ctx context.Context, cfg *rest.Config) {
 	_ = dynamicClient.Resource(escGVR).Delete(ctx, externalSecretsConfigName, metav1.DeleteOptions{})
 
 	// 3. Remove webhooks first so namespace deletion can proceed.
-	webhooks, _ := clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	webhooks, err := clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	if err != nil || webhooks == nil {
+		webhooks = &admissionregistrationv1.ValidatingWebhookConfigurationList{}
+	}
 	for i := range webhooks.Items {
 		_ = clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(ctx, webhooks.Items[i].Name, metav1.DeleteOptions{})
 	}
 
 	// 4. ClusterRoleBindings before ClusterRoles.
-	crbs, _ := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	crbs, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	if err != nil || crbs == nil {
+		crbs = &rbacv1.ClusterRoleBindingList{}
+	}
 	for i := range crbs.Items {
 		_ = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, crbs.Items[i].Name, metav1.DeleteOptions{})
 	}
-	crList, _ := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	crList, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{LabelSelector: operandLabelSelector})
+	if err != nil || crList == nil {
+		crList = &rbacv1.ClusterRoleList{}
+	}
 	for i := range crList.Items {
 		_ = clientset.RbacV1().ClusterRoles().Delete(ctx, crList.Items[i].Name, metav1.DeleteOptions{})
 	}

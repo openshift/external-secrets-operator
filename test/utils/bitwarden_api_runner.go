@@ -90,7 +90,9 @@ func RunBitwardenAPIJob(ctx context.Context, client kubernetes.Interface, namesp
 		return -1, "", fmt.Errorf("create job %s: %w", jobName, err)
 	}
 	propagationBackground := metav1.DeletePropagationBackground
-	defer func() { _ = client.BatchV1().Jobs(namespace).Delete(ctx, jobName, metav1.DeleteOptions{PropagationPolicy: &propagationBackground}) }()
+	defer func() {
+		_ = client.BatchV1().Jobs(namespace).Delete(ctx, jobName, metav1.DeleteOptions{PropagationPolicy: &propagationBackground})
+	}()
 
 	err = wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		j, getErr := client.BatchV1().Jobs(namespace).Get(ctx, jobName, metav1.GetOptions{})
@@ -111,8 +113,11 @@ func RunBitwardenAPIJob(ctx context.Context, client kubernetes.Interface, namesp
 
 	// Find the pod and get exit code and logs.
 	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: "job-name=" + jobName})
-	if err != nil || len(pods.Items) == 0 {
+	if err != nil {
 		return -1, "", fmt.Errorf("list pods for job %s: %w", jobName, err)
+	}
+	if len(pods.Items) == 0 {
+		return -1, "", fmt.Errorf("no pods found for job %s", jobName)
 	}
 	pod := pods.Items[0]
 	for _, cs := range pod.Status.ContainerStatuses {

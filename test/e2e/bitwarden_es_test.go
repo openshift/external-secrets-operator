@@ -56,6 +56,7 @@ const (
 	bitwardenPushSecretResourceName   = "bitwarden-push-secret"
 	bitwardenExternalSecretByNameName = "bitwarden-external-secret-by-name"
 	bitwardenExternalSecretByUUIDName = "bitwarden-external-secret"
+	bitwardenEgressNetworkPolicyName  = "allow-egress-to-bitwarden-sdk-server"
 	// bitwardenResourceWaitTimeout allows for slow first requests and provider retries to the SDK server.
 	bitwardenResourceWaitTimeout = 4 * time.Minute
 )
@@ -93,6 +94,9 @@ func ensureBitwardenOperandReady(ctx context.Context) error {
 			return err
 		}
 	} else {
+		if _, err := ensureBitwardenEgressOnExternalSecretsConfig(ctx, runtimeClient); err != nil {
+			return err
+		}
 		if err := utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute); err != nil {
 			return err
 		}
@@ -134,6 +138,9 @@ func ensureBitwardenOperandReady(ctx context.Context) error {
 		return err
 	}
 
+	if err := utils.RestartBitwardenSDKServerPods(ctx, clientset); err != nil {
+		return err
+	}
 	if err := utils.VerifyPodsReadyByPrefix(ctx, clientset, utils.BitwardenOperandNamespace, []string{bitwardenSDKServerPodPrefix}); err != nil {
 		return err
 	}
@@ -149,18 +156,20 @@ func ensureBitwardenOperandReady(ctx context.Context) error {
 var _ = Describe("Bitwarden Provider", Ordered, Label("Provider:Bitwarden", "Suite:Bitwarden"), func() {
 	ctx := context.Background()
 	var (
-		clientset                  *kubernetes.Clientset
-		dynamicClient              *dynamic.DynamicClient
-		runtimeClient              client.Client
-		loader                     utils.DynamicResourceLoader
-		testNamespace              string
-		clusterStoreName           string
-		tlsMaterials               *utils.BitwardenTLSMaterials
-		originalESC                *operatorv1alpha1.ExternalSecretsConfig
-		cssObj                     *unstructured.Unstructured
-		bitwardenOrgID             string
-		bitwardenProjectID         string
-		pushedRemoteKeyForUUIDTest string // set by first It, used by second It to look up secret UUID
+		clientset          *kubernetes.Clientset
+		dynamicClient      *dynamic.DynamicClient
+		runtimeClient      client.Client
+		loader             utils.DynamicResourceLoader
+		testNamespace      string
+		clusterStoreName   string
+		tlsMaterials       *utils.BitwardenTLSMaterials
+		originalESC        *operatorv1alpha1.ExternalSecretsConfig
+		cssObj             *unstructured.Unstructured
+		bitwardenOrgID     string
+		bitwardenProjectID string
+		// pushedRemoteKeyForUUIDTest is set by the first It block and consumed by the second.
+		// These tests must run in order (Ordered container) due to this shared state dependency.
+		pushedRemoteKeyForUUIDTest string
 	)
 
 	BeforeAll(func() {
@@ -197,7 +206,14 @@ var _ = Describe("Bitwarden Provider", Ordered, Label("Provider:Bitwarden", "Sui
 				Expect(err).NotTo(HaveOccurred())
 			}
 		} else {
-			By("Waiting for ExternalSecretsConfig to be Ready (cluster CR already exists)")
+			By("Ensuring ExternalSecretsConfig has Bitwarden egress network policy (required for controller to reach bitwarden-sdk-server)")
+			updated, err := ensureBitwardenEgressOnExternalSecretsConfig(ctx, runtimeClient)
+			Expect(err).NotTo(HaveOccurred())
+			if updated {
+				By("Waiting for ExternalSecretsConfig to be Ready after adding Bitwarden egress policy")
+			} else {
+				By("Waiting for ExternalSecretsConfig to be Ready (cluster CR already exists)")
+			}
 			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute)).To(Succeed())
 		}
 
@@ -449,11 +465,16 @@ func loadExternalSecretsConfigFromFileWithBitwardenNetworkPolicy(assetFunc func(
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredMap, esc); err != nil {
 		return nil, err
 	}
-	// Append egress so ExternalSecretsCoreController can reach bitwarden-sdk-server:9998 when Bitwarden plugin is enabled.
+	esc.Spec.ControllerConfig.NetworkPolicies = append(esc.Spec.ControllerConfig.NetworkPolicies, bitwardenEgressNetworkPolicy())
+	return esc, nil
+}
+
+// bitwardenEgressNetworkPolicy returns the NetworkPolicy that allows the core controller to reach bitwarden-sdk-server:9998.
+func bitwardenEgressNetworkPolicy() operatorv1alpha1.NetworkPolicy {
 	port9998 := intstr.FromInt32(9998)
 	tcp := corev1.ProtocolTCP
-	esc.Spec.ControllerConfig.NetworkPolicies = append(esc.Spec.ControllerConfig.NetworkPolicies, operatorv1alpha1.NetworkPolicy{
-		Name:          "allow-egress-to-bitwarden-sdk-server",
+	return operatorv1alpha1.NetworkPolicy{
+		Name:          bitwardenEgressNetworkPolicyName,
 		ComponentName: operatorv1alpha1.CoreController,
 		Egress: []networkingv1.NetworkPolicyEgressRule{
 			{
@@ -465,6 +486,29 @@ func loadExternalSecretsConfigFromFileWithBitwardenNetworkPolicy(assetFunc func(
 				},
 			},
 		},
+	}
+}
+
+// ensureBitwardenEgressOnExternalSecretsConfig ensures the cluster ExternalSecretsConfig has the Bitwarden egress
+// network policy. If the policy is missing, it is appended and the CR is updated. Returns true if an update was made.
+func ensureBitwardenEgressOnExternalSecretsConfig(ctx context.Context, c client.Client) (bool, error) {
+	var updated bool
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		esc := &operatorv1alpha1.ExternalSecretsConfig{}
+		if err := c.Get(ctx, client.ObjectKey{Name: "cluster"}, esc); err != nil {
+			return err
+		}
+		for _, np := range esc.Spec.ControllerConfig.NetworkPolicies {
+			if np.Name == bitwardenEgressNetworkPolicyName {
+				return nil
+			}
+		}
+		esc.Spec.ControllerConfig.NetworkPolicies = append(esc.Spec.ControllerConfig.NetworkPolicies, bitwardenEgressNetworkPolicy())
+		if err := c.Update(ctx, esc); err != nil {
+			return err
+		}
+		updated = true
+		return nil
 	})
-	return esc, nil
+	return updated, err
 }

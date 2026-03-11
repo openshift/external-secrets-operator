@@ -242,7 +242,15 @@ func FetchAWSCredsFromSecret(ctx context.Context, k8sClient *kubernetes.Clientse
 	if err != nil {
 		return "", "", err
 	}
-	return string(cred.Data[awsCredKeyIdSecretKeyName]), string(cred.Data[awsCredAccessKeySecretKeyName]), nil
+	id, ok := cred.Data[awsCredKeyIdSecretKeyName]
+	if !ok || len(id) == 0 {
+		return "", "", fmt.Errorf("secret %s/%s is missing %q", secretNamespace, secretName, awsCredKeyIdSecretKeyName)
+	}
+	key, ok := cred.Data[awsCredAccessKeySecretKeyName]
+	if !ok || len(key) == 0 {
+		return "", "", fmt.Errorf("secret %s/%s is missing %q", secretNamespace, secretName, awsCredAccessKeySecretKeyName)
+	}
+	return string(id), string(key), nil
 }
 
 // DeleteAWSSecretFromCredsSecret deletes an AWS Secrets Manager secret using credentials from the given Kubernetes secret.
@@ -263,9 +271,9 @@ func DeleteAWSSecretFromCredsSecret(ctx context.Context, k8sClient *kubernetes.C
 		return fmt.Errorf("failed to create AWS session: %w", err)
 	}
 	svc := secretsmanager.New(sess)
-	_, err = svc.DeleteSecret(&secretsmanager.DeleteSecretInput{
+	_, err = svc.DeleteSecretWithContext(ctx, &secretsmanager.DeleteSecretInput{
 		SecretId:                   aws.String(awsSecretName),
-		ForceDeleteWithoutRecovery: aws.Bool(true),
+		ForceDeleteWithoutRecovery: aws.Bool(true), // permanently delete without 7-day wait
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete AWS secret: %w", err)
