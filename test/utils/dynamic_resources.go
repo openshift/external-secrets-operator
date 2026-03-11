@@ -127,3 +127,46 @@ func (d DynamicResourceLoader) CreateFromFile(assetFunc func(name string) ([]byt
 	d.do(createFunc, assetFunc, filename, overrideNamespace)
 	d.t.Logf("Resource %v created\n", filename)
 }
+
+// CreateFromUnstructured creates a resource from an unstructured object. For namespaced resources, overrideNamespace is applied if non-empty.
+// AlreadyExists is treated as success (idempotent). Other errors cause a test panic.
+func (d DynamicResourceLoader) CreateFromUnstructured(unstructuredObj *unstructured.Unstructured, overrideNamespace string) {
+	err := d.CreateFromUnstructuredReturnErr(unstructuredObj, overrideNamespace)
+	d.noErrorSkipExists(err)
+	if err == nil {
+		d.t.Logf("Resource %s created\n", unstructuredObj.GetName())
+	}
+}
+
+// CreateFromUnstructuredReturnErr creates a resource and returns the error (including AlreadyExists).
+// Use from Ginkgo tests with Expect(err).NotTo(HaveOccurred()) to see the actual API error on failure.
+func (d DynamicResourceLoader) CreateFromUnstructuredReturnErr(unstructuredObj *unstructured.Unstructured, overrideNamespace string) error {
+	dri := d.getResourceInterface(unstructuredObj, overrideNamespace)
+	_, err := dri.Create(context.Background(), unstructuredObj, metav1.CreateOptions{})
+	return err
+}
+
+// DeleteFromUnstructured deletes a resource by name. For cluster-scoped resources, namespace is ignored.
+func (d DynamicResourceLoader) DeleteFromUnstructured(unstructuredObj *unstructured.Unstructured, overrideNamespace string) {
+	dri := d.getResourceInterface(unstructuredObj, overrideNamespace)
+	err := dri.Delete(context.Background(), unstructuredObj.GetName(), metav1.DeleteOptions{})
+	d.noErrorSkipNotExisting(err)
+	d.t.Logf("Resource %s deleted\n", unstructuredObj.GetName())
+}
+
+func (d DynamicResourceLoader) getResourceInterface(unstructuredObj *unstructured.Unstructured, overrideNamespace string) dynamic.ResourceInterface {
+	gvk := unstructuredObj.GroupVersionKind()
+	gr, err := restmapper.GetAPIGroupResources(d.KubeClient.Discovery())
+	require.NoError(d.t, err)
+	mapper := restmapper.NewDiscoveryRESTMapper(gr)
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	require.NoError(d.t, err)
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		if overrideNamespace != "" {
+			unstructuredObj.SetNamespace(overrideNamespace)
+		}
+		require.NotEmpty(d.t, unstructuredObj.GetNamespace(), "Namespace can not be empty for namespaced resource")
+		return d.DynamicClient.Resource(mapping.Resource).Namespace(unstructuredObj.GetNamespace())
+	}
+	return d.DynamicClient.Resource(mapping.Resource)
+}
