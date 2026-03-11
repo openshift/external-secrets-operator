@@ -212,6 +212,7 @@ test-e2e: ## Run e2e tests against a cluster.
 		-count 1 -v -p 1 \
 		-tags e2e ./e2e \
 		-ginkgo.v \
+		-ginkgo.trace \
 		-ginkgo.show-node-events \
 		-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
 
