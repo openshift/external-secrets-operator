@@ -188,6 +188,9 @@ func FetchBitwardenCredsFromSecret(ctx context.Context, client kubernetes.Interf
 		return "", "", "", fmt.Errorf("get Bitwarden creds secret %s/%s: %w", secretNamespace, secretName, err)
 	}
 	token = string(secret.Data[TokenSecretKey])
+	if token == "" {
+		return "", "", "", fmt.Errorf("bitwarden creds secret %s/%s missing required key %q", secretNamespace, secretName, TokenSecretKey)
+	}
 	if v, ok := secret.Data[BitwardenCredKeyOrgID]; ok {
 		orgID = string(v)
 	}
@@ -291,7 +294,7 @@ func WaitForBitwardenSDKServerReachableFromCluster(ctx context.Context, client k
 			},
 			Containers: []corev1.Container{{
 				Name:    "curl",
-				Image:   "docker.io/curlimages/curl:latest",
+				Image:   bitwardenAPITestRunnerImage,
 				Command: cmd,
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: &allowPrivilegeEscalation,

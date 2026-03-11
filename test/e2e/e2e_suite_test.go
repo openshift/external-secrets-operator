@@ -51,18 +51,13 @@ var (
 )
 
 func getTestDir() string {
-	if os.Getenv("OPENSHIFT_CI") == "true" {
-		if d := os.Getenv("ARTIFACT_DIR"); d != "" {
-			return d
-		}
-	}
 	if d := os.Getenv("ARTIFACT_DIR"); d != "" {
 		return d
 	}
 	// Local run: use repo _output.
 	cwd, err := os.Getwd()
 	if err == nil {
-		return filepath.Clean(filepath.Join(cwd, "..", "_output"))
+		return filepath.Clean(filepath.Join(cwd, "..", "..", "_output"))
 	}
 	return "/tmp"
 }
@@ -99,8 +94,19 @@ func TestE2E(t *testing.T) {
 
 	suiteConfig, reportConfig := GinkgoConfiguration()
 
-	// Suite behavior: longer timeout, run all specs after first failure for easier debugging.
-	suiteConfig.Timeout = 90 * time.Minute
+	// Suite timeout must stay within the outer go test -timeout (E2E_TIMEOUT in Makefile) so that
+	// Ginkgo can run AfterSuite and write reports before the process is terminated.
+	const cleanupBuffer = 5 * time.Minute
+	if deadline, ok := t.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining > cleanupBuffer {
+			suiteConfig.Timeout = remaining - cleanupBuffer
+		} else {
+			suiteConfig.Timeout = remaining / 2
+		}
+	} else {
+		suiteConfig.Timeout = 55 * time.Minute
+	}
 	suiteConfig.FailFast = false
 	suiteConfig.FlakeAttempts = 0
 	suiteConfig.MustPassRepeatedly = 1
