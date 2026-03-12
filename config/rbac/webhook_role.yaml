@@ -1,0 +1,57 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-secrets-operator-webhook
+  labels:
+    app.kubernetes.io/name: external-secrets-operator
+    app.kubernetes.io/component: webhook
+rules:
+# Required to list SecretStores for validation
+- apiGroups:
+  - external-secrets.io
+  apiVersions:
+  - v1
+  - v1beta1
+  resources:
+  - secretstores
+  - clustersecretstores
+  verbs:
+  - get
+  - list
+  - watch
+# Required to validate ExternalSecretsConfig
+- apiGroups:
+  - operator.openshift.io
+  apiVersions:
+  - v1alpha1
+  resources:
+  - externalsecretsconfigs
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-secrets-operator-webhook
+  labels:
+    app.kubernetes.io/name: external-secrets-operator
+    app.kubernetes.io/component: webhook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-secrets-operator-webhook
+subjects:
+- kind: ServiceAccount
+  name: external-secrets-operator
+  namespace: external-secrets-operator
+
+
+
+
+
+
+
+
+
