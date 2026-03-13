@@ -32,6 +32,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/openshift/external-secrets-operator/test/utils"
 )
 
 var _ = Describe("Network Policy E2E Tests", Ordered, func() {
@@ -68,6 +70,17 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 			}
 			g.Expect(found).To(BeTrue(), "operator pod should exist")
 		}, 2*time.Minute, 10*time.Second).Should(Succeed())
+	})
+
+	AfterAll(func() {
+		By("Cleaning up ExternalSecretsConfig custom network policies")
+		esc, err := dynamicClient.Resource(escGVR).Get(ctx, "cluster", metav1.GetOptions{})
+		if err == nil {
+			// Remove custom network policies by clearing the field
+			unstructured.RemoveNestedField(esc.Object,
+				"spec", "controllerConfig", "networkPolicies")
+			_, _ = dynamicClient.Resource(escGVR).Update(ctx, esc, metav1.UpdateOptions{})
+		}
 	})
 
 	// Diff-suggested: network policy static assets are created during reconciliation
@@ -122,7 +135,7 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 	// Diff-suggested: custom network policies from ExternalSecretsConfig API
 	Context("Custom Network Policies", func() {
 		It("should create a custom network policy from ExternalSecretsConfig spec", func() {
-			customPolicyName := fmt.Sprintf("e2e-custom-np-%s", getRandomSuffix())
+			customPolicyName := fmt.Sprintf("e2e-custom-np-%s", utils.GetRandomString(5))
 
 			By("Updating ExternalSecretsConfig with a custom network policy")
 			esc, err := dynamicClient.Resource(escGVR).Get(ctx, "cluster", metav1.GetOptions{})
@@ -160,7 +173,7 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 
 		// Diff-suggested: custom network policy egress update
 		It("should update custom network policy egress rules when spec changes", func() {
-			customPolicyName := fmt.Sprintf("e2e-update-np-%s", getRandomSuffix())
+			customPolicyName := fmt.Sprintf("e2e-update-np-%s", utils.GetRandomString(5))
 
 			By("Creating ExternalSecretsConfig with initial custom network policy")
 			esc, err := dynamicClient.Resource(escGVR).Get(ctx, "cluster", metav1.GetOptions{})
@@ -259,7 +272,7 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 	// Diff-suggested: runtime validation warning for misconfigured BitwardenSDKServer policies
 	Context("Network Policy Misconfiguration Warning", func() {
 		It("should emit a warning event when BitwardenSDKServer policy is configured without plugin enabled", func() {
-			bwPolicyName := fmt.Sprintf("e2e-bw-np-%s", getRandomSuffix())
+			bwPolicyName := fmt.Sprintf("e2e-bw-np-%s", utils.GetRandomString(5))
 
 			By("Updating ExternalSecretsConfig with BitwardenSDKServer network policy (plugin not enabled)")
 			esc, err := dynamicClient.Resource(escGVR).Get(ctx, "cluster", metav1.GetOptions{})
@@ -335,7 +348,7 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 	Context("Webhook Accessibility", func() {
 		It("should allow webhook to receive admission requests through network policies", func() {
 			By("Creating a test resource to trigger webhook validation")
-			testNS := fmt.Sprintf("e2e-np-webhook-%s", getRandomSuffix())
+			testNS := fmt.Sprintf("e2e-np-webhook-%s", utils.GetRandomString(5))
 
 			// Create test namespace using dynamic client
 			nsObj := &unstructured.Unstructured{
@@ -400,7 +413,3 @@ var _ = Describe("Network Policy E2E Tests", Ordered, func() {
 	})
 })
 
-// getRandomSuffix returns a short random string for test resource names
-func getRandomSuffix() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano()%100000)
-}
