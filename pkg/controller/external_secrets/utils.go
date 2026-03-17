@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	corev1 "k8s.io/api/core/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,6 +84,23 @@ func (r *Reconciler) validateExternalSecretsConfig(esc *operatorv1alpha1.Externa
 			return fmt.Errorf("spec.controllerConfig.certProvider.certManager.mode is set, but cert-manager is not installed")
 		}
 	}
+
+	// Warn if BitwardenSDKServer network policies are configured but Bitwarden plugin is not enabled.
+	// The policies will still be created (targeting non-existent pods is harmless), but this helps
+	// users detect misconfigurations early.
+	if !isBitwardenConfigEnabled(esc) {
+		for _, np := range esc.Spec.ControllerConfig.NetworkPolicies {
+			if np.ComponentName == operatorv1alpha1.BitwardenSDKServer {
+				r.log.V(1).Info("network policy targets BitwardenSDKServer component but bitwarden plugin is not enabled",
+					"networkPolicy", np.Name,
+					"hint", "enable the bitwarden plugin or remove the BitwardenSDKServer network policy")
+				r.eventRecorder.Eventf(esc, corev1.EventTypeWarning, "NetworkPolicyMisconfiguration",
+					"NetworkPolicy %q targets BitwardenSDKServer but the bitwarden plugin is not enabled", np.Name)
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
