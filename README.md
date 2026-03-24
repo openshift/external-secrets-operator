@@ -129,6 +129,23 @@ kubectl apply -f https://raw.githubusercontent.com/<org>/external-secrets-operat
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
+## Testing
+
+From the repo root you can run:
+
+| Target | Description |
+|--------|-------------|
+| `make test-unit` | Run unit tests (excluding test/e2e, test/apis, test/utils). |
+| `make test-apis` | Run API integration tests (Ginkgo tests in `test/apis` using envtest). |
+| `make test` | Run `test-apis` and `test-unit` (no cluster required). |
+| `make test-e2e` | Run end-to-end tests against a live cluster. |
+
+For e2e tests, including prerequisites and suite-specific commands (e.g. label filters for AWS, Bitwarden, cross-platform), see [test/e2e/README.md](test/e2e/README.md). Example:
+
+```sh
+make test-e2e E2E_GINKGO_LABEL_FILTER="<label-filter>"
+```
+
 ## Contributing
 We welcome contributions from the community! To contribute:
 
