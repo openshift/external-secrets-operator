@@ -23,7 +23,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +33,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/restmapper"
+
+	"github.com/stretchr/testify/require"
 )
 
 type DynamicResourceLoader struct {
@@ -54,6 +55,75 @@ func NewDynamicResourceLoader(context context.Context, t *testing.T) DynamicReso
 		context:       context,
 		t:             t,
 	}
+}
+
+func (d DynamicResourceLoader) DeleteFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
+	d.t.Logf("Deleting resource %v\n", filename)
+	deleteFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
+		err := dynamicResourceInterface.Delete(d.context, unstructured.GetName(), metav1.DeleteOptions{})
+		d.noErrorSkipNotExisting(err)
+	}
+
+	d.do(deleteFunc, assetFunc, filename, overrideNamespace)
+	d.t.Logf("Resource %v deleted\n", filename)
+}
+
+func (d DynamicResourceLoader) CreateFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
+	d.t.Logf("Creating resource %v\n", filename)
+	createFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
+		_, err := dynamicResourceInterface.Create(d.context, unstructured, metav1.CreateOptions{})
+		d.noErrorSkipExists(err)
+	}
+
+	d.do(createFunc, assetFunc, filename, overrideNamespace)
+	d.t.Logf("Resource %v created\n", filename)
+}
+
+// CreateFromUnstructured creates a resource from an unstructured object. For namespaced resources, overrideNamespace is applied if non-empty.
+// AlreadyExists is treated as success (idempotent). Other errors cause a test panic.
+func (d DynamicResourceLoader) CreateFromUnstructured(unstructuredObj *unstructured.Unstructured, overrideNamespace string) {
+	err := d.CreateFromUnstructuredReturnErr(unstructuredObj, overrideNamespace)
+	d.noErrorSkipExists(err)
+	if err == nil {
+		d.t.Logf("Resource %s created\n", unstructuredObj.GetName())
+	}
+}
+
+// CreateFromUnstructuredReturnErr creates a resource and returns the error (including AlreadyExists).
+// Use from Ginkgo tests with Expect(err).NotTo(HaveOccurred()) to see the actual API error on failure.
+func (d DynamicResourceLoader) CreateFromUnstructuredReturnErr(unstructuredObj *unstructured.Unstructured, overrideNamespace string) error {
+	dri := d.getResourceInterface(unstructuredObj, overrideNamespace)
+	_, err := dri.Create(d.context, unstructuredObj, metav1.CreateOptions{})
+	return err
+}
+
+// DeleteFromUnstructured deletes a resource by name. For cluster-scoped resources, namespace is ignored.
+func (d DynamicResourceLoader) DeleteFromUnstructured(unstructuredObj *unstructured.Unstructured, overrideNamespace string) {
+	dri := d.getResourceInterface(unstructuredObj, overrideNamespace)
+	err := dri.Delete(d.context, unstructuredObj.GetName(), metav1.DeleteOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		require.NoError(d.t, err)
+	}
+	if err == nil || k8serrors.IsNotFound(err) {
+		d.t.Logf("Resource %s deleted\n", unstructuredObj.GetName())
+	}
+}
+
+func (d DynamicResourceLoader) getResourceInterface(unstructuredObj *unstructured.Unstructured, overrideNamespace string) dynamic.ResourceInterface {
+	gvk := unstructuredObj.GroupVersionKind()
+	gr, err := restmapper.GetAPIGroupResources(d.KubeClient.Discovery())
+	require.NoError(d.t, err)
+	mapper := restmapper.NewDiscoveryRESTMapper(gr)
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	require.NoError(d.t, err)
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		if overrideNamespace != "" {
+			unstructuredObj.SetNamespace(overrideNamespace)
+		}
+		require.NotEmpty(d.t, unstructuredObj.GetNamespace(), "Namespace can not be empty for namespaced resource")
+		return d.DynamicClient.Resource(mapping.Resource).Namespace(unstructuredObj.GetNamespace())
+	}
+	return d.DynamicClient.Resource(mapping.Resource)
 }
 
 func (d DynamicResourceLoader) noErrorSkipExists(err error) {
@@ -77,7 +147,7 @@ func (d DynamicResourceLoader) do(do doFunc, assetFunc func(name string) ([]byte
 	err = decoder.Decode(&rawObj)
 	require.NoError(d.t, err)
 
-	obj, gvk, err := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme).Decode(rawObj.Raw, nil, nil)
+	obj, _, err := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme).Decode(rawObj.Raw, nil, nil)
 	require.NoError(d.t, err)
 
 	unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
@@ -85,45 +155,9 @@ func (d DynamicResourceLoader) do(do doFunc, assetFunc func(name string) ([]byte
 
 	unstructuredObj := &unstructured.Unstructured{Object: unstructuredMap}
 
-	gr, err := restmapper.GetAPIGroupResources(d.KubeClient.Discovery())
-	require.NoError(d.t, err)
-
-	mapper := restmapper.NewDiscoveryRESTMapper(gr)
-	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	require.NoError(d.t, err)
-
-	var dri dynamic.ResourceInterface
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		if overrideNamespace != "" {
-			unstructuredObj.SetNamespace(overrideNamespace)
-		}
-		require.NotEmpty(d.t, unstructuredObj.GetNamespace(), "Namespace can not be empty!")
-		dri = d.DynamicClient.Resource(mapping.Resource).Namespace(unstructuredObj.GetNamespace())
-	} else {
-		dri = d.DynamicClient.Resource(mapping.Resource)
+	if overrideNamespace != "" {
+		unstructuredObj.SetNamespace(overrideNamespace)
 	}
-
+	dri := d.getResourceInterface(unstructuredObj, overrideNamespace)
 	do(d.t, unstructuredObj, dri)
-}
-
-func (d DynamicResourceLoader) DeleteFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
-	d.t.Logf("Deleting resource %v\n", filename)
-	deleteFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
-		err := dynamicResourceInterface.Delete(context.Background(), unstructured.GetName(), metav1.DeleteOptions{})
-		d.noErrorSkipNotExisting(err)
-	}
-
-	d.do(deleteFunc, assetFunc, filename, overrideNamespace)
-	d.t.Logf("Resource %v deleted\n", filename)
-}
-
-func (d DynamicResourceLoader) CreateFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
-	d.t.Logf("Creating resource %v\n", filename)
-	createFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
-		_, err := dynamicResourceInterface.Create(context.Background(), unstructured, metav1.CreateOptions{})
-		d.noErrorSkipExists(err)
-	}
-
-	d.do(createFunc, assetFunc, filename, overrideNamespace)
-	d.t.Logf("Resource %v created\n", filename)
 }
