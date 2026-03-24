@@ -41,8 +41,12 @@ import (
 )
 
 const (
-	awsCredSecretName             = "aws-creds"
-	awsCredNamespace              = "kube-system"
+	// AWSCredSecretName and AWSCredNamespace are the fixed name and namespace for the K8s secret
+	// that holds AWS credentials (e.g. for Platform:AWS and CrossPlatform:GCP-AWS e2e). Document in docs/e2e.
+	AWSCredSecretName             = "aws-creds"
+	AWSCredNamespace              = "kube-system"
+	awsCredSecretName             = AWSCredSecretName
+	awsCredNamespace              = AWSCredNamespace
 	awsCredAccessKeySecretKeyName = "aws_secret_access_key"
 	awsCredKeyIdSecretKeyName     = "aws_access_key_id"
 )
@@ -228,11 +232,34 @@ func fetchAWSCreds(ctx context.Context, k8sClient *kubernetes.Clientset) (string
 }
 
 func DeleteAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, region string) error {
-	id, key, err := fetchAWSCreds(ctx, k8sClient)
-	if err != nil {
-		return err
-	}
+	return DeleteAWSSecretFromCredsSecret(ctx, k8sClient, awsCredSecretName, awsCredNamespace, secretName, region)
+}
 
+// FetchAWSCredsFromSecret returns AWS access key ID and secret from the given Kubernetes secret.
+// The secret must have keys aws_access_key_id and aws_secret_access_key.
+func FetchAWSCredsFromSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secretName, secretNamespace string) (accessKeyID, secretAccessKey string, err error) {
+	cred, err := k8sClient.CoreV1().Secrets(secretNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", err
+	}
+	id, ok := cred.Data[awsCredKeyIdSecretKeyName]
+	if !ok || len(id) == 0 {
+		return "", "", fmt.Errorf("secret %s/%s is missing %q", secretNamespace, secretName, awsCredKeyIdSecretKeyName)
+	}
+	key, ok := cred.Data[awsCredAccessKeySecretKeyName]
+	if !ok || len(key) == 0 {
+		return "", "", fmt.Errorf("secret %s/%s is missing %q", secretNamespace, secretName, awsCredAccessKeySecretKeyName)
+	}
+	return string(id), string(key), nil
+}
+
+// DeleteAWSSecretFromCredsSecret deletes an AWS Secrets Manager secret using credentials from the given Kubernetes secret.
+// Used for cross-platform e2e (e.g. GCP cluster accessing AWS Secrets Manager).
+func DeleteAWSSecretFromCredsSecret(ctx context.Context, k8sClient *kubernetes.Clientset, credSecretName, credSecretNamespace, awsSecretName, region string) error {
+	id, key, err := FetchAWSCredsFromSecret(ctx, k8sClient, credSecretName, credSecretNamespace)
+	if err != nil {
+		return fmt.Errorf("fetch AWS creds from secret %s/%s: %w", credSecretNamespace, credSecretName, err)
+	}
 	sess, err := session.NewSession(&aws.Config{
 		Credentials: awscred.NewCredentials(&awscred.StaticProvider{Value: awscred.Value{
 			AccessKeyID:     id,
@@ -243,10 +270,9 @@ func DeleteAWSSecret(ctx context.Context, k8sClient *kubernetes.Clientset, secre
 	if err != nil {
 		return fmt.Errorf("failed to create AWS session: %w", err)
 	}
-
 	svc := secretsmanager.New(sess)
-	_, err = svc.DeleteSecret(&secretsmanager.DeleteSecretInput{
-		SecretId:                   aws.String(secretName),
+	_, err = svc.DeleteSecretWithContext(ctx, &secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(awsSecretName),
 		ForceDeleteWithoutRecovery: aws.Bool(true), // permanently delete without 7-day wait
 	})
 	if err != nil {

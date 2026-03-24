@@ -179,7 +179,7 @@ generate: $(CONTROLLER_GEN) ## Generate code containing DeepCopy, DeepCopyInto, 
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Targets that need Go workspace mode (CI sets GOFLAGS=-mod=vendor which conflicts with go.work)
-fmt vet test test-unit test-e2e run update-vendor update-dep: GOFLAGS=
+fmt vet test test-unit test-e2e e2e-coverage-publish run update-vendor update-dep: GOFLAGS=
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -212,8 +212,51 @@ test-e2e: ## Run e2e tests against a cluster.
 		-count 1 -v -p 1 \
 		-tags e2e ./e2e \
 		-ginkgo.v \
+		-ginkgo.trace \
 		-ginkgo.show-node-events \
 		-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
+
+# Codecov uploader version for reproducible, verifiable downloads.
+CODECOV_VERSION ?= v0.7.6
+CODECOV_URL = https://uploader.codecov.io/$(CODECOV_VERSION)/linux/codecov
+CODECOV_SHA_URL = $(CODECOV_URL).SHA256SUM
+
+# E2E_COVERAGE_DIR is the local directory to store coverage data copied from the operator pod.
+E2E_COVERAGE_DIR ?= $(OUTPUTS_PATH)/e2e-cover-data
+# E2E_COVERAGE_NAMESPACE is the namespace where the operator is deployed during e2e tests.
+E2E_COVERAGE_NAMESPACE ?= external-secrets-operator
+.PHONY: e2e-coverage-publish
+e2e-coverage-publish: $(OUTPUTS_PATH) ## Collect e2e coverage data from the operator pod and upload to Codecov.
+	@echo "Collecting e2e coverage data..."
+	@POD=$$($(KUBECTL) get pod -n $(E2E_COVERAGE_NAMESPACE) \
+		-l control-plane=controller-manager \
+		-o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && \
+	if [ -z "$$POD" ]; then \
+		echo "Error: No operator pod found in namespace $(E2E_COVERAGE_NAMESPACE)"; \
+		exit 1; \
+	fi && \
+	echo "Found operator pod: $$POD" && \
+	mkdir -p $(E2E_COVERAGE_DIR) && \
+	$(KUBECTL) cp "$(E2E_COVERAGE_NAMESPACE)/$$POD:/tmp/e2e-cover/." $(E2E_COVERAGE_DIR) -c manager && \
+	echo "Coverage data copied to $(E2E_COVERAGE_DIR)" && \
+	$(KUBECTL) scale deployment external-secrets-operator-controller-manager \
+		--replicas=0 -n $(E2E_COVERAGE_NAMESPACE) || true
+	@if [ -d "$(E2E_COVERAGE_DIR)" ] && [ "$$(ls -A $(E2E_COVERAGE_DIR) 2>/dev/null)" ]; then \
+		echo "Converting coverage data to Go format..."; \
+		go tool covdata textfmt -i=$(E2E_COVERAGE_DIR) -o=$(OUTPUTS_PATH)/coverage-e2e.out; \
+		echo "Coverage summary:"; \
+		go tool covdata percent -i=$(E2E_COVERAGE_DIR) || true; \
+		echo "Uploading to Codecov..."; \
+		curl -sS -o $(OUTPUTS_PATH)/codecov $(CODECOV_URL) && \
+		curl -sS -o $(OUTPUTS_PATH)/codecov.SHA256SUM $(CODECOV_SHA_URL) && \
+		cd $(OUTPUTS_PATH) && sha256sum -c codecov.SHA256SUM && cd $(PROJECT_ROOT) && \
+		chmod +x $(OUTPUTS_PATH)/codecov && \
+		$(OUTPUTS_PATH)/codecov --file=$(OUTPUTS_PATH)/coverage-e2e.out --flags=e2e --name="E2E Coverage" --verbose && \
+		rm -f $(OUTPUTS_PATH)/codecov $(OUTPUTS_PATH)/codecov.SHA256SUM; \
+	else \
+		echo "Warning: No coverage data found in $(E2E_COVERAGE_DIR)"; \
+		exit 1; \
+	fi
 
 .PHONY: test-apis
 test-apis: $(ENVTEST) $(GINKGO) ## Run API integration tests.

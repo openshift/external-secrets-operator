@@ -29,17 +29,16 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -91,19 +90,9 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		var err error
 		loader = utils.NewDynamicResourceLoader(ctx, &testing.T{})
 
-		clientset, err = kubernetes.NewForConfig(cfg)
-		Expect(err).Should(BeNil())
-
-		dynamicClient, err = dynamic.NewForConfig(cfg)
-		Expect(err).Should(BeNil())
-
-		// Create scheme and register types
-		scheme := runtime.NewScheme()
-		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-		utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
-
-		runtimeClient, err = client.New(cfg, client.Options{Scheme: scheme})
-		Expect(err).Should(BeNil())
+		clientset = suiteClientset
+		dynamicClient = suiteDynamicClient
+		runtimeClient = suiteRuntimeClient
 
 		awsSecretName = fmt.Sprintf("eso-e2e-secret-%s", utils.GetRandomString(5))
 
@@ -126,8 +115,15 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			operatorPodPrefix,
 		})).To(Succeed())
 
-		By("Creating the externalsecrets.openshift.operator.io/cluster CR")
-		loader.CreateFromFile(testassets.ReadFile, externalSecretsFile, "")
+		esc := &operatorv1alpha1.ExternalSecretsConfig{}
+		if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, esc); err != nil {
+			if k8serrors.IsNotFound(err) {
+				By("Creating the externalsecrets.openshift.operator.io/cluster CR")
+				loader.CreateFromFile(testassets.ReadFile, externalSecretsFile, "")
+			} else {
+				Expect(err).NotTo(HaveOccurred(), "failed to get cluster ExternalSecretsConfig")
+			}
+		}
 
 		By("Waiting for ExternalSecretsConfig to be Ready (with Degraded=False)")
 		Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute)).To(Succeed(),
@@ -141,6 +137,17 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			operandCertControllerPodPrefix,
 			operandWebhookPodPrefix,
 		})).To(Succeed())
+	})
+
+	AfterEach(func() {
+		if !CurrentSpecReport().State.Is(types.SpecStateFailureStates) {
+			return
+		}
+		artifactDir := getTestDir()
+		By(fmt.Sprintf("Test failed: dumping logs and resources to %s/e2e-artifacts/", artifactDir))
+		if err := utils.DumpE2EArtifacts(ctx, clientset, dynamicClient, operatorNamespace, operandNamespace, testNamespace, artifactDir); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to dump e2e artifacts: %v\n", err)
+		}
 	})
 
 	Context("AWS Secret Manager", Label("Platform:AWS"), func() {
@@ -200,6 +207,108 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 			By("Creating PushSecret")
 			assetFunc := utils.ReplacePatternInAsset(awsSecretNamePattern, awsSecretName,
+				awsClusterSecretStoreNamePattern, clusterSecretStoreResourceName)
+			loader.CreateFromFile(assetFunc, pushSecretFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, pushSecretFile, testNamespace)
+
+			By("Waiting for PushSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1alpha1APIVersion,
+					Resource: PushSecretsKind,
+				},
+				testNamespace, pushSecretResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret")
+			loader.CreateFromFile(assetFunc, externalSecretFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, externalSecretFile, testNamespace)
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				testNamespace, externalSecretResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Waiting for target secret to be created with expected data")
+			Eventually(func(g Gomega) {
+				secret, err := loader.KubeClient.CoreV1().Secrets(testNamespace).Get(ctx, secretResourceName, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "should get %s from namespace %s", secretResourceName, testNamespace)
+
+				val, ok := secret.Data[keyNameInSecret]
+				g.Expect(ok).To(BeTrue(), "%s should be present in secret %s", keyNameInSecret, secret.Name)
+
+				g.Expect(val).To(Equal(expectedSecretValue), "%s does not match expected value", keyNameInSecret)
+			}, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Cross-platform: GCP cluster and AWS Secrets Manager", Label("CrossPlatform:GCP-AWS"), func() {
+		const (
+			externalSecretFile               = "testdata/aws_external_secret.yaml"
+			pushSecretFile                   = "testdata/push_secret.yaml"
+			awsSecretToPushFile              = "testdata/aws_k8s_push_secret.yaml"
+			awsSecretNamePattern             = "${AWS_SECRET_KEY_NAME}"
+			awsSecretValuePattern            = "${SECRET_VALUE}"
+			awsClusterSecretStoreNamePattern = "${CLUSTERSECRETSTORE_NAME}"
+			awsSecretRegionName              = "ap-south-1"
+		)
+		var crossPlatformAWSSecretName string
+
+		AfterAll(func() {
+			if crossPlatformAWSSecretName != "" {
+				By("Deleting the AWS secret")
+				Expect(utils.DeleteAWSSecretFromCredsSecret(ctx, clientset, utils.AWSCredSecretName, utils.AWSCredNamespace, crossPlatformAWSSecretName, awsSecretRegionName)).
+					NotTo(HaveOccurred(), "failed to delete AWS secret (cross-platform e2e)")
+			}
+		})
+
+		It("should create secrets using ClusterSecretStore with AWS credentials secret in fixed namespace", func() {
+			var (
+				clusterSecretStoreResourceName = fmt.Sprintf("aws-secret-store-cross-%s", utils.GetRandomString(5))
+				pushSecretResourceName         = "aws-push-secret"
+				externalSecretResourceName     = "aws-external-secret"
+				secretResourceName             = "aws-secret"
+				keyNameInSecret                = "aws_secret_access_key"
+			)
+
+			crossPlatformAWSSecretName = fmt.Sprintf("e2e-cross-platform-%s", utils.GetRandomString(8))
+			defer func() {
+				if crossPlatformAWSSecretName != "" {
+					_ = utils.DeleteAWSSecretFromCredsSecret(ctx, clientset, utils.AWSCredSecretName, utils.AWSCredNamespace, crossPlatformAWSSecretName, awsSecretRegionName)
+				}
+			}()
+
+			expectedSecretValue, err := utils.ReadExpectedSecretValue(expectedSecretValueFile)
+			Expect(err).To(Succeed())
+
+			By("Creating kubernetes secret to be used in PushSecret")
+			secretsAssetFunc := utils.ReplacePatternInAsset(awsSecretValuePattern, base64.StdEncoding.EncodeToString(expectedSecretValue))
+			loader.CreateFromFile(secretsAssetFunc, awsSecretToPushFile, testNamespace)
+			defer loader.DeleteFromFile(testassets.ReadFile, awsSecretToPushFile, testNamespace)
+
+			By("Creating ClusterSecretStore (AWS) from API")
+			cssObj := utils.AWSClusterSecretStore(clusterSecretStoreResourceName, awsSecretRegionName)
+			loader.CreateFromUnstructured(cssObj, "")
+			defer loader.DeleteFromUnstructured(cssObj, "")
+
+			By("Waiting for ClusterSecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: clusterSecretStoresKind,
+				},
+				"", clusterSecretStoreResourceName, time.Minute,
+			)).To(Succeed())
+
+			By("Creating PushSecret")
+			assetFunc := utils.ReplacePatternInAsset(awsSecretNamePattern, crossPlatformAWSSecretName,
 				awsClusterSecretStoreNamePattern, clusterSecretStoreResourceName)
 			loader.CreateFromFile(assetFunc, pushSecretFile, testNamespace)
 			defer loader.DeleteFromFile(testassets.ReadFile, pushSecretFile, testNamespace)
