@@ -215,6 +215,20 @@ test-e2e: ## Run e2e tests against a cluster.
 		-ginkgo.trace \
 		-ginkgo.show-node-events \
 		-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
+	
+.PHONY: e2e-test-vault  # Run the e2e tests against a Kind k8s instance that is spun up.
+e2e-test-vault:
+	@go test -C $(PROJECT_ROOT)/test \
+	-timeout $(E2E_TIMEOUT) \
+	-count 1 \
+	-v \
+	-p 1 \
+	-tags e2e \
+	./e2e \
+	-ginkgo.v \
+	-ginkgo.trace \
+	-ginkgo.show-node-events \
+	-ginkgo.label-filter="$(E2E_GINKGO_LABEL_FILTER)"
 
 .PHONY: test-apis
 test-apis: $(ENVTEST) $(GINKGO) ## Run API integration tests.
