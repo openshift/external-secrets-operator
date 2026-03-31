@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -130,6 +131,38 @@ type ControllerConfig struct {
 	// +listMapKey=name
 	// +listMapKey=componentName
 	NetworkPolicies []NetworkPolicy `json:"networkPolicies,omitempty"`
+
+	// annotations allows adding custom annotations to all external-secrets component
+	// Deployments and Pod templates. These annotations are applied globally to all
+	// operand components (Controller, Webhook, CertController, BitwardenSDKServer).
+	// These annotations are merged with any default annotations set by the operator.
+	// User-specified annotations take precedence over defaults in case of conflicts.
+	// Annotations with keys starting with kubernetes.io/, app.kubernetes.io/, openshift.io/, or k8s.io/
+	// are reserved and cannot be overridden.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(a, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, a.key.startsWith(p)))",message="annotations with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/' are not allowed"
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=50
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=key
+	// +optional
+	Annotations []Annotation `json:"annotations,omitempty"`
+
+	// componentConfigs allows specifying component-specific configuration overrides
+	// for external-secrets operand components (Controller, Webhook, CertController, BitwardenSDKServer).
+	// Each entry targets a specific component and allows overriding deployment-level
+	// settings and environment variables for that component.
+	// The componentName must be unique across all entries.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(x, self.exists_one(y, x.componentName == y.componentName))",message="componentName must be unique across all componentConfig entries"
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=4
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=componentName
+	// +optional
+	ComponentConfigs []ComponentConfig `json:"componentConfigs,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
@@ -219,6 +252,12 @@ const (
 	// CoreController represents the external-secrets component
 	CoreController ComponentName = "ExternalSecretsCoreController"
 
+	// Webhook represents the external-secrets webhook component
+	Webhook ComponentName = "Webhook"
+
+	// CertController represents the external-secrets cert-controller component
+	CertController ComponentName = "CertController"
+
 	// BitwardenSDKServer represents the bitwarden-sdk-server component
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
 )
@@ -248,4 +287,70 @@ type NetworkPolicy struct {
 	// +kubebuilder:validation:Required
 	//+listType=atomic
 	Egress []networkingv1.NetworkPolicyEgressRule `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
+}
+
+// ComponentConfig holds per-component configuration overrides for an external-secrets operand component.
+// Each entry targets a specific component identified by componentName and allows overriding
+// deployment-level settings and environment variables.
+type ComponentConfig struct {
+	// componentName specifies which deployment component this configuration applies to.
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
+	// +kubebuilder:validation:Required
+	ComponentName ComponentName `json:"componentName"`
+
+	// deploymentConfig allows specifying deployment-level configuration overrides
+	// for the component, such as revision history limits.
+	// +kubebuilder:validation:Optional
+	// +optional
+	DeploymentConfig DeploymentConfig `json:"deploymentConfig,omitempty"`
+
+	// overrideEnv allows setting custom environment variables for the component's container.
+	// These environment variables are merged with the default environment variables set by
+	// the operator. User-specified variables take precedence in case of conflicts.
+	// Environment variables with names starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_
+	// are reserved and cannot be overridden.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
+	// +kubebuilder:validation:MinItems:=0
+	// +kubebuilder:validation:MaxItems:=50
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	// +optional
+	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+}
+
+// DeploymentConfig holds deployment-level configuration overrides.
+type DeploymentConfig struct {
+	// revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.
+	// A minimum value of 1 is enforced to ensure rollback capability is always maintained.
+	// When omitted, this means the user has no opinion and the value is left to the
+	// platform to choose a good default, which is subject to change over time.
+	// The current default is 10.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Optional
+	// +optional
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
+}
+
+// KVPair represents a generic key-value pair used for configuration metadata.
+type KVPair struct {
+	// key is the metadata key. It must be a non-empty string with a maximum length of 317 characters,
+	// conforming to Kubernetes annotation key conventions (optional prefix + name).
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=317
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// value is the metadata value. It must have a maximum length of 4096 characters.
+	// +kubebuilder:validation:MaxLength:=4096
+	// +kubebuilder:validation:Optional
+	// +optional
+	Value string `json:"value,omitempty"`
+}
+
+// Annotation represents a custom annotation key-value pair to be applied to operand resources.
+type Annotation struct {
+	// Embedded KVPair provides key and value fields.
+	KVPair `json:",inline"`
 }
