@@ -112,6 +112,29 @@ type ProxyConfig struct {
 	NoProxy string `json:"noProxy,omitempty"`
 }
 
+// KVPair represents a generic key-value pair for configuration.
+type KVPair struct {
+	// key is the name of the key-value pair.
+	// This field must be non-empty and can have a maximum of 317 characters.
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=317
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// value is the value of the key-value pair.
+	// This field can have a maximum of 4096 characters.
+	// +kubebuilder:validation:MaxLength:=4096
+	// +kubebuilder:validation:Optional
+	Value string `json:"value,omitempty"`
+}
+
+// Annotation represents a custom annotation key-value pair.
+// It embeds KVPair inline for reusability.
+type Annotation struct {
+	// Embedded KVPair provides key and value fields.
+	KVPair `json:",inline"`
+}
+
 // Mode indicates the operational state of the optional features.
 type Mode string
 

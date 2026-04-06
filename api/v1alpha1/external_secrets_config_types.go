@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -113,6 +114,35 @@ type ControllerConfig struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 
+	// annotations allows adding custom annotations to all external-secrets component
+	// Deployments and Pod templates. These annotations are applied globally to all
+	// operand components (Controller, Webhook, CertController, BitwardenSDKServer).
+	// These annotations are merged with any default annotations set by the operator.
+	// User-specified annotations take precedence over defaults in case of conflicts.
+	// Annotations with keys starting with kubernetes.io/, app.kubernetes.io/, openshift.io/, or k8s.io/
+	// are reserved and cannot be overridden.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(a, !['kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/'].exists(p, a.key.startsWith(p)))",message="annotations with reserved prefixes 'kubernetes.io/', 'app.kubernetes.io/', 'openshift.io/', 'k8s.io/' are not allowed"
+	// +kubebuilder:validation:MaxItems:=50
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=key
+	// +optional
+	Annotations []Annotation `json:"annotations,omitempty"`
+
+	// componentConfigs allows specifying component-specific configuration overrides for
+	// individual external-secrets components (Controller, Webhook, CertController, BitwardenSDKServer).
+	// Each entry configures deployment-level overrides and custom environment variables for a single component.
+	// The componentName must be unique across all entries.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(x, self.exists_one(y, x.componentName == y.componentName))",message="componentName must be unique across all componentConfig entries"
+	// +kubebuilder:validation:MaxItems:=4
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=componentName
+	// +optional
+	ComponentConfigs []ComponentConfig `json:"componentConfigs,omitempty"`
+
 	// networkPolicies specifies the list of network policy configurations
 	// to be applied to external-secrets pods.
 	//
@@ -212,14 +242,61 @@ type CertProvidersConfig struct {
 	CertManager *CertManagerConfig `json:"certManager,omitempty"`
 }
 
-// ComponentName represents the different external-secrets components that can have network policies applied.
+// ComponentConfig allows specifying configuration overrides for a single external-secrets component.
+// This includes deployment-level configuration such as revisionHistoryLimit and custom environment variables.
+type ComponentConfig struct {
+	// componentName specifies which deployment component this configuration applies to.
+	// Each component can only appear once in the componentConfigs list.
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
+	// +kubebuilder:validation:Required
+	ComponentName ComponentName `json:"componentName"`
+
+	// deploymentConfig allows specifying deployment-level configuration overrides
+	// for the specified component.
+	// +kubebuilder:validation:Optional
+	// +optional
+	DeploymentConfig DeploymentConfig `json:"deploymentConfig,omitempty"`
+
+	// overrideEnv allows setting custom environment variables for the component's container.
+	// These environment variables are merged with the default environment variables set by
+	// the operator. User-specified variables take precedence in case of conflicts.
+	// Environment variables with names starting with HOSTNAME, KUBERNETES_, or EXTERNAL_SECRETS_ are reserved
+	// and cannot be overridden.
+	//
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
+	// +kubebuilder:validation:MaxItems:=50
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
+	// +optional
+	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+}
+
+// DeploymentConfig allows specifying deployment-level configuration overrides.
+type DeploymentConfig struct {
+	// revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback.
+	// Minimum value of 1 is enforced to ensure rollback capability.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Optional
+	// +optional
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
+}
+
+// ComponentName represents the different external-secrets components that can be configured.
 type ComponentName string
 
 const (
-	// CoreController represents the external-secrets component
+	// CoreController represents the external-secrets core controller component.
 	CoreController ComponentName = "ExternalSecretsCoreController"
 
-	// BitwardenSDKServer represents the bitwarden-sdk-server component
+	// Webhook represents the external-secrets webhook component.
+	Webhook ComponentName = "Webhook"
+
+	// CertController represents the external-secrets cert-controller component.
+	CertController ComponentName = "CertController"
+
+	// BitwardenSDKServer represents the bitwarden-sdk-server component.
 	BitwardenSDKServer ComponentName = "BitwardenSDKServer"
 )
 
@@ -234,7 +311,7 @@ type NetworkPolicy struct {
 	Name string `json:"name"`
 
 	// componentName specifies which external-secrets component this network policy applies to.
-	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;BitwardenSDKServer
+	// +kubebuilder:validation:Enum:=ExternalSecretsCoreController;Webhook;CertController;BitwardenSDKServer
 	// +kubebuilder:validation:Required
 	ComponentName ComponentName `json:"componentName"`
 
