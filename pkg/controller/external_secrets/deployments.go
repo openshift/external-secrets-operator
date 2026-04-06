@@ -148,6 +148,15 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
 
+	// Apply global annotations from ControllerConfig to Deployment and Pod template.
+	applyAnnotationsToDeployment(deployment, esc)
+
+	// Apply per-component configuration overrides (revisionHistoryLimit, overrideEnv).
+	componentName := getComponentNameForDeploymentAsset(assetName)
+	if componentName != "" {
+		applyComponentConfig(deployment, esc, componentName)
+	}
+
 	return deployment, nil
 }
 
@@ -659,4 +668,80 @@ func (r *Reconciler) removeTrustedCAVolumeMount(container *corev1.Container) {
 		}
 	}
 	container.VolumeMounts = filteredVolumeMounts
+}
+
+// applyAnnotationsToDeployment merges annotations from ControllerConfig.Annotations into
+// the Deployment's metadata and Pod template's metadata. User-specified annotations take
+// precedence over defaults. Annotations with reserved prefixes are already blocked by
+// CRD-level CEL validation, so they are not checked here.
+func applyAnnotationsToDeployment(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	if len(esc.Spec.ControllerConfig.Annotations) == 0 {
+		return
+	}
+
+	// Apply to Deployment metadata annotations
+	deploymentAnnotations := deployment.GetAnnotations()
+	if deploymentAnnotations == nil {
+		deploymentAnnotations = make(map[string]string, len(esc.Spec.ControllerConfig.Annotations))
+	}
+	for _, annotation := range esc.Spec.ControllerConfig.Annotations {
+		deploymentAnnotations[annotation.Key] = annotation.Value
+	}
+	deployment.SetAnnotations(deploymentAnnotations)
+
+	// Apply to Pod template annotations
+	podAnnotations := deployment.Spec.Template.GetAnnotations()
+	if podAnnotations == nil {
+		podAnnotations = make(map[string]string, len(esc.Spec.ControllerConfig.Annotations))
+	}
+	for _, annotation := range esc.Spec.ControllerConfig.Annotations {
+		podAnnotations[annotation.Key] = annotation.Value
+	}
+	deployment.Spec.Template.SetAnnotations(podAnnotations)
+}
+
+// applyComponentConfig applies per-component configuration overrides from
+// ComponentConfig to the corresponding Deployment. This includes:
+// - revisionHistoryLimit: sets spec.revisionHistoryLimit on the Deployment
+// - overrideEnv: merges custom environment variables into all containers
+func applyComponentConfig(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, componentName operatorv1alpha1.ComponentName) {
+	cc := getComponentConfig(esc, componentName)
+	if cc == nil {
+		return
+	}
+
+	// Apply revisionHistoryLimit if specified
+	if cc.DeploymentConfig.RevisionHistoryLimit != nil {
+		deployment.Spec.RevisionHistoryLimit = cc.DeploymentConfig.RevisionHistoryLimit
+	}
+
+	// Merge overrideEnv into all containers in the Pod template
+	if len(cc.OverrideEnv) > 0 {
+		for i := range deployment.Spec.Template.Spec.Containers {
+			mergeEnvVars(&deployment.Spec.Template.Spec.Containers[i], cc.OverrideEnv)
+		}
+	}
+}
+
+// mergeEnvVars merges override environment variables into a container's existing env list.
+// User-specified variables take precedence over defaults in case of conflicts.
+// Reserved prefixes are already blocked by CRD-level CEL validation.
+func mergeEnvVars(container *corev1.Container, overrideEnv []corev1.EnvVar) {
+	if container.Env == nil {
+		container.Env = make([]corev1.EnvVar, 0, len(overrideEnv))
+	}
+
+	for _, override := range overrideEnv {
+		found := false
+		for i, existing := range container.Env {
+			if existing.Name == override.Name {
+				container.Env[i] = override
+				found = true
+				break
+			}
+		}
+		if !found {
+			container.Env = append(container.Env, override)
+		}
+	}
 }

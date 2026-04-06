@@ -124,6 +124,50 @@ func (r *Reconciler) IsCertManagerInstalled() bool {
 	return ok
 }
 
+// deploymentAssetNameForComponent maps a ComponentName enum to its corresponding deployment asset name.
+// Returns empty string if no deployment asset is associated with the given component name.
+func deploymentAssetNameForComponent(name operatorv1alpha1.ComponentName) string {
+	switch name {
+	case operatorv1alpha1.CoreController:
+		return controllerDeploymentAssetName
+	case operatorv1alpha1.Webhook:
+		return webhookDeploymentAssetName
+	case operatorv1alpha1.CertController:
+		return certControllerDeploymentAssetName
+	case operatorv1alpha1.BitwardenSDKServer:
+		return bitwardenDeploymentAssetName
+	default:
+		return ""
+	}
+}
+
+// getComponentConfig returns the ComponentConfig for the given component name from the ControllerConfig.
+// Returns nil if no ComponentConfig is found for the given component.
+func getComponentConfig(esc *operatorv1alpha1.ExternalSecretsConfig, componentName operatorv1alpha1.ComponentName) *operatorv1alpha1.ComponentConfig {
+	for i := range esc.Spec.ControllerConfig.ComponentConfigs {
+		if esc.Spec.ControllerConfig.ComponentConfigs[i].ComponentName == componentName {
+			return &esc.Spec.ControllerConfig.ComponentConfigs[i]
+		}
+	}
+	return nil
+}
+
+// getComponentNameForDeploymentAsset maps a deployment asset name back to a ComponentName.
+func getComponentNameForDeploymentAsset(assetName string) operatorv1alpha1.ComponentName {
+	switch assetName {
+	case controllerDeploymentAssetName:
+		return operatorv1alpha1.CoreController
+	case webhookDeploymentAssetName:
+		return operatorv1alpha1.Webhook
+	case certControllerDeploymentAssetName:
+		return operatorv1alpha1.CertController
+	case bitwardenDeploymentAssetName:
+		return operatorv1alpha1.BitwardenSDKServer
+	default:
+		return ""
+	}
+}
+
 // getProxyConfiguration returns the proxy configuration based on precedence.
 // The precedence order is: ExternalSecretsConfig > ExternalSecretsManager > OLM environment variables.
 func (r *Reconciler) getProxyConfiguration(esc *operatorv1alpha1.ExternalSecretsConfig) *operatorv1alpha1.ProxyConfig {
