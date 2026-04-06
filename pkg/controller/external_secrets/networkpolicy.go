@@ -207,6 +207,18 @@ func (r *Reconciler) getPodSelectorForComponent(componentName operatorv1alpha1.C
 				"app.kubernetes.io/name": "external-secrets",
 			},
 		}, nil
+	case operatorv1alpha1.Webhook:
+		return metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app.kubernetes.io/name": "external-secrets-webhook",
+			},
+		}, nil
+	case operatorv1alpha1.CertController:
+		return metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app.kubernetes.io/name": "external-secrets-cert-controller",
+			},
+		}, nil
 	case operatorv1alpha1.BitwardenSDKServer:
 		return metav1.LabelSelector{
 			MatchLabels: map[string]string{

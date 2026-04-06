@@ -148,6 +148,17 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
 
+	// Apply user-configured annotations to Deployment and Pod template
+	applyAnnotations(deployment, esc.Spec.ControllerConfig.Annotations)
+
+	// Apply per-component configuration overrides (revisionHistoryLimit, overrideEnv)
+	componentName, err := getComponentNameForAsset(assetName)
+	if err != nil {
+		r.log.V(4).Info("no component mapping found for asset, skipping component config", "asset", assetName)
+	} else {
+		applyComponentConfig(deployment, esc.Spec.ControllerConfig.ComponentConfigs, componentName)
+	}
+
 	return deployment, nil
 }
 
