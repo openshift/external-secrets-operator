@@ -148,6 +148,14 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 		return nil, fmt.Errorf("failed to update proxy configuration: %w", err)
 	}
 
+	// Apply custom annotations from controllerConfig.annotations
+	r.applyAnnotationsToDeployment(deployment, esc)
+
+	// Apply component-specific overrides (revisionHistoryLimit, overrideEnv)
+	if err := r.applyComponentConfigToDeployment(deployment, esc, assetName); err != nil {
+		return nil, fmt.Errorf("failed to apply component config: %w", err)
+	}
+
 	return deployment, nil
 }
 
