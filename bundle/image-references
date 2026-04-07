@@ -1,0 +1,17 @@
+---
+kind: ImageStream
+apiVersion: image.openshift.io/v1
+spec:
+  tags:
+  - name: external-secrets-operator-rhel9
+    from:
+      kind: DockerImage
+      name: openshift.io/external-secrets-operator:latest
+  - name: external-secrets-rhel9
+    from:
+      kind: DockerImage
+      name: ghcr.io/external-secrets/external-secrets:v0.20.4
+  - name: bitwarden-sdk-server-rhel9
+    from:
+      kind: DockerImage
+      name: ghcr.io/external-secrets/bitwarden-sdk-server:v0.5.2
