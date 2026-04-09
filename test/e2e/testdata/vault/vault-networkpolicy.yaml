@@ -1,0 +1,26 @@
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-to-vault-test
+  namespace: external-secrets
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - external-secrets
+          - bitwarden-sdk-server
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 8200
+      to:
+        - podSelector:
+            matchLabels:
+              app: vault
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault-test
+  policyTypes:
+    - Egress
