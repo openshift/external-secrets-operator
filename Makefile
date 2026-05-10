@@ -505,6 +505,33 @@ docs: $(REFERENCE_DOC_GENERATOR) ## Generate API reference documentation.
 	@echo "Generating API doc..."
 	@$(REFERENCE_DOC_GENERATOR) --source-path=api/v1alpha1/ --renderer=markdown --config=hack/docs/config.yaml --output-path=docs/api_reference.md
 
+##@ E2E Coverage
+##
+## Targets for building a coverage-instrumented operator image, collecting
+## coverage data written during E2E tests, and uploading the report to Codecov.
+##
+## Typical flow (local):
+##   make docker-build-coverage docker-push-coverage   # build & push coverage image
+##   <deploy coverage image to cluster via CSV patch>
+##   make test-e2e                                      # run E2E suite
+##   make e2e-coverage-collect KUBECTL=oc               # collect + upload
+##
+## In CI, hack/e2e-coverage.sh handles setup and collection automatically.
+
+COVERAGE_IMG ?= $(IMG)-e2e-coverage
+
+.PHONY: docker-build-coverage
+docker-build-coverage: ## Build coverage Docker image from images/ci/Dockerfile.coverage.
+	$(CONTAINER_TOOL) build -f images/ci/Dockerfile.coverage -t $(COVERAGE_IMG) .
+
+.PHONY: docker-push-coverage
+docker-push-coverage: ## Push coverage Docker image.
+	$(CONTAINER_TOOL) push $(COVERAGE_IMG)
+
+.PHONY: e2e-coverage-collect
+e2e-coverage-collect: ## Collect e2e coverage data and optionally upload to Codecov.
+	ARTIFACT_DIR=$${ARTIFACT_DIR:-.} hack/e2e-coverage.sh collect
+
 .PHONY: clean
 clean: ## Clean up generated files and directories.
 	@echo "Cleaning up make generated files...."
