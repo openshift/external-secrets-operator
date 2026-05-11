@@ -10,15 +10,13 @@
 #   COVERAGE_IMAGE          (setup)   Full pullspec of the coverage-instrumented image
 #   CODECOV_TOKEN           (collect) Codecov upload token; skip upload if unset
 #   ARTIFACT_DIR            (collect) Directory for CI artifacts; defaults to "."
-#   COVERAGE_EXTRACTOR_IMAGE          Image used to extract data from PVC; default golang:1.25
 set -euo pipefail
 
 NAMESPACE="external-secrets-operator"
 DEPLOYMENT="external-secrets-operator-controller-manager"
-PVC_NAME="e2e-coverage-pvc"
 GOCOVERDIR_PATH="/tmp/e2e-cover"
-EXTRACTOR_IMAGE="${COVERAGE_EXTRACTOR_IMAGE:-golang:1.25}"
 CODECOV_SECRET_PATH="/var/run/secrets/codecov/CODECOV_TOKEN"
+POD_LABEL="app=external-secrets-operator"
 
 setup() {
     echo "--- E2E Coverage Setup ---"
@@ -28,21 +26,6 @@ setup() {
         exit 1
     fi
     echo "Coverage image: ${COVERAGE_IMAGE}"
-
-    echo "Creating PVC for coverage data..."
-    oc apply -f - <<EOF
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ${PVC_NAME}
-  namespace: ${NAMESPACE}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-EOF
 
     echo "Discovering CSV from deployment ownerReference..."
     local csv
@@ -54,12 +37,12 @@ EOF
     fi
     echo "Found CSV: ${csv}"
 
-    echo "Patching CSV with coverage image, GOCOVERDIR, and PVC volume..."
+    echo "Patching CSV with coverage image, GOCOVERDIR, and emptyDir volume..."
     oc patch csv "${csv}" -n "${NAMESPACE}" --type=json -p "[
         {\"op\": \"replace\", \"path\": \"/spec/install/spec/deployments/0/spec/template/spec/containers/0/image\", \"value\": \"${COVERAGE_IMAGE}\"},
         {\"op\": \"add\", \"path\": \"/spec/install/spec/deployments/0/spec/template/spec/containers/0/env/-\", \"value\": {\"name\": \"GOCOVERDIR\", \"value\": \"${GOCOVERDIR_PATH}\"}},
         {\"op\": \"add\", \"path\": \"/spec/install/spec/deployments/0/spec/template/spec/containers/0/volumeMounts/-\", \"value\": {\"name\": \"coverage-data\", \"mountPath\": \"${GOCOVERDIR_PATH}\"}},
-        {\"op\": \"add\", \"path\": \"/spec/install/spec/deployments/0/spec/template/spec/volumes/-\", \"value\": {\"name\": \"coverage-data\", \"persistentVolumeClaim\": {\"claimName\": \"${PVC_NAME}\"}}}
+        {\"op\": \"add\", \"path\": \"/spec/install/spec/deployments/0/spec/template/spec/volumes/-\", \"value\": {\"name\": \"coverage-data\", \"emptyDir\": {}}}
     ]"
 
     echo "Waiting for operator rollout with coverage image..."
@@ -80,42 +63,30 @@ collect() {
     local coverage_dir="${artifact_dir}/e2e-cover-data"
     local coverage_profile="${artifact_dir}/coverage-e2e.out"
 
-    # Read Codecov token from mounted secret if available
     if [[ -z "${CODECOV_TOKEN:-}" ]] && [[ -f "${CODECOV_SECRET_PATH}" ]]; then
         CODECOV_TOKEN=$(cat "${CODECOV_SECRET_PATH}")
         export CODECOV_TOKEN
     fi
 
-    echo "Scaling down operator to flush coverage data via SIGTERM..."
-    oc scale "deployment/${DEPLOYMENT}" --replicas=0 -n "${NAMESPACE}" || true
-    oc wait --for=delete pod -l app=external-secrets-operator \
-        -n "${NAMESPACE}" --timeout=60s 2>/dev/null || true
+    local pod
+    pod=$(oc get pod -n "${NAMESPACE}" -l "${POD_LABEL}" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [[ -z "${pod}" ]]; then
+        echo "Error: no operator pod found in namespace ${NAMESPACE}"
+        exit 1
+    fi
+    echo "Operator pod: ${pod}"
 
-    # Clean up any leftover extractor pod from a prior run
-    oc delete pod coverage-extractor -n "${NAMESPACE}" --ignore-not-found --wait=false 2>/dev/null || true
+    echo "Sending SIGTERM to operator process to flush coverage data..."
+    oc exec -n "${NAMESPACE}" "${pod}" -c manager -- kill -s TERM 1 || true
 
-    echo "Creating extractor pod to access PVC data..."
-    oc run coverage-extractor \
-        --image="${EXTRACTOR_IMAGE}" \
-        --restart=Never \
-        --overrides="{
-            \"spec\": {
-                \"volumes\": [{\"name\": \"cov\", \"persistentVolumeClaim\": {\"claimName\": \"${PVC_NAME}\"}}],
-                \"containers\": [{\"name\": \"coverage-extractor\", \"image\": \"${EXTRACTOR_IMAGE}\",
-                    \"command\": [\"sleep\", \"600\"],
-                    \"volumeMounts\": [{\"name\": \"cov\", \"mountPath\": \"${GOCOVERDIR_PATH}\"}]
-                }]
-            }
-        }" \
-        -n "${NAMESPACE}"
+    echo "Waiting for container to restart..."
+    sleep 10
+    oc wait pod/"${pod}" --for=condition=Ready -n "${NAMESPACE}" --timeout=120s
 
-    oc wait pod/coverage-extractor --for=condition=Ready \
-        -n "${NAMESPACE}" --timeout=120s
-
-    # Use /. suffix so oc cp places files directly in coverage_dir, not nested
     mkdir -p "${coverage_dir}"
-    oc cp "${NAMESPACE}/coverage-extractor:${GOCOVERDIR_PATH}/." "${coverage_dir}"
-    oc delete pod coverage-extractor -n "${NAMESPACE}" --ignore-not-found --wait=false 2>/dev/null || true
+    echo "Copying coverage data from operator pod..."
+    oc cp "${NAMESPACE}/${pod}:${GOCOVERDIR_PATH}/." "${coverage_dir}" -c manager
 
     echo "Coverage files:"
     ls -la "${coverage_dir}/" 2>/dev/null || true

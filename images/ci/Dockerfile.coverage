@@ -18,9 +18,10 @@ RUN go build -tags $GO_BUILD_TAGS \
     -o external-secrets-operator cmd/external-secrets-operator/main.go
 
 FROM registry.access.redhat.com/ubi9-minimal:9.4
+RUN microdnf install -y tar && microdnf clean all
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets-operator
 COPY --from=builder $SRC_DIR/external-secrets-operator /bin/external-secrets-operator
-RUN mkdir -p /tmp/e2e-cover && chmod 777 /tmp/e2e-cover
+RUN mkdir -p /tmp/e2e-cover && chown 65534:65534 /tmp/e2e-cover && chmod 700 /tmp/e2e-cover
 USER 65534:65534
 ENV GOCOVERDIR=/tmp/e2e-cover
 ENTRYPOINT ["/bin/external-secrets-operator"]
