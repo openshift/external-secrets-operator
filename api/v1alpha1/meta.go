@@ -111,7 +111,28 @@ type ProxyConfig struct {
 	// +kubebuilder:validation:MaxLength:=4096
 	// +optional
 	NoProxy string `json:"noProxy,omitempty"`
+
+	// NetworkPolicyProvisioning defines the management strategy for the proxy egress rule.
+	// When set to Managed, the operator automatically provisions and maintains
+	// a NetworkPolicy allowing traffic to the configured proxy.
+	// If no proxy is configured, no NetworkPolicy will be created
+	// regardless of this setting.
+	// +kubebuilder:validation:Enum=Managed;Unmanaged
+	// +kubebuilder:default=Managed
+	// +optional
+	NetworkPolicyProvisioning ManagementState `json:"networkPolicyProvisioning,omitempty"`
 }
+
+// ManagementState controls whether the operator manages the resource lifecycle.
+type ManagementState string
+
+const (
+	// ManagementStateManaged indicates the Operator is responsible for the resource lifecycle.
+	ManagementStateManaged ManagementState = "Managed"
+
+	// ManagementStateUnmanaged indicates the User is responsible for the resource lifecycle.
+	ManagementStateUnmanaged ManagementState = "Unmanaged"
+)
 
 // Mode indicates the operational state of the optional features.
 type Mode string

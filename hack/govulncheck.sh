@@ -24,7 +24,7 @@ set -o errexit
 ## Below vulnerabilities are in the go packages, which impacts the operator code and requires the fix to be available downstream.
 # - https://pkg.go.dev/vuln/GO-2026-4601 - Incorrect parsing of IPv6 host literals in net/url
 # - https://pkg.go.dev/vuln/GO-2026-4602 - FileInfo can escape from a Root in os
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4601|GO-2026-4602"
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4971|GO-2026-4918"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"

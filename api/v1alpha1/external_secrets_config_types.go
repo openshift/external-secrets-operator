@@ -137,6 +137,7 @@ type ControllerConfig struct {
 	//
 	// Each entry allows specifying a name for the generated NetworkPolicy object,
 	// along with its full Kubernetes NetworkPolicy definition.
+	// The operator prepends "eso-user-" to the provided name when creating the Kubernetes object.
 	//
 	// If this field is not provided, external-secrets components will be isolated
 	// with deny-all network policies, which will prevent proper operation.
@@ -299,8 +300,9 @@ const (
 // NetworkPolicy represents a custom network policy configuration for operator-managed components.
 // It includes a name for identification and the network policy rules to be enforced.
 type NetworkPolicy struct {
-	// name is a unique identifier for this network policy configuration.
-	// This name will be used as part of the generated NetworkPolicy resource name.
+	// Name is the logical identifier for this network policy entry.
+	// The operator prepends "eso-user-" to this value when creating the Kubernetes
+	// NetworkPolicy object (e.g. "allow-egress" becomes "eso-user-allow-egress").
 	// +kubebuilder:validation:MinLength:=1
 	// +kubebuilder:validation:MaxLength:=253
 	// +required
