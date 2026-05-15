@@ -509,8 +509,6 @@ docs: $(REFERENCE_DOC_GENERATOR) ## Generate API reference documentation.
 ##
 ## Targets for building a coverage-instrumented operator image, collecting
 ## coverage data written during E2E tests, and uploading the report to Codecov.
-## Uses emptyDir (no PVC): the collect step sends SIGTERM to the operator
-## process, waits for container restart, then copies data from the running pod.
 ##
 ## Typical flow (local):
 ##   make docker-build-coverage docker-push-coverage   # build & push coverage image
@@ -538,4 +536,3 @@ e2e-coverage-collect: ## Collect e2e coverage data and optionally upload to Code
 clean: ## Clean up generated files and directories.
 	@echo "Cleaning up make generated files...."
 	@rm -rf $(LOCALBIN) $(OUTPUTS_PATH) cover.out dist
-	

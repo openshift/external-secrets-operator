@@ -17,7 +17,7 @@ RUN go build -tags $GO_BUILD_TAGS \
     -cover -covermode=count -coverpkg=./... \
     -o external-secrets-operator cmd/external-secrets-operator/main.go
 
-FROM registry.access.redhat.com/ubi9-minimal:9.4
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 RUN microdnf install -y tar && microdnf clean all
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets-operator
 COPY --from=builder $SRC_DIR/external-secrets-operator /bin/external-secrets-operator

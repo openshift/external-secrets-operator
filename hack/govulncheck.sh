@@ -26,7 +26,7 @@ set -o errexit
 # - https://pkg.go.dev/vuln/GO-2026-4602 - FileInfo can escape from a Root in os
 # - https://pkg.go.dev/vuln/GO-2026-4971 - Dial and LookupPort panic on Windows with NUL input in net
 # - https://pkg.go.dev/vuln/GO-2026-4918 - HTTP/2 infinite loop via SETTINGS_MAX_FRAME_SIZE of 0 in net/http, golang.org/x/net
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4601|GO-2026-4602|GO-2026-4971|GO-2026-4918"
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4971|GO-2026-4918"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"
