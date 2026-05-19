@@ -202,7 +202,7 @@ _Appears in:_
 | `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  |  |
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
 | `annotations` _object (keys:string, values:string)_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment.<br />The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.<br />Annotation keys containing domains `kubernetes.io/`, `openshift.io/`, `cert-manager.io/` or `k8s.io/` (including subdomains like `*.kubernetes.io/`) are not allowed. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
-| `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
+| `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />The operator prepends "eso-user-" to the provided name when creating the Kubernetes object.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
 | `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings for each component independently.<br />Each component can only have one configuration entry. |  | MaxItems: 4 <br />MinItems: 0 <br /> |
 
 
@@ -414,6 +414,23 @@ _Appears in:_
 | `labels` _object (keys:string, values:string)_ | labels to apply to all resources created by the operator.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
 
 
+#### ManagementState
+
+_Underlying type:_ _string_
+
+ManagementState controls whether the operator manages the resource lifecycle.
+
+
+
+_Appears in:_
+- [ProxyConfig](#proxyconfig)
+
+| Field | Description |
+| --- | --- |
+| `Managed` | ManagementStateManaged indicates the Operator is responsible for the resource lifecycle.<br /> |
+| `Unmanaged` | ManagementStateUnmanaged indicates the User is responsible for the resource lifecycle.<br /> |
+
+
 #### Mode
 
 _Underlying type:_ _string_
@@ -446,7 +463,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is a unique identifier for this network policy configuration.<br />This name will be used as part of the generated NetworkPolicy resource name. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
+| `name` _string_ | Name is the logical identifier for this network policy entry.<br />The operator prepends "eso-user-" to this value when creating the Kubernetes<br />NetworkPolicy object (e.g. "allow-egress" becomes "eso-user-allow-egress"). |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 | `componentName` _[ComponentName](#componentname)_ | componentName specifies which external-secrets component this network policy applies to. |  | Enum: [ExternalSecretsCoreController BitwardenSDKServer] <br /> |
 | `egress` _[NetworkPolicyEgressRule](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#networkpolicyegressrule-v1-networking) array_ | egress is a list of egress rules to be applied to the selected pods. Outgoing traffic<br />is allowed if there are no NetworkPolicies selecting the pod (and cluster policy<br />otherwise allows the traffic), OR if the traffic matches at least one egress rule<br />across all the NetworkPolicy objects whose podSelector matches the pod. If<br />this field is empty then this NetworkPolicy limits all outgoing traffic (and serves<br />solely to ensure that the pods it selects are isolated by default).<br />The operator will automatically handle ingress rules based on the current running ports. |  |  |
 
@@ -498,6 +515,7 @@ _Appears in:_
 | `httpProxy` _string_ | httpProxy is the URL of the proxy for HTTP requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br /> |
 | `httpsProxy` _string_ | httpsProxy is the URL of the proxy for HTTPS requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br /> |
 | `noProxy` _string_ | noProxy is a comma-separated list of hostnames and/or CIDRs and/or IPs for which the proxy should not be used.<br />This field can have a maximum of 4096 characters. |  | MaxLength: 4096 <br />MinLength: 0 <br /> |
+| `networkPolicyProvisioning` _[ManagementState](#managementstate)_ | NetworkPolicyProvisioning defines the management strategy for the proxy egress rule.<br />When set to Managed, the operator automatically provisions and maintains<br />a NetworkPolicy allowing traffic to the configured proxy.<br />If no proxy is configured, no NetworkPolicy will be created<br />regardless of this setting. | Managed | Enum: [Managed Unmanaged] <br /> |
 
 
 #### SecretReference
