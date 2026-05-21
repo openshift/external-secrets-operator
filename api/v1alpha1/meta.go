@@ -123,6 +123,45 @@ type ProxyConfig struct {
 	NetworkPolicyProvisioning ManagementState `json:"networkPolicyProvisioning,omitempty"`
 }
 
+// ResourceReferencePolicy defines whether the referenced resource and key must exist.
+// +kubebuilder:validation:Enum:=Required;Optional
+type ResourceReferencePolicy string
+
+const (
+	// ResourceReferencePolicyRequired means the operator sets Degraded if the referenced resource or key is missing.
+	ResourceReferencePolicyRequired ResourceReferencePolicy = "Required"
+
+	// ResourceReferencePolicyOptional means the operator skips the dependent logic if the referenced resource or key is missing.
+	ResourceReferencePolicyOptional ResourceReferencePolicy = "Optional"
+)
+
+// ConfigMapKeyReference refers to a specific key within a ConfigMap.
+type ConfigMapKeyReference struct {
+	// name of the ConfigMap resource being referred to.
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=253
+	// +required
+	Name string `json:"name,omitempty"`
+
+	// key is the specific key in the ConfigMap to be utilized.
+	// When omitted, defaults to "ca-bundle.crt".
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=253
+	// +kubebuilder:validation:Pattern:=^[-._a-zA-Z0-9]+$
+	// +kubebuilder:default:="ca-bundle.crt"
+	// +optional
+	Key string `json:"key,omitempty"`
+
+	// policy defines whether the referenced ConfigMap and key must exist.
+	// Required means the operator sets Degraded if the ConfigMap or key is missing.
+	// Optional means the operator skips the dependent logic if the ConfigMap or key is missing.
+	// When omitted, defaults to Required.
+	// +kubebuilder:validation:Enum:=Required;Optional
+	// +kubebuilder:default:=Required
+	// +optional
+	Policy ResourceReferencePolicy `json:"policy,omitempty"`
+}
+
 // ManagementState controls whether the operator manages the resource lifecycle.
 type ManagementState string
 
