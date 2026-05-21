@@ -215,7 +215,7 @@ test-e2e: ## Run e2e tests against a cluster.
 		-ginkgo.trace \
 		-ginkgo.show-node-events \
 		-ginkgo.label-filter=$(E2E_GINKGO_LABEL_FILTER)
-	
+
 .PHONY: test-apis
 test-apis: $(ENVTEST) $(GINKGO) ## Run API integration tests.
 	@echo "Running API unit tests..."
