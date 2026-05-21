@@ -159,6 +159,14 @@ type ControllerConfig struct {
 	// +listMapKey=componentName
 	// +optional
 	ComponentConfigs []ComponentConfig `json:"componentConfigs,omitempty"`
+
+	// trustedCABundle references a ConfigMap containing PEM-encoded CA certificates for the
+	// external-secrets core controller to trust when making outbound TLS connections, including
+	// to external secret management systems and configured proxies.
+	// The ConfigMap must exist in the external-secrets operand namespace.
+	// When omitted, the system certificates are used.
+	// +optional
+	TrustedCABundle *ConfigMapKeyReference `json:"trustedCABundle,omitempty"`
 }
 
 // ComponentConfig defines configuration overrides for a specific external-secrets component.
@@ -175,9 +183,10 @@ type ComponentConfig struct {
 	DeploymentConfigs *DeploymentConfig `json:"deploymentConfigs,omitempty"`
 
 	// overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.
-	// Keys starting with 'HOSTNAME', 'KUBERNETES_', or 'EXTERNAL_SECRETS_' are reserved and will be rejected.
+	// Names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved prefixes and will be rejected.
+	// The exact names 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved.
 	// +kubebuilder:validation:MaxItems:=50
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !['HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)))",message="Environment variable names with reserved prefixes 'HOSTNAME', 'KUBERNETES_', 'EXTERNAL_SECRETS_' are not allowed"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !['KUBERNETES_', 'EXTERNAL_SECRETS_'].exists(p, e.name.startsWith(p)) && e.name != 'HOSTNAME' && e.name != 'SSL_CERT_DIR' && e.name != 'SSL_CERT_FILE')",message="Environment variable names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved; 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved exact names."
 	// +listType=map
 	// +listMapKey=name
 	// +optional
