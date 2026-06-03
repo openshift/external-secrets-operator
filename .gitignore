@@ -26,3 +26,7 @@ cover.html
 # dirs to ignore
 bin
 _output
+
+# do not apply ignore rules to anything in vendor/ dir
+!vendor/
+!vendor/**
