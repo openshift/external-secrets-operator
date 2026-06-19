@@ -1,0 +1,54 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  labels:
+    app.kubernetes.io/name: external-secrets-operator
+    app.kubernetes.io/component: webhook
+  annotations:
+    # OpenShift service-ca-operator will inject the CA bundle automatically
+    service.beta.openshift.io/inject-cabundle: "true"
+webhooks:
+- name: validate.externalsecretsconfig.operator.openshift.io
+  admissionReviewVersions:
+  - v1
+  - v1beta1
+  # matchConditions dramatically reduces webhook calls by filtering at API server level
+  # Requires Kubernetes 1.27+ (available in OpenShift 4.14+)
+  # Only triggers webhook when BitWarden provider is being disabled
+  matchConditions:
+  - name: "bitwarden-being-disabled"
+    expression: |
+      has(oldObject.spec.plugins) &&
+      has(oldObject.spec.plugins.bitwardenSecretManagerProvider) &&
+      has(oldObject.spec.plugins.bitwardenSecretManagerProvider.mode) &&
+      oldObject.spec.plugins.bitwardenSecretManagerProvider.mode == 'Enabled' &&
+      (
+        !has(object.spec.plugins) ||
+        !has(object.spec.plugins.bitwardenSecretManagerProvider) ||
+        !has(object.spec.plugins.bitwardenSecretManagerProvider.mode) ||
+        object.spec.plugins.bitwardenSecretManagerProvider.mode == 'Disabled'
+      )
+  clientConfig:
+    service:
+      name: external-secrets-operator-webhook-service
+      namespace: external-secrets-operator
+      path: /validate-operator-openshift-io-v1alpha1-externalsecretsconfig
+      port: 443
+    # caBundle will be injected by OpenShift service-ca-operator
+    caBundle: ""
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  rules:
+  - apiGroups:
+    - operator.openshift.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - UPDATE
+    resources:
+    - externalsecretsconfigs
+    scope: Cluster
+  sideEffects: None
+  timeoutSeconds: 10
+

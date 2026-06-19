@@ -1,0 +1,29 @@
+# This patch adds webhook certificate volume mount for OpenShift service-ca
+# The secret is automatically created by OpenShift's service-ca-operator
+# when the service has the annotation: service.beta.openshift.io/serving-cert-secret-name
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        # Add webhook cert dir argument to use OpenShift-generated certificates
+        - --webhook-cert-dir=/etc/webhook-certs
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/webhook-certs
+          name: webhook-cert
+          readOnly: true
+      volumes:
+      - name: webhook-cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
