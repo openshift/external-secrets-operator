@@ -139,14 +139,25 @@ OPERATOR_SDK_VERSION ?= v1.39.0
 YQ_VERSION = v4.50.1
 HELM_VERSION ?= v3.17.3
 
-# Include the library makefiles
-include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
-    targets/openshift/bindata.mk \
-    targets/openshift/yq.mk \
-)
+# Include the library makefiles only when vendored (so e.g. `make update-vendor` works on a clean tree).
+BUILD_MACHINERY_GO_MAKE := $(PROJECT_ROOT)/vendor/github.com/openshift/build-machinery-go/make
 
-# generate bindata targets
+ifneq (,$(wildcard $(BUILD_MACHINERY_GO_MAKE)/targets/openshift/bindata.mk))
+include $(BUILD_MACHINERY_GO_MAKE)/targets/openshift/bindata.mk
+# Generate bindata targets
 $(call add-bindata,assets,./bindata/...,bindata,assets,pkg/operator/assets/bindata.go)
+endif
+
+ifneq (,$(wildcard $(BUILD_MACHINERY_GO_MAKE)/targets/openshift/yq.mk))
+include $(BUILD_MACHINERY_GO_MAKE)/targets/openshift/yq.mk
+else
+# Vendored yq.mk defines ensure-yq; stub so the Makefile parses before the first `go work vendor`.
+.PHONY: ensure-yq
+ensure-yq:
+	@echo >&2 "Missing $(BUILD_MACHINERY_GO_MAKE)/targets/openshift/yq.mk"
+	@echo >&2 "Populate vendor first: make update-vendor"
+	@exit 1
+endif
 
 .PHONY: all
 all: build verify

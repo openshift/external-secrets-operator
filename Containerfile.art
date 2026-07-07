@@ -1,0 +1,50 @@
+FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_9_golang_1.25 AS builder
+
+# Values for below ARGs will passed from tekton configs for konflux builds.
+## Release version of the external-secrets-operator source code used in the build.
+ARG RELEASE_VERSION
+## Commit hash that considered for the image build.
+ARG COMMIT_SHA
+## GitHub URL of the external-secrets-operator source repository.
+ARG SOURCE_URL
+## The location where the source code is stored.
+ARG SOURCE_DIR="/go/src/github.com/openshift/external-secrets-operator"
+
+WORKDIR $SOURCE_DIR
+# ART builds from source repos without git submodules
+COPY . .
+COPY LICENSE /licenses/
+
+RUN IMG_VERSION=${BUILD_VERSION:-${RELEASE_VERSION#v}} SOURCE_GIT_COMMIT=${SOURCE_GIT_COMMIT:-${COMMIT_SHA}} make build
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:83006d535923fcf1345067873524a3980316f51794f01d8655be55d6e9387183
+
+ARG RELEASE_VERSION
+ARG COMMIT_SHA
+ARG SOURCE_URL
+ARG SOURCE_DIR="/go/src/github.com/openshift/external-secrets-operator"
+
+COPY --from=builder $SOURCE_DIR/bin/external-secrets-operator /bin/external-secrets-operator
+COPY --from=builder /licenses /licenses
+
+USER 65534:65534
+
+LABEL com.redhat.component="external-secrets-operator-container" \
+      cpe="cpe:/a:redhat:external_secrets_operator:1.1::el9" \
+      name="external-secrets-operator/external-secrets-operator-rhel9" \
+      version="${RELEASE_VERSION}" \
+      summary="external-secrets-operator" \
+      maintainer="Red Hat, Inc." \
+      description="external-secrets-operator-container" \
+      vendor="Red Hat, Inc." \
+      release="${RELEASE_VERSION}" \
+      io.openshift.expose-services="" \
+      io.openshift.build.commit.id="${COMMIT_SHA}" \
+      io.openshift.build.source-location="${SOURCE_URL}" \
+      io.openshift.build.commit.url="${SOURCE_URL}/commit/${COMMIT_SHA}" \
+      io.openshift.maintainer.product="OpenShift Container Platform" \
+      io.openshift.tags="data,images,operator,external-secrets,external-secrets-operator" \
+      io.k8s.display-name="openshift-external-secrets-operator" \
+      io.k8s.description="external-secrets-operator-container"
+
+ENTRYPOINT ["/bin/external-secrets-operator"]
