@@ -80,7 +80,7 @@ spec:
           - name: OPERATOR_NAME
             value: external-secrets-operator
           - name: OPERATOR_IMAGE_VERSION
-            value: 1.1.0
+            value: 1.1.1
           - name: RELATED_IMAGE_EXTERNAL_SECRETS
             value: ghcr.io/external-secrets/external-secrets:v0.20.4
           - name: OPERAND_EXTERNAL_SECRETS_IMAGE_VERSION
