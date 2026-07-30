@@ -21,14 +21,9 @@ set -o errexit
 # - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes
 # - https://pkg.go.dev/vuln/GO-2025-3547 - Kubernetes kube-apiserver Vulnerable to Race Condition in k8s.io/kubernetes
 #
-## Below vulnerabilities are in the go packages, which doesn't impact the operator code and requires the fix to be available downstream.
-# - https://pkg.go.dev/vuln/GO-2026-4918 - HTTP/2 infinite loop via SETTINGS_MAX_FRAME_SIZE of 0 in net/http, golang.org/x/net
-# - https://pkg.go.dev/vuln/GO-2026-4971 - Dial and LookupPort panic on Windows with NUL input in net
-# - https://pkg.go.dev/vuln/GO-2026-5026 - x/net/idna: ToUnicode accepts Punycode labels encoding pure ASCII labels
-# - https://pkg.go.dev/vuln/GO-2026-5037 - high-CPU VerifyHostname behavior via repeated hostname splitting.
-# - https://pkg.go.dev/vuln/GO-2026-5038 - Decoding a maliciously-crafted MIME header containing many invalid encoded-words can consume excessive CPU.
-# - https://pkg.go.dev/vuln/GO-2026-5039 - net/textproto package includes its input as part of the error.
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4918|GO-2026-4971|GO-2026-5026|GO-2026-5037|GO-2026-5038|GO-2026-5039"
+## Below vulnerabilities are in the go packages and requires the fix to be available downstream.
+# - https://pkg.go.dev/vuln/GO-2026-5856 - Encrypted Client Hello privacy leak in crypto/tls
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-5856"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"
