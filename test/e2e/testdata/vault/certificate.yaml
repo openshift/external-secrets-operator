@@ -1,0 +1,26 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-server-tls
+  namespace: {{VAULT_NAMESPACE}}
+spec:
+  secretName: vault-server-tls
+  duration: 2160h
+  renewBefore: 360h
+  commonName: vault.{{VAULT_NAMESPACE}}.svc
+  dnsNames:
+    - vault
+    - vault.{{VAULT_NAMESPACE}}
+    - vault.{{VAULT_NAMESPACE}}.svc
+    - vault.{{VAULT_NAMESPACE}}.svc.cluster.local
+  issuerRef:
+    name: vault-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
