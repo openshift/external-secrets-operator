@@ -1,6 +1,6 @@
 FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.25-openshift-4.21 AS builder
 
-ARG RELEASE_BRANCH=v0.20.4
+ARG RELEASE_BRANCH=release-1.1
 ARG GO_BUILD_TAGS=strictfipsruntime,openssl
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets
 

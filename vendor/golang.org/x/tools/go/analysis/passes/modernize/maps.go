@@ -92,13 +92,14 @@ func mapsloop(pass *analysis.Pass) (any, error) {
 		// and can we replace its RHS with slices.{Clone,Collect}?
 		//
 		// Beware: if x may be nil, we cannot use Clone as it preserves nilness.
-		var mrhs ast.Expr // make(M) or M{}, or nil
+		var mrhs ast.Expr       // make(M) or M{}, or nil
+		var mAssign token.Token // token used to assign m
 		if curPrev, ok := curRange.PrevSibling(); ok {
 			if assign, ok := curPrev.Node().(*ast.AssignStmt); ok &&
 				len(assign.Lhs) == 1 &&
 				len(assign.Rhs) == 1 &&
 				astutil.EqualSyntax(assign.Lhs[0], m) {
-
+				mAssign = assign.Tok
 				// Have: m = rhs; for k, v := range x { m[k] = v }
 				var newMap bool
 				rhs := assign.Rhs[0]
@@ -175,12 +176,13 @@ func mapsloop(pass *analysis.Pass) (any, error) {
 			//   ->
 			//
 			//   /* comments */
-			//   m = maps.Copy(x)
+			//   m = maps.Collect(x)
 			curPrev, _ := curRange.PrevSibling()
 			start, end = curPrev.Node().Pos(), rng.End()
-			newText = fmt.Appendf(nil, "%s%s = %s%s(%s)",
+			newText = fmt.Appendf(nil, "%s%s %s %s%s(%s)",
 				allComments(file, start, end),
 				astutil.Format(pass.Fset, m),
+				mAssign.String(),
 				prefix,
 				funcName,
 				astutil.Format(pass.Fset, x))
@@ -231,9 +233,28 @@ func mapsloop(pass *analysis.Pass) (any, error) {
 				// Have: for k, v := range x { lhs = rhs }
 
 				assign := rng.Body.List[0].(*ast.AssignStmt)
+
+				// usesKV reports whether e references vars k or v.
+				usesKV := func(e ast.Expr) bool {
+					k := info.Defs[rng.Key.(*ast.Ident)]
+					v := info.Defs[rng.Value.(*ast.Ident)]
+					for n := range ast.Preorder(e) {
+						if id, ok := n.(*ast.Ident); ok {
+							obj := info.Uses[id]
+							if obj != nil && // don't rely on k, v being non-nil
+								(obj == k || obj == v) {
+								return true
+							}
+						}
+					}
+					return false
+				}
+
 				if index, ok := assign.Lhs[0].(*ast.IndexExpr); ok &&
+					len(assign.Lhs) == 1 &&
 					astutil.EqualSyntax(rng.Key, index.Index) &&
-					astutil.EqualSyntax(rng.Value, assign.Rhs[0]) {
+					astutil.EqualSyntax(rng.Value, assign.Rhs[0]) &&
+					!usesKV(index.X) { // reject (e.g.) f(k, v)[k] = v
 					if tmap, ok := typeparams.CoreType(info.TypeOf(index.X)).(*types.Map); ok &&
 						types.Identical(info.TypeOf(index), info.TypeOf(rng.Value)) && // m[k], v
 						types.Identical(tmap.Key(), info.TypeOf(rng.Key)) {
