@@ -135,6 +135,18 @@ kubectl create secret generic aws-creds \
 
 ---
 
+### Feature:OverrideOperandArgs
+
+File: `operand_args_test.go` — operator env vars override operand Deployment container args.
+
+| Item | Details |
+|------|--------|
+| **Label filter** | `"Feature:OverrideOperandArgs"` |
+| **Pre-requisites** | Operator installed (OLM Subscription preferred). Suite enables Bitwarden temporarily to cover bitwarden-sdk-server args, then restores ESC plugin state. |
+| **Make command** | `make test-e2e E2E_GINKGO_LABEL_FILTER="Feature:OverrideOperandArgs"` |
+
+---
+
 ## Running multiple suites
 
 To run more than one label (e.g. Bitwarden provider and API):
