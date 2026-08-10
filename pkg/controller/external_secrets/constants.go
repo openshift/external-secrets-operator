@@ -81,6 +81,26 @@ const (
 	webhookContainerName        = "webhook"
 	certControllerContainerName = "cert-controller"
 	bitwardenContainerName      = "bitwarden-sdk-server"
+
+	// Operand deployment / container names used by e2e and env-based arg overrides.
+	OperandCoreControllerDeployment     = externalsecretsCommonName
+	OperandWebhookDeployment            = externalsecretsCommonName + "-webhook"
+	OperandCertControllerDeployment     = externalsecretsCommonName + "-cert-controller"
+	OperandBitwardenSDKServerDeployment = "bitwarden-sdk-server"
+
+	OperandCoreControllerContainer = controllerContainerName
+	OperandWebhookContainer        = webhookContainerName
+	OperandCertControllerContainer = certControllerContainerName
+	OperandBitwardenContainer      = bitwardenContainerName
+
+	// OperandExternalSecretsArgsEnvVar is the operator env var for core controller container args overrides.
+	OperandExternalSecretsArgsEnvVar = "OPERAND_EXTERNAL_SECRETS_ARGS"
+	// OperandWebhookArgsEnvVar is the operator env var for webhook container args overrides.
+	OperandWebhookArgsEnvVar = "OPERAND_WEBHOOK_ARGS"
+	// OperandCertControllerArgsEnvVar is the operator env var for cert-controller container args overrides.
+	OperandCertControllerArgsEnvVar = "OPERAND_CERT_CONTROLLER_ARGS"
+	// OperandBitwardenSDKServerArgsEnvVar is the operator env var for bitwarden-sdk-server container args overrides.
+	OperandBitwardenSDKServerArgsEnvVar = "OPERAND_BITWARDEN_SDK_SERVER_ARGS"
 )
 
 var (

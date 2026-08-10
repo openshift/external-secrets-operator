@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
+	"slices"
+	"strings"
 	"unsafe"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,6 +22,10 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
+
+// operandArgsEnvSeparator splits OPERAND_*_ARGS on commas that introduce the next
+// --flag, so values may themselves contain commas (e.g. --tls-ciphers=A,B).
+var operandArgsEnvSeparator = regexp.MustCompile(`,+\s*--`)
 
 // createOrApplyDeployments ensures required Deployment resources exist and are correctly configured.
 func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
@@ -119,6 +126,9 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	switch assetName {
 	case controllerDeploymentAssetName:
 		updateContainerSpec(deployment, esc, image, logLevel)
+		if err := applyOperandArgsFromEnv(deployment, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
+			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
+		}
 	case webhookDeploymentAssetName:
 		checkInterval := "5m"
 		if esc.Spec.ApplicationConfig.WebhookConfig != nil &&
@@ -126,12 +136,21 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 			checkInterval = esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String()
 		}
 		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval)
+		if err := applyOperandArgsFromEnv(deployment, OperandWebhookContainer, OperandWebhookArgsEnvVar); err != nil {
+			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
+		}
 		updateWebhookVolumeConfig(deployment, esc)
 	case certControllerDeploymentAssetName:
 		updateCertControllerContainerSpec(deployment, image, logLevel)
+		if err := applyOperandArgsFromEnv(deployment, OperandCertControllerContainer, OperandCertControllerArgsEnvVar); err != nil {
+			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
+		}
 	case bitwardenDeploymentAssetName:
 		deployment.Labels["app.kubernetes.io/version"] = os.Getenv(bitwardenImageVersionEnvVarName)
 		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
+		if err := applyOperandArgsFromEnv(deployment, OperandBitwardenContainer, OperandBitwardenSDKServerArgsEnvVar); err != nil {
+			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
+		}
 		updateBitwardenVolumeConfig(deployment, esc)
 	}
 
@@ -748,4 +767,122 @@ func getComponentNameFromAsset(assetName string) (operatorv1alpha1.ComponentName
 	default:
 		return "", "", fmt.Errorf("unknown deployment asset name: %s", assetName)
 	}
+}
+
+// argFlagKey returns the flag key for a container arg (everything before the first '='),
+// or the whole token when there is no '='. Positional args without a leading "--" return "".
+func argFlagKey(arg string) string {
+	if !strings.HasPrefix(arg, "--") {
+		return ""
+	}
+	if i := strings.IndexByte(arg, '='); i >= 0 {
+		return arg[:i]
+	}
+	return arg
+}
+
+// parseOperandArgsEnv parses a list of full CLI flags separated by a comma that
+// introduces the next --flag (e.g. "--concurrent=5,--loglevel=debug").
+// Commas inside --key=value values are preserved (e.g. "--tls-ciphers=A,B,--loglevel=debug").
+// Boolean-style flags (--key with no '=') cannot carry a value, so any ",..." after
+// the flag name is dropped (e.g. "--enable-foo,junk,--bar=1" → "--enable-foo","--bar=1").
+// Whitespace around separators, repeated commas between flags, and a trailing
+// comma are tolerated. Callers should treat a fully empty/whitespace env value
+// as a no-op before calling this helper.
+func parseOperandArgsEnv(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}, nil
+	}
+
+	// Delimiter consumes the next flag's leading "--", so re-prefix on later parts.
+	parts := operandArgsEnvSeparator.Split(raw, -1)
+	args := make([]string, 0, len(parts))
+	for i, part := range parts {
+		if i > 0 {
+			part = "--" + part
+		}
+		// Trim surrounding whitespace, strip trailing separator commas, then
+		// trim again so a comma preceded by spaces (e.g. "--foo=1 ,") is removed.
+		part = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(part), ","))
+		if part == "" {
+			continue
+		}
+		if !strings.HasPrefix(part, "--") || part == "--" {
+			return nil, common.NewIrrecoverableError(
+				fmt.Errorf("argument %q must start with --", part),
+				"invalid custom arg override",
+			)
+		}
+		// Boolean-style flags have no value; discard ",junk" after the flag name.
+		if !strings.Contains(part, "=") {
+			if j := strings.IndexByte(part, ','); j >= 0 {
+				part = strings.TrimSpace(part[:j])
+				if part == "--" {
+					return nil, common.NewIrrecoverableError(
+						fmt.Errorf("argument %q must start with --", part),
+						"invalid custom arg override",
+					)
+				}
+			}
+		}
+		args = append(args, part)
+	}
+	return args, nil
+}
+
+// mergeContainerArgs overrides matching --flag keys in base with overrides and appends
+// unknown keys. Positional args (no leading "--") in base are preserved in place;
+// non-flag overrides are skipped (parseOperandArgsEnv already rejects them for the env path).
+func mergeContainerArgs(base []string, overrides []string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+
+	keyIndex := make(map[string]int, len(base))
+	for i, arg := range base {
+		if key := argFlagKey(arg); key != "" {
+			keyIndex[key] = i
+		}
+	}
+
+	result := slices.Clone(base)
+	for _, override := range overrides {
+		key := argFlagKey(override)
+		if key == "" {
+			continue
+		}
+		if idx, ok := keyIndex[key]; ok {
+			result[idx] = override
+			continue
+		}
+		result = append(result, override)
+		keyIndex[key] = len(result) - 1
+	}
+	return result
+}
+
+// applyOperandArgsFromEnv reads envVarName and merges its --key[=value] flags into
+// the named container's Args. Flags are separated by a comma before the next --flag
+// so values may contain commas. Unset or empty env is a no-op.
+func applyOperandArgsFromEnv(deployment *appsv1.Deployment, containerName, envVarName string) error {
+	raw := strings.TrimSpace(os.Getenv(envVarName))
+	if raw == "" {
+		return nil
+	}
+
+	overrides, err := parseOperandArgsEnv(raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", envVarName, err)
+	}
+
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name != containerName {
+			continue
+		}
+		deployment.Spec.Template.Spec.Containers[i].Args = mergeContainerArgs(
+			deployment.Spec.Template.Spec.Containers[i].Args, overrides)
+		return nil
+	}
+	return fmt.Errorf("container %s not found in deployment %s", containerName, deployment.GetName())
 }

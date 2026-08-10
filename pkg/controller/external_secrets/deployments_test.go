@@ -16,6 +16,7 @@ import (
 
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
+	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
 )
 
@@ -1755,4 +1756,502 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseOperandArgsEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    []string
+		wantErr bool
+	}{
+		// Empty / whitespace
+		{
+			name: "empty",
+			raw:  "",
+			want: []string{},
+		},
+		{
+			name: "whitespace only",
+			raw:  "  \t  ",
+			want: []string{},
+		},
+		{
+			name: "commas only",
+			raw:  ",,,",
+			want: []string{},
+		},
+
+		// Happy path
+		{
+			name: "single flag",
+			raw:  "--concurrent=5",
+			want: []string{"--concurrent=5"},
+		},
+		{
+			name: "boolean flag without equals",
+			raw:  "--enable-foo",
+			want: []string{"--enable-foo"},
+		},
+		{
+			name: "boolean then valued flags",
+			raw:  "--enable-foo,--enable-bar=true",
+			want: []string{"--enable-foo", "--enable-bar=true"},
+		},
+		{
+			name: "many flags",
+			raw:  "--a=1,--b=2,--c=3,--d=4",
+			want: []string{"--a=1", "--b=2", "--c=3", "--d=4"},
+		},
+		{
+			name: "surrounding whitespace trimmed",
+			raw:  "  --concurrent=5,--loglevel=debug  ",
+			want: []string{"--concurrent=5", "--loglevel=debug"},
+		},
+		{
+			name: "space after comma before next flag",
+			raw:  "--concurrent=5, --loglevel=debug",
+			want: []string{"--concurrent=5", "--loglevel=debug"},
+		},
+		{
+			name: "tab after comma before next flag",
+			raw:  "--a=1,\t--b=2",
+			want: []string{"--a=1", "--b=2"},
+		},
+		{
+			name: "newline after comma before next flag",
+			raw:  "--foo=bar,\n--baz=1",
+			want: []string{"--foo=bar", "--baz=1"},
+		},
+		{
+			name: "repeated commas between flags skipped",
+			raw:  "--concurrent=5,,--loglevel=debug,",
+			want: []string{"--concurrent=5", "--loglevel=debug"},
+		},
+		{
+			name: "messy whitespace and repeated commas",
+			raw:  "--arg1,   --arg2,, --arg3,--arg4,",
+			want: []string{"--arg1", "--arg2", "--arg3", "--arg4"},
+		},
+		{
+			name: "leading separator tolerated",
+			raw:  ",--concurrent=5",
+			want: []string{"--concurrent=5"},
+		},
+		{
+			name: "leading comma and spaces before first flag",
+			raw:  "  ,  --foo=1",
+			want: []string{"--foo=1"},
+		},
+
+		// Commas inside values (the reason for ,-- splitting)
+		{
+			name: "commas inside single flag value preserved",
+			raw:  "--tls-ciphers=TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+			want: []string{
+				"--tls-ciphers=TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+			},
+		},
+		{
+			name: "commas inside value then another flag",
+			raw:  "--tls-ciphers=TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,--loglevel=debug",
+			want: []string{
+				"--tls-ciphers=TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+				"--loglevel=debug",
+			},
+		},
+		{
+			name: "boolean flag then comma-containing value",
+			raw:  "--enable-http2,--tls-ciphers=A,B,C",
+			want: []string{"--enable-http2", "--tls-ciphers=A,B,C"},
+		},
+		{
+			name: "trailing comma on single flag value stripped",
+			raw:  "--tls-ciphers=A,B,",
+			want: []string{"--tls-ciphers=A,B"},
+		},
+		{
+			name: "comma without following flag stays in value",
+			raw:  "--concurrent=5,not-a-flag,--loglevel=debug",
+			want: []string{"--concurrent=5,not-a-flag", "--loglevel=debug"},
+		},
+		{
+			name: "single-dash fragment stays in prior value",
+			raw:  "--concurrent=5,-v,--loglevel=debug",
+			want: []string{"--concurrent=5,-v", "--loglevel=debug"},
+		},
+		{
+			name: "positional-looking text after comma stays in value",
+			raw:  "--port=10250,webhook",
+			want: []string{"--port=10250,webhook"},
+		},
+		{
+			name: "equals signs inside value preserved",
+			raw:  "--dns-name=foo=bar,--loglevel=debug",
+			want: []string{"--dns-name=foo=bar", "--loglevel=debug"},
+		},
+		{
+			name: "empty value after equals",
+			raw:  "--concurrent=,--loglevel=debug",
+			want: []string{"--concurrent=", "--loglevel=debug"},
+		},
+		{
+			// Space-separated "--flag value" is not supported; the whole token is kept.
+			name: "space inside token kept as single flag",
+			raw:  "--concurrent 5",
+			want: []string{"--concurrent 5"},
+		},
+		{
+			// Known delimiter limitation: a value that itself contains ",--" is split.
+			name: "value containing comma-dash-dash splits at delimiter",
+			raw:  "--cert-dir=/tmp/foo,--bar/baz,--loglevel=debug",
+			want: []string{"--cert-dir=/tmp/foo", "--bar/baz", "--loglevel=debug"},
+		},
+		{
+			// Leading separator, junk after a boolean flag (dropped), real tab before
+			// the next --flag, commas inside = values, and a quoted bool value.
+			name: "messy mixed separators and comma values",
+			raw:  ",--ARG1,arg2,,,\t,--arg3=1,2,3,--arg4=\"true\"",
+			want: []string{"--ARG1", "--arg3=1,2,3", "--arg4=\"true\""},
+		},
+		{
+			name: "junk after boolean flag dropped",
+			raw:  "--enable-foo,junk,--loglevel=debug",
+			want: []string{"--enable-foo", "--loglevel=debug"},
+		},
+
+		// Rejected inputs
+		{
+			name:    "missing dashes",
+			raw:     "concurrent=5",
+			wantErr: true,
+		},
+		{
+			name:    "single dash rejected",
+			raw:     "-concurrent=5",
+			wantErr: true,
+		},
+		{
+			name:    "positional token rejected",
+			raw:     "webhook,--port=10250",
+			wantErr: true,
+		},
+		{name: "positional only rejected",
+			raw:     "certcontroller",
+			wantErr: true,
+		},
+		{
+			name:    "bare equals rejected",
+			raw:     "=value",
+			wantErr: true,
+		},
+		{
+			name:    "bare double-dash alone rejected",
+			raw:     "--",
+			wantErr: true,
+		},
+		{
+			name:    "bare double-dash mid-list rejected",
+			raw:     "--concurrent=5,--,--loglevel=debug",
+			wantErr: true,
+		},
+		{
+			name:    "trailing bare double-dash rejected",
+			raw:     "--concurrent=5,--",
+			wantErr: true,
+		},
+		{
+			name:    "trailing bare double-dash with spaces rejected",
+			raw:     "--foo=bar, --",
+			wantErr: true,
+		},
+		{
+			name:    "only separators rejected",
+			raw:     ",--,--",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseOperandArgsEnv(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseOperandArgsEnv(%q) error = nil, want error", tt.raw)
+				}
+				if !common.IsIrrecoverableError(err) {
+					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want IrrecoverableError", tt.raw, err)
+				}
+				if !strings.Contains(err.Error(), "invalid custom arg override") {
+					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want message %q", tt.raw, err, "invalid custom arg override")
+				}
+				if !strings.Contains(err.Error(), "must start with --") {
+					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want cause mentioning must start with --", tt.raw, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseOperandArgsEnv(%q) unexpected error: %v", tt.raw, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseOperandArgsEnv(%q) = %#v, want %#v", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMergeContainerArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		base      []string
+		overrides []string
+		want      []string
+	}{
+		{
+			name:      "nil overrides unchanged",
+			base:      []string{"--concurrent=1"},
+			overrides: nil,
+			want:      []string{"--concurrent=1"},
+		},
+		{
+			name:      "override existing key",
+			base:      []string{"--concurrent=1", "--metrics-addr=:8080"},
+			overrides: []string{"--concurrent=5"},
+			want:      []string{"--concurrent=5", "--metrics-addr=:8080"},
+		},
+		{
+			name:      "append new key",
+			base:      []string{"--concurrent=1"},
+			overrides: []string{"--enable-foo=true"},
+			want:      []string{"--concurrent=1", "--enable-foo=true"},
+		},
+		{
+			name:      "boolean token replaces valued flag with same key",
+			base:      []string{"--enable-foo=true", "--loglevel=info"},
+			overrides: []string{"--enable-foo"},
+			want:      []string{"--enable-foo", "--loglevel=info"},
+		},
+		{
+			name:      "preserve leading positional token",
+			base:      []string{"webhook", "--port=10250", "--loglevel=info"},
+			overrides: []string{"--loglevel=debug", "--metrics-addr=:9090"},
+			want:      []string{"webhook", "--port=10250", "--loglevel=debug", "--metrics-addr=:9090"},
+		},
+		{
+			name:      "preserve certcontroller positional token",
+			base:      []string{"certcontroller", "--crd-requeue-interval=5m"},
+			overrides: []string{"--crd-requeue-interval=10m"},
+			want:      []string{"certcontroller", "--crd-requeue-interval=10m"},
+		},
+		{
+			name:      "skip non-flag overrides",
+			base:      []string{"webhook", "--port=10250"},
+			overrides: []string{"webhook", "--port=10251"},
+			want:      []string{"webhook", "--port=10251"},
+		},
+		{
+			name:      "all non-flag overrides leave base unchanged",
+			base:      []string{"webhook", "--port=10250"},
+			overrides: []string{"webhook", "certcontroller", "-v"},
+			want:      []string{"webhook", "--port=10250"},
+		},
+		{
+			name:      "empty override tokens skipped",
+			base:      []string{"--concurrent=1"},
+			overrides: []string{"", "--concurrent=2", ""},
+			want:      []string{"--concurrent=2"},
+		},
+		{
+			name:      "single-dash override skipped",
+			base:      []string{"--loglevel=info"},
+			overrides: []string{"-loglevel=debug", "--metrics-addr=:9090"},
+			want:      []string{"--loglevel=info", "--metrics-addr=:9090"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeContainerArgs(tt.base, tt.overrides)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("mergeContainerArgs() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyOperandArgsFromEnv(t *testing.T) {
+	deploymentWithContainer := func(name string, args []string) *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: name, Args: args}},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("unset env is no-op", func(t *testing.T) {
+		dep := deploymentWithContainer(OperandCoreControllerContainer, []string{"--concurrent=1"})
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--concurrent=1"}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
+
+	t.Run("empty env is no-op", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "  ")
+		dep := deploymentWithContainer(OperandCoreControllerContainer, []string{"--concurrent=1"})
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--concurrent=1"}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
+
+	t.Run("overrides and appends", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5,--enable-foo=true")
+		dep := deploymentWithContainer(OperandCoreControllerContainer, []string{"--concurrent=1", "--metrics-addr=:8080"})
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--concurrent=5", "--metrics-addr=:8080", "--enable-foo=true"}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
+
+	t.Run("invalid entry fails", func(t *testing.T) {
+		t.Setenv(OperandWebhookArgsEnvVar, "not-a-flag")
+		dep := deploymentWithContainer(OperandWebhookContainer, []string{"webhook", "--port=10250"})
+		err := applyOperandArgsFromEnv(dep, OperandWebhookContainer, OperandWebhookArgsEnvVar)
+		if err == nil {
+			t.Fatal("expected error for invalid args env value")
+		}
+		if !common.IsIrrecoverableError(err) {
+			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+		wantSubstrings := []string{
+			OperandWebhookArgsEnvVar,
+			"invalid custom arg override",
+			`argument "not-a-flag" must start with --`,
+		}
+		for _, sub := range wantSubstrings {
+			if !strings.Contains(err.Error(), sub) {
+				t.Fatalf("error = %v, want substring %q", err, sub)
+			}
+		}
+	})
+
+	t.Run("positional env value fails without mutating args", func(t *testing.T) {
+		t.Setenv(OperandWebhookArgsEnvVar, "webhook,--port=10251")
+		original := []string{"webhook", "--port=10250"}
+		dep := deploymentWithContainer(OperandWebhookContainer, append([]string(nil), original...))
+		err := applyOperandArgsFromEnv(dep, OperandWebhookContainer, OperandWebhookArgsEnvVar)
+		if err == nil {
+			t.Fatal("expected error for positional env value")
+		}
+		if !common.IsIrrecoverableError(err) {
+			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, original) {
+			t.Errorf("Args mutated on error: %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, original)
+		}
+	})
+
+	t.Run("single dash env value fails", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "-concurrent=5")
+		dep := deploymentWithContainer(OperandCoreControllerContainer, []string{"--concurrent=1"})
+		err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar)
+		if err == nil {
+			t.Fatal("expected error for single-dash env value")
+		}
+		if !common.IsIrrecoverableError(err) {
+			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+	})
+
+	t.Run("comma without following flag stays in value", func(t *testing.T) {
+		// Commas only separate flags when they introduce the next --flag, so
+		// ",bad" remains part of --concurrent's value rather than a second token.
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5,bad")
+		dep := deploymentWithContainer(OperandCoreControllerContainer, []string{"--concurrent=1"})
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--concurrent=5,bad"}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
+
+	t.Run("comma-containing tls-ciphers value merges with other flags", func(t *testing.T) {
+		t.Setenv(OperandWebhookArgsEnvVar, "--tls-ciphers=A,B,--loglevel=debug")
+		dep := deploymentWithContainer(OperandWebhookContainer, []string{
+			"webhook",
+			"--port=10250",
+			"--loglevel=info",
+		})
+		if err := applyOperandArgsFromEnv(dep, OperandWebhookContainer, OperandWebhookArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{
+			"webhook",
+			"--port=10250",
+			"--loglevel=debug",
+			"--tls-ciphers=A,B",
+		}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
+
+	t.Run("bare double-dash separator fails without mutating args", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5,--,--loglevel=debug")
+		original := []string{"--concurrent=1"}
+		dep := deploymentWithContainer(OperandCoreControllerContainer, append([]string(nil), original...))
+		err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar)
+		if err == nil {
+			t.Fatal("expected error for bare -- token")
+		}
+		if !common.IsIrrecoverableError(err) {
+			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, original) {
+			t.Errorf("Args mutated on error: %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, original)
+		}
+	})
+
+	t.Run("missing container fails", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5")
+		dep := deploymentWithContainer("other", []string{"--concurrent=1"})
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err == nil {
+			t.Fatal("expected error for missing container")
+		}
+	})
+
+	t.Run("empty containers list fails", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5")
+		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
+		if err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err == nil {
+			t.Fatal("expected error for empty containers list")
+		}
+	})
+
+	t.Run("bitwarden args applied onto empty base", func(t *testing.T) {
+		t.Setenv(OperandBitwardenSDKServerArgsEnvVar, "--port=9999")
+		dep := deploymentWithContainer(OperandBitwardenContainer, nil)
+		if err := applyOperandArgsFromEnv(dep, OperandBitwardenContainer, OperandBitwardenSDKServerArgsEnvVar); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--port=9999"}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, want) {
+			t.Errorf("Args = %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, want)
+		}
+	})
 }
