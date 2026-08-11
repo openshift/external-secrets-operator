@@ -17,10 +17,13 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1 "github.com/openshift/api/config/v1"
+
 	"github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 )
 
 const (
@@ -3481,6 +3484,124 @@ func TestGetDeploymentObjectOperandArgsFromEnv(t *testing.T) {
 		}
 		if !common.IsUserConfigurationError(err) {
 			t.Fatalf("error = %v, want UserConfigurationError", err)
+		}
+	})
+}
+
+// setStartupTLSProfile records spec as the startup cluster TLS profile for the
+// duration of the test, restoring the previous value afterwards.
+func setStartupTLSProfile(t *testing.T, spec *configv1.TLSProfileSpec) {
+	t.Helper()
+	previous := tlsprofile.StartupProfile()
+	t.Cleanup(func() { tlsprofile.SetStartupProfile(previous) })
+	tlsprofile.SetStartupProfile(spec)
+}
+
+func TestGetDeploymentObjectTLSProfileArgs(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	esc := commontest.TestExternalSecretsConfig()
+	escWithBW := esc.DeepCopy()
+	escWithBW.Spec.Plugins.BitwardenSecretManagerProvider = &v1alpha1.BitwardenSecretManagerProvider{
+		Mode:      v1alpha1.Enabled,
+		SecretRef: &v1alpha1.SecretReference{Name: "bitwarden-certs"},
+	}
+	resourceMetadata := testResourceMetadata(esc)
+	r := testReconciler(t)
+
+	assets := []struct {
+		name      string
+		assetName string
+		container string
+		esc       *v1alpha1.ExternalSecretsConfig
+	}{
+		{"controller", controllerDeploymentAssetName, OperandCoreControllerContainer, esc},
+		{"webhook", webhookDeploymentAssetName, OperandWebhookContainer, esc},
+		{"cert controller", certControllerDeploymentAssetName, OperandCertControllerContainer, esc},
+		{"bitwarden", bitwardenDeploymentAssetName, OperandBitwardenContainer, escWithBW},
+	}
+
+	t.Run("no cluster profile leaves args untouched", func(t *testing.T) {
+		setStartupTLSProfile(t, nil)
+		for _, a := range assets {
+			dep, err := r.getDeploymentObject(a.assetName, a.esc, resourceMetadata)
+			if err != nil {
+				t.Fatalf("%s: getDeploymentObject() unexpected error: %v", a.name, err)
+			}
+			for _, arg := range containerArgsByName(dep, a.container) {
+				if strings.HasPrefix(arg, "--tls-") {
+					t.Errorf("%s: unexpected TLS arg %q with no cluster profile", a.name, arg)
+				}
+			}
+		}
+	})
+
+	t.Run("intermediate profile sets min version and ciphers", func(t *testing.T) {
+		setStartupTLSProfile(t, configv1.TLSProfiles[configv1.TLSProfileIntermediateType])
+		for _, a := range assets {
+			dep, err := r.getDeploymentObject(a.assetName, a.esc, resourceMetadata)
+			if err != nil {
+				t.Fatalf("%s: getDeploymentObject() unexpected error: %v", a.name, err)
+			}
+			args := containerArgsByName(dep, a.container)
+			if !slices.Contains(args, "--tls-min-version=1.2") {
+				t.Errorf("%s: expected --tls-min-version=1.2, got %#v", a.name, args)
+			}
+			if !slices.ContainsFunc(args, func(s string) bool { return strings.HasPrefix(s, "--tls-ciphers=") }) {
+				t.Errorf("%s: expected --tls-ciphers, got %#v", a.name, args)
+			}
+			if slices.ContainsFunc(args, func(s string) bool { return strings.HasPrefix(s, "--tls-curve-preferences") }) {
+				t.Errorf("%s: --tls-curve-preferences must not be set, got %#v", a.name, args)
+			}
+		}
+	})
+
+	t.Run("modern profile omits ciphers", func(t *testing.T) {
+		setStartupTLSProfile(t, configv1.TLSProfiles[configv1.TLSProfileModernType])
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--tls-min-version=1.3") {
+			t.Errorf("expected --tls-min-version=1.3, got %#v", args)
+		}
+		if slices.ContainsFunc(args, func(s string) bool { return strings.HasPrefix(s, "--tls-ciphers") }) {
+			t.Errorf("TLS 1.3 must not set --tls-ciphers, got %#v", args)
+		}
+	})
+
+	t.Run("operand args env overrides cluster profile", func(t *testing.T) {
+		setStartupTLSProfile(t, configv1.TLSProfiles[configv1.TLSProfileIntermediateType])
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--tls-min-version=1.3")
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--tls-min-version=1.3") {
+			t.Errorf("expected env override --tls-min-version=1.3, got %#v", args)
+		}
+		if slices.Contains(args, "--tls-min-version=1.2") {
+			t.Errorf("cluster profile value should have been overridden, got %#v", args)
+		}
+	})
+
+	t.Run("positional subcommand token is preserved", func(t *testing.T) {
+		setStartupTLSProfile(t, configv1.TLSProfiles[configv1.TLSProfileIntermediateType])
+		for _, a := range []struct{ assetName, container, token string }{
+			{webhookDeploymentAssetName, OperandWebhookContainer, "webhook"},
+			{certControllerDeploymentAssetName, OperandCertControllerContainer, "certcontroller"},
+		} {
+			dep, err := r.getDeploymentObject(a.assetName, esc, resourceMetadata)
+			if err != nil {
+				t.Fatalf("%s: getDeploymentObject() unexpected error: %v", a.token, err)
+			}
+			args := containerArgsByName(dep, a.container)
+			if len(args) == 0 || args[0] != a.token {
+				t.Errorf("expected leading %q token, got %#v", a.token, args)
+			}
 		}
 	})
 }
