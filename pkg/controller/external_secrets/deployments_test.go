@@ -1760,10 +1760,11 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 
 func TestParseOperandArgsEnv(t *testing.T) {
 	tests := []struct {
-		name    string
-		raw     string
-		want    []string
-		wantErr bool
+		name       string
+		raw        string
+		want       []string
+		wantErr    bool
+		wantErrSub string // optional; defaults to "must start with --" when wantErr
 	}{
 		// Empty / whitespace
 		{
@@ -1970,6 +1971,24 @@ func TestParseOperandArgsEnv(t *testing.T) {
 			raw:     ",--,--",
 			wantErr: true,
 		},
+		{
+			name:       "empty flag name rejected",
+			raw:        "--=value",
+			wantErr:    true,
+			wantErrSub: "must include a flag name after --",
+		},
+		{
+			name:       "empty flag name with empty value rejected",
+			raw:        "--=",
+			wantErr:    true,
+			wantErrSub: "must include a flag name after --",
+		},
+		{
+			name:       "empty flag name mid-list rejected",
+			raw:        "--concurrent=5,--=value,--loglevel=debug",
+			wantErr:    true,
+			wantErrSub: "must include a flag name after --",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1984,8 +2003,12 @@ func TestParseOperandArgsEnv(t *testing.T) {
 				if !strings.Contains(err.Error(), "invalid custom arg override") {
 					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want message %q", tt.raw, err, "invalid custom arg override")
 				}
-				if !strings.Contains(err.Error(), "must start with --") {
-					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want cause mentioning must start with --", tt.raw, err)
+				errSub := tt.wantErrSub
+				if errSub == "" {
+					errSub = "must start with --"
+				}
+				if !strings.Contains(err.Error(), errSub) {
+					t.Fatalf("parseOperandArgsEnv(%q) error = %v, want cause mentioning %q", tt.raw, err, errSub)
 				}
 				return
 			}
@@ -2221,6 +2244,25 @@ func TestApplyOperandArgsFromEnv(t *testing.T) {
 		}
 		if !common.IsIrrecoverableError(err) {
 			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, original) {
+			t.Errorf("Args mutated on error: %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, original)
+		}
+	})
+
+	t.Run("empty flag name fails without mutating args", func(t *testing.T) {
+		t.Setenv(OperandExternalSecretsArgsEnvVar, "--=value")
+		original := []string{"--concurrent=1"}
+		dep := deploymentWithContainer(OperandCoreControllerContainer, append([]string(nil), original...))
+		err := applyOperandArgsFromEnv(dep, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar)
+		if err == nil {
+			t.Fatal("expected error for empty flag name")
+		}
+		if !common.IsIrrecoverableError(err) {
+			t.Fatalf("error = %v, want IrrecoverableError", err)
+		}
+		if !strings.Contains(err.Error(), "must include a flag name after --") {
+			t.Fatalf("error = %v, want empty flag name message", err)
 		}
 		if !reflect.DeepEqual(dep.Spec.Template.Spec.Containers[0].Args, original) {
 			t.Errorf("Args mutated on error: %#v, want %#v", dep.Spec.Template.Spec.Containers[0].Args, original)
