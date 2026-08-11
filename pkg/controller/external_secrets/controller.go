@@ -48,6 +48,7 @@ import (
 	"github.com/go-logr/logr"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	configv1 "github.com/openshift/api/config/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	operatorclient "github.com/openshift/external-secrets-operator/pkg/controller/client"
@@ -91,6 +92,7 @@ type Reconciler struct {
 	now                   *common.Now
 }
 
+// +kubebuilder:rbac:groups=config.openshift.io,resources=apiservers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs/status,verbs=get;update
 // +kubebuilder:rbac:groups=operator.openshift.io,resources=externalsecretsconfigs/finalizers,verbs=update
@@ -229,6 +231,9 @@ func buildCacheObjectList(includeCertManager bool) map[client.Object]cache.ByObj
 	objectList[&operatorv1alpha1.ExternalSecretsConfig{}] = cache.ByObject{}
 	objectList[&operatorv1alpha1.ExternalSecretsManager{}] = cache.ByObject{}
 
+	// Cluster APIServer for TLS profile resolution
+	objectList[&configv1.APIServer{}] = cache.ByObject{}
+
 	// Certificate objects - only include if cert-manager CRD exists
 	if includeCertManager {
 		objectList[&certmanagerv1.Certificate{}] = cache.ByObject{
@@ -329,6 +334,19 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return nil
 			}
 			r.log.V(4).Info("received ExternalSecretsManager reconcile event", "name", obj.GetName())
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{Name: common.ExternalSecretsConfigObjectName},
+			}}
+		}),
+		builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+	)
+
+	// Watch cluster APIServer for TLS profile changes. Generation changes on
+	// apiserver.config.openshift.io/cluster trigger reconciliation so operand
+	// deployments can be updated with new TLS settings.
+	mgrBuilder.Watches(
+		&configv1.APIServer{},
+		handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
 			return []reconcile.Request{{
 				NamespacedName: types.NamespacedName{Name: common.ExternalSecretsConfigObjectName},
 			}}
