@@ -826,6 +826,13 @@ func parseOperandArgsEnv(raw string) ([]string, error) {
 				}
 			}
 		}
+		// Reject empty flag names such as "--=value" (argFlagKey is "--").
+		if argFlagKey(part) == "--" {
+			return nil, common.NewIrrecoverableError(
+				fmt.Errorf("argument %q must include a flag name after --", part),
+				"invalid custom arg override",
+			)
+		}
 		args = append(args, part)
 	}
 	return args, nil
