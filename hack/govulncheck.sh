@@ -31,6 +31,8 @@ set -o errexit
 # - https://pkg.go.dev/vuln/GO-2026-5970 - x/text/unicode/norm: infinite loop on invalid UTF-8 input.
 # - https://pkg.go.dev/vuln/GO-2026-5856 - crypto/tls: ECH handshake PSK identity disclosure to passive observers.
 KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4918|GO-2026-4971|GO-2026-5026|GO-2026-5037|GO-2026-5038|GO-2026-5039|GO-2026-5970|GO-2026-5856"
+# - https://pkg.go.dev/vuln/GO-2026-5856 - crypto/tls: Encrypted Client Hello handshakes can be de-anonymized via PSK identity disclosure
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4918|GO-2026-4971|GO-2026-5026|GO-2026-5037|GO-2026-5038|GO-2026-5039|GO-2026-5856"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"

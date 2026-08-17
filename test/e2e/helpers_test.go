@@ -34,12 +34,14 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
+	externalsecrets "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
 	"github.com/openshift/external-secrets-operator/test/utils"
 )
 
@@ -56,8 +58,12 @@ const (
 // ensureExternalSecretsConfigReady creates the cluster ExternalSecretsConfig CR when missing
 // and waits until Ready=True. Shared by suite Describes that may run before e2e_test BeforeAll.
 func ensureExternalSecretsConfigReady(ctx context.Context) error {
-	if suiteRuntimeClient == nil || suiteDynamicClient == nil {
+	if suiteRuntimeClient == nil || suiteDynamicClient == nil || suiteClientset == nil {
 		return fmt.Errorf("suite clients not initialized")
+	}
+
+	if err := waitForNamespaceTermination(ctx, suiteClientset, externalsecrets.OperandDefaultNamespace, 2*time.Minute); err != nil {
+		return fmt.Errorf("waiting for operand namespace to finish terminating: %w", err)
 	}
 
 	esc := &operatorv1alpha1.ExternalSecretsConfig{}
@@ -71,6 +77,29 @@ func ensureExternalSecretsConfigReady(ctx context.Context) error {
 	}
 
 	return utils.WaitForExternalSecretsConfigReady(ctx, suiteDynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)
+}
+
+func waitForNamespaceTermination(ctx context.Context, clientset *kubernetes.Clientset, namespace string, timeout time.Duration) error {
+	ns, err := clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if ns.Status.Phase != "Terminating" {
+		return nil
+	}
+	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		_, err := clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	})
 }
 
 // resourceType defines a Kubernetes resource type to verify annotations on
