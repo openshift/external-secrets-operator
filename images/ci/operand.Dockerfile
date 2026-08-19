@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.26-openshift-4.23 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.26-openshift-5.0 AS builder
 
 ARG RELEASE_BRANCH=v2.5.0
 ARG GO_BUILD_TAGS=strictfipsruntime,openssl
@@ -12,7 +12,7 @@ RUN git clone --depth 1 --branch $RELEASE_BRANCH https://github.com/openshift/ex
 RUN go mod vendor
 RUN go build -mod=vendor -tags $GO_BUILD_TAGS -o _output/external-secrets main.go
 
-FROM registry.access.redhat.com/ubi9-minimal:9.4
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 ARG SRC_DIR=/go/src/github.com/openshift/external-secrets
 COPY --from=builder $SRC_DIR/_output/external-secrets /bin/external-secrets
