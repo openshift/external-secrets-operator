@@ -18,6 +18,7 @@ package serialization
 import (
 	"fmt"
 	"go/ast"
+	"go/types"
 
 	"golang.org/x/tools/go/analysis"
 	"sigs.k8s.io/kube-api-linter/pkg/analysis/helpers/extractjsontags"
@@ -181,10 +182,14 @@ func (s *serializationCheck) checkFieldPropertiesWithoutOmitEmpty(pass *analysis
 		// The field is not omitempty, and the zero value is valid, the field does not need to be a pointer.
 		s.handleFieldShouldNotBePointer(pass, field, fieldName, isPointer, underlying, markersAccess, "field %s does not have omitempty and allows the zero value. The field does not need to be a pointer.", qualifiedFieldName)
 	case !hasValidZeroValue:
-		// The zero value would not be accepted, so the field needs to have omitempty.
-		// Force the omitempty policy to suggest a fix. We can only get to this function when the policy is configured to Ignore.
-		// Since we absolutely have to add the omitempty tag, we can report it as a suggestion.
-		reportShouldAddOmitEmpty(pass, field, OmitEmptyPolicySuggestFix, qualifiedFieldName, "field %s does not allow the zero value. It must have the omitempty tag.", jsonTags)
+		if s.omitZeroPolicy == OmitZeroPolicyForbid || !isStruct {
+			// The zero value would not be accepted, so the field needs to have omitempty.
+			// Force the omitempty policy to suggest a fix. We can only get to this function when the policy is configured to Ignore.
+			// Since we absolutely have to add the omitempty tag, we can report it as a suggestion.
+			// If we are checking omitzero separately, and it's a struct, this wouldn't apply so we skip.
+			reportShouldAddOmitEmpty(pass, field, OmitEmptyPolicySuggestFix, qualifiedFieldName, "field %s does not allow the zero value. It must have the omitempty tag.", jsonTags)
+		}
+
 		// Once it has the omitempty tag, it will also need to be a pointer in some cases.
 		// Now handle it as if it had the omitempty already.
 		// We already handle the omitempty tag above, so force the `hasOmitEmpty` to true.
@@ -300,6 +305,31 @@ func hasExplicitZeroMinValidation(pass *analysis.Pass, field *ast.Field, underly
 		// Check for explicit MinItems=0
 		return fieldMarkers.HasWithValue(markers.KubebuilderMinItemsMarker + "=0")
 	case *ast.MapType:
+		// Check for explicit MinProperties=0
+		return fieldMarkers.HasWithValue(markers.KubebuilderMinPropertiesMarker + "=0")
+	case *ast.Ident, *ast.SelectorExpr:
+		// For named types (local or from external packages), check if the underlying type is a slice or map.
+		return hasExplicitZeroMinValidationForNamedType(pass, underlying, fieldMarkers)
+	}
+
+	return false
+}
+
+// hasExplicitZeroMinValidationForNamedType checks if a named type (like a type alias to slice/map)
+// has an explicit MinItems=0 or MinProperties=0 marker.
+func hasExplicitZeroMinValidationForNamedType(pass *analysis.Pass, underlying ast.Expr, fieldMarkers markershelper.MarkerSet) bool {
+	typeOf := pass.TypesInfo.TypeOf(underlying)
+	if typeOf == nil {
+		return false
+	}
+
+	underlyingType := typeOf.Underlying()
+
+	switch underlyingType.(type) {
+	case *types.Slice:
+		// Check for explicit MinItems=0
+		return fieldMarkers.HasWithValue(markers.KubebuilderMinItemsMarker + "=0")
+	case *types.Map:
 		// Check for explicit MinProperties=0
 		return fieldMarkers.HasWithValue(markers.KubebuilderMinPropertiesMarker + "=0")
 	}

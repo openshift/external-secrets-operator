@@ -126,7 +126,7 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 	}
 	externalSecretsNamespace := getNamespace(esc)
 
-	certificate.Spec.IssuerRef = v1.ObjectReference{
+	certificate.Spec.IssuerRef = v1.IssuerReference{
 		Name:  certManageConfig.IssuerRef.Name,
 		Kind:  certManageConfig.IssuerRef.Kind,
 		Group: certManageConfig.IssuerRef.Group,
@@ -159,7 +159,7 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 	return nil
 }
 
-func (r *Reconciler) assertIssuerRefExists(issueRef v1.ObjectReference, namespace string) error {
+func (r *Reconciler) assertIssuerRefExists(issueRef v1.IssuerReference, namespace string) error {
 	issuerExists, err := r.getIssuer(issueRef, namespace)
 	if err != nil {
 		if errors.Is(err, errUnsupportedIssuerKind) {
@@ -208,7 +208,7 @@ func (r *Reconciler) assertSecretRefExists(esc *operatorv1alpha1.ExternalSecrets
 	return nil
 }
 
-func (r *Reconciler) getIssuer(issuerRef v1.ObjectReference, namespace string) (issuerExists bool, err error) {
+func (r *Reconciler) getIssuer(issuerRef v1.IssuerReference, namespace string) (issuerExists bool, err error) {
 	namespacedName := types.NamespacedName{
 		Name:      issuerRef.Name,
 		Namespace: namespace,
@@ -231,7 +231,7 @@ func (r *Reconciler) getIssuer(issuerRef v1.ObjectReference, namespace string) (
 	return issuerExists, nil
 }
 
-func issuerNotFoundError(issueRef v1.ObjectReference) error {
+func issuerNotFoundError(issueRef v1.IssuerReference) error {
 	return apierrors.NewNotFound(issuerGroupResource(issueRef.Kind), issueRef.Name)
 }
 
