@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr/testr"
 
@@ -55,6 +56,7 @@ func TestReconcile(t *testing.T) {
 		preReq                  func(*Reconciler, *fakes.FakeCtrlClient)
 		expectedStatusCondition []operatorv1alpha1.ControllerStatus
 		wantErr                 string
+		wantRequeueAfter        time.Duration
 	}{
 		{
 			name: "esm reconciliation successful",
@@ -135,7 +137,7 @@ func TestReconcile(t *testing.T) {
 			wantErr:                 `failed to fetch externalsecretsmanagers.operator.openshift.io "/cluster" during reconciliation: externalsecretsmanagers.operator.openshift.io "cluster" not found`,
 		},
 		{
-			name: "externalsecretsconfig object not found",
+			name: "externalsecretsconfig object not found requeues",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.GetCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) error {
 					switch o := obj.(type) {
@@ -154,6 +156,7 @@ func TestReconcile(t *testing.T) {
 				})
 			},
 			expectedStatusCondition: []operatorv1alpha1.ControllerStatus{},
+			wantRequeueAfter:        common.DefaultRequeueTime,
 		},
 		{
 			name: "externalsecretsconfig fetch fails",
@@ -278,7 +281,7 @@ func TestReconcile(t *testing.T) {
 			}
 			r.CtrlClient = mock
 			esm = &operatorv1alpha1.ExternalSecretsManager{}
-			_, err := r.Reconcile(context.Background(), ctrl.Request{
+			result, err := r.Reconcile(context.Background(), ctrl.Request{
 				NamespacedName: types.NamespacedName{
 					Name: common.ExternalSecretsManagerObjectName,
 				},
@@ -286,6 +289,9 @@ func TestReconcile(t *testing.T) {
 
 			if (tt.wantErr != "" || err != nil) && (err == nil || err.Error() != tt.wantErr) {
 				t.Errorf("Reconcile() err: %v, wantErr: %v", err, tt.wantErr)
+			}
+			if result.RequeueAfter != tt.wantRequeueAfter {
+				t.Errorf("Reconcile() RequeueAfter = %v, want %v", result.RequeueAfter, tt.wantRequeueAfter)
 			}
 			for _, c1 := range esm.Status.ControllerStatuses {
 				for _, c2 := range tt.expectedStatusCondition {

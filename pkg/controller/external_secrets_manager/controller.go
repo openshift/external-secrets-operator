@@ -152,10 +152,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if err := r.Get(ctx, key, r.esc); err != nil {
 		if errors.IsNotFound(err) {
-			// NotFound errors, would mean the object hasn't been created yet and
-			// not required to reconcile yet.
-			r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io object not found, skipping reconciliation", "key", key)
-			return ctrl.Result{}, nil
+			// Requeue so the controller retries once the CR appears. Without this,
+			// a race between cache sync and CR creation (common in GitOps flows)
+			// can leave the controller stuck until the pod is restarted.
+			r.log.V(1).Info("externalsecretsconfigs.operator.openshift.io object not found, will retry", "key", key)
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueTime}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to fetch externalsecretsconfigs.operator.openshift.io %q during reconciliation: %w", key, err)
 	}
