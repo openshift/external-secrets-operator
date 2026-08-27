@@ -33,14 +33,29 @@ const (
 	CheckSwitch
 	CheckTypeSwitch
 
-	// Check append only allows assignments of `append` to be cuddled with other
+	// CheckAfterBlock ensures there's a newline after each block.
+	CheckAfterBlock
+	// CheckAfterDecl ensures there's a newline after a declaration statement
+	// (`var`, `const`, `type`) unless the following statement is another
+	// declaration.
+	CheckAfterDecl
+	// CheckAfterDefer ensures there's a newline after a `defer` statement
+	// unless the following statement is another `defer`.
+	CheckAfterDefer
+	// CheckAfterExpr ensures there's a newline after an expression statement
+	// unless the following statement is another expression statement.
+	CheckAfterExpr
+	// CheckAfterGo ensures there's a newline after a `go` statement unless the
+	// following statement is another `go`.
+	CheckAfterGo
+	// CheckAppend only allows assignments of `append` to be cuddled with other
 	// assignments if it's a variable used in the append statement, e.g.
 	//
 	// a := 1
 	// x = append(x, a)
 	// .
 	CheckAppend
-	// Assign exclusive only allows assignments of either new variables or
+	// CheckAssignExclusive only allows assignments of either new variables or
 	// re-assignment of existing ones, e.g.
 	//
 	// a := 1
@@ -59,8 +74,22 @@ const (
 	// t1.Fn3()
 	// .
 	CheckAssignExpr
-	// Force error checking to follow immediately after an error variable is
-	// assigned, e.g.
+	// CheckCuddleGroup changes how cuddle-max-statements violations are
+	// reported when more than the configured number of cuddled statements
+	// share a variable with the trigger statement (e.g. `if`, `for`,
+	// `switch`). Instead of pointing at the (N+1)th cuddled statement and
+	// splitting the cuddled group, the diagnostic is placed on the trigger
+	// itself so the entire cuddled group stays together and gets separated
+	// from the trigger by a blank line, e.g.
+	//
+	// a := 1
+	// b := 2
+	//
+	// if a > b {}
+	// .
+	CheckCuddleGroup
+	// CheckErr force error checking to follow immediately after an error
+	// variable is assigned, e.g.
 	//
 	// _, err := someFn()
 	// if err != nil {
@@ -71,6 +100,7 @@ const (
 	CheckLeadingWhitespace
 	CheckTrailingWhitespace
 
+	//nolint:godoclint // No need to document
 	// CheckTypes only used for reporting.
 	CheckCaseTrailingNewline
 )
@@ -95,9 +125,15 @@ func (c CheckType) String() string {
 		"switch",
 		"type-switch",
 		//
+		"after-block",
+		"after-decl",
+		"after-defer",
+		"after-expr",
+		"after-go",
 		"append",
 		"assign-exclusive",
 		"assign-expr",
+		"cuddle-group",
 		"err",
 		"leading-whitespace",
 		"trailing-whitespace",
@@ -107,22 +143,24 @@ func (c CheckType) String() string {
 }
 
 type Configuration struct {
-	IncludeGenerated  bool
-	AllowFirstInBlock bool
-	AllowWholeBlock   bool
-	BranchMaxLines    int
-	CaseMaxLines      int
-	Checks            CheckSet
+	IncludeGenerated    bool
+	AllowFirstInBlock   bool
+	AllowWholeBlock     bool
+	BranchMaxLines      int
+	CaseMaxLines        int
+	CuddleMaxStatements int
+	Checks              CheckSet
 }
 
 func NewConfig() *Configuration {
 	return &Configuration{
-		IncludeGenerated:  false,
-		AllowFirstInBlock: true,
-		AllowWholeBlock:   false,
-		CaseMaxLines:      0,
-		BranchMaxLines:    2,
-		Checks:            DefaultChecks(),
+		IncludeGenerated:    false,
+		AllowFirstInBlock:   true,
+		AllowWholeBlock:     false,
+		CaseMaxLines:        0,
+		BranchMaxLines:      2,
+		CuddleMaxStatements: 1,
+		Checks:              DefaultChecks(),
 	}
 }
 
@@ -210,6 +248,12 @@ func AllChecks() CheckSet {
 	c := DefaultChecks()
 	c.Add(CheckAssignExclusive)
 	c.Add(CheckAssignExpr)
+	c.Add(CheckAfterBlock)
+	c.Add(CheckAfterDecl)
+	c.Add(CheckAfterDefer)
+	c.Add(CheckAfterExpr)
+	c.Add(CheckAfterGo)
+	c.Add(CheckCuddleGroup)
 
 	return c
 }
@@ -261,6 +305,16 @@ func CheckFromString(s string) (CheckType, error) {
 	case "type-switch":
 		return CheckTypeSwitch, nil
 
+	case "after-block":
+		return CheckAfterBlock, nil
+	case "after-decl":
+		return CheckAfterDecl, nil
+	case "after-defer":
+		return CheckAfterDefer, nil
+	case "after-expr":
+		return CheckAfterExpr, nil
+	case "after-go":
+		return CheckAfterGo, nil
 	case "append":
 		return CheckAppend, nil
 	case "assign-exclusive":
@@ -269,6 +323,8 @@ func CheckFromString(s string) (CheckType, error) {
 		return CheckAssignExpr, nil
 	case "err":
 		return CheckErr, nil
+	case "cuddle-group":
+		return CheckCuddleGroup, nil
 	case "leading-whitespace":
 		return CheckLeadingWhitespace, nil
 	case "trailing-whitespace":

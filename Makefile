@@ -16,9 +16,9 @@ export XDG_CONFIG_HOME ?= $(PROJECT_ROOT)/_output/.config
 
 # IMG_VERSION defines the images version for the operator, bundle and catalog (must be valid semver: Major.Minor.Patch).
 # To re-generate any image for another specific version without changing the standard setup, you can:
-# - use the IMG_VERSION as arg of the specific image build and push targets (e.g make IMG_VERSION=1.2.0 bundle-build bundle-push)
-# - use environment variables to overwrite this value (e.g export IMG_VERSION=1.2.0)
-IMG_VERSION ?= 1.2.0
+# - use the IMG_VERSION as arg of the specific image build and push targets (e.g make IMG_VERSION=1.3.0 bundle-build bundle-push)
+# - use environment variables to overwrite this value (e.g export IMG_VERSION=1.3.0)
+IMG_VERSION ?= 1.3.0
 
 # Validate IMG_VERSION is valid semver (Major.Minor.Patch), fallback to default if not.
 ifneq ($(shell echo '$(IMG_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && echo valid),valid)
@@ -33,9 +33,9 @@ EXTERNAL_SECRETS_VERSION ?= v2.5.0
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
-BUNDLE_CHANNELS ?=
+CHANNELS ?= stable-v1,stable-v1.3
 ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
+BUNDLE_CHANNELS := $(CHANNELS)
 endif
 
 # DEFAULT_CHANNEL defines the default channel used in the bundle.
@@ -43,11 +43,11 @@ endif
 # To re-generate a bundle for any other default channel without changing the default setup, you can:
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
-BUNDLE_DEFAULT_CHANNEL ?=
+DEFAULT_CHANNEL ?= stable-v1
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+BUNDLE_DEFAULT_CHANNEL := $(DEFAULT_CHANNEL)
 endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+BUNDLE_METADATA_OPTS ?= --channels=$(BUNDLE_CHANNELS) --default-channel=$(BUNDLE_DEFAULT_CHANNEL)
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
@@ -61,7 +61,7 @@ IMAGE_TAG_BASE ?= operator.openshift.io/external-secrets-operator
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(IMG_VERSION)
 
 # BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
-BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(IMG_VERSION) $(BUNDLE_METADATA_OPTS)
+BUNDLE_GEN_FLAGS ?= -q --overwrite=false --version $(IMG_VERSION) $(BUNDLE_METADATA_OPTS)
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 # You can enable this value if you would like to use SHA Based Digests
@@ -73,11 +73,11 @@ endif
 
 # IMG is the image URL used for building/pushing image targets.
 # Default tag is 'latest' to avoid unnecessary changes in checked-in manifests.
-# Override with a specific version when building release images (e.g., IMG=openshift.io/external-secrets-operator:v1.2.0).
+# Override with a specific version when building release images (e.g., IMG=openshift.io/external-secrets-operator:v1.3.0).
 IMG ?= openshift.io/external-secrets-operator:latest
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.32.0
+ENVTEST_K8S_VERSION = 1.36.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -107,7 +107,7 @@ GO_PACKAGE ?= github.com/openshift/external-secrets-operator
 SOURCE_GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-# Extract major/minor from IMG_VERSION (e.g., 1.2.0 -> major=1, minor=1)
+# Extract major/minor from IMG_VERSION (e.g., 1.3.0 -> major=1, minor=3)
 IMG_VERSION_MAJOR = $(word 1,$(subst ., ,$(IMG_VERSION)))
 IMG_VERSION_MINOR = $(word 2,$(subst ., ,$(IMG_VERSION)))
 
@@ -143,9 +143,9 @@ KUBE_API_LINT = $(LOCALBIN)/kube-api-linter.so
 # Tool Versions
 # Set the Operator SDK version to use. By default, what is installed on the system is used.
 # This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
-OPERATOR_SDK_VERSION ?= v1.39.0
-YQ_VERSION = v4.50.1
-HELM_VERSION ?= v3.17.3
+OPERATOR_SDK_VERSION ?= v1.42.3
+YQ_VERSION = v4.53.3
+HELM_VERSION ?= v4.2.4
 
 # Image tag produced by markdownlint-image; base image for that Dockerfile.
 MARKDOWNLINT_IMAGE ?= external-secrets-operator-markdownlint:latest

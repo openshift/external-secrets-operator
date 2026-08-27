@@ -858,7 +858,7 @@ type Marker struct {
 	// Pos is the starting position in the file for the comment line containing the marker.
 	Pos token.Pos
 
-	// End is the ending position in the file for the coment line containing the marker.
+	// End is the ending position in the file for the comment line containing the marker.
 	End token.Pos
 }
 
@@ -916,6 +916,31 @@ func (ms MarkerSet) HasWithValue(marker string) bool {
 	id, args, payload := extractMarkerIDArgumentsAndPayload(DefaultRegistry(), marker)
 
 	return ms.HasWithArgumentsAndPayload(id, args, payload)
+}
+
+// IdentifierFromString extracts the marker identifier from a marker string
+// that may include values (e.g. "listType=atomic" -> "listType",
+// "k8s:listType=atomic" -> "k8s:listType").
+// If the string contains no value separator, it is returned as-is.
+func IdentifierFromString(marker string) string {
+	if !strings.Contains(marker, "=") {
+		return marker
+	}
+
+	if isDeclarativeValidationMarker(marker) {
+		tag, err := codetags.Parse(marker)
+		if err != nil {
+			return marker
+		}
+
+		return tag.Name
+	}
+
+	// Ignored values are the arguments map and payload, which are not needed
+	// for identifier extraction.
+	id, _, _ := extractMarkerIDArgumentsAndPayload(DefaultRegistry(), marker)
+
+	return id
 }
 
 // HasWithArgumentsAndPayload returns whether marker(s) with the
