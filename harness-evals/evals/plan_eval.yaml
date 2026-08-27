@@ -1,0 +1,103 @@
+stage: plan
+template: templates/plan-template.md
+version: 1
+eval_count: 5
+evals:
+  - id: plan-r1-001-error-status-matrix
+    round: 1
+    stage: plan
+    source_issue_ids: [ESO-396, PR-149-review-validation]
+    input_refs:
+      - pattern: user_pki_material_validation_degraded
+    prompt: >
+      When the plan consumes user-referenced ConfigMaps/Secrets, does it include an explicit
+      error/status matrix covering NotFound requeue, invalid content Degraded/events, and
+      optional-missing policy before implementation phases?
+    assertions:
+      - type: must_mention
+        value: NotFound or missing reference requeue behavior
+      - type: must_mention
+        value: invalid content Degraded or equivalent user-configuration failure
+      - type: must_cover_phase
+        value: error or status matrix appears before or within early implementation phases
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.8
+
+  - id: plan-r1-002-watch-self-healing
+    round: 1
+    stage: plan
+    source_issue_ids: [ESO-396, ESO-237]
+    input_refs:
+      - pattern: user_referenced_object_watch_and_recovery
+      - pattern: co_managed_configmap_ownership_label_drift
+    prompt: >
+      Does the plan specify watch/label self-healing so referenced object fixes recover Ready
+      without CR edits, and cleanup when references are removed after success?
+    assertions:
+      - type: must_mention
+        value: watch or reconcile on referenced object changes
+      - type: must_mention
+        value: recovery without CR edit or equivalent self-healing
+      - type: must_align_with_constitution
+        value: does not invent SSA; stays consistent with UpdateWithRetry / existing client patterns from assessment
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: plan-r1-003-reserved-operator-knobs
+    round: 1
+    stage: plan
+    source_issue_ids: [ESO-435, ESO-417]
+    input_refs:
+      - pattern: operator_owned_env_cel_reservation
+    prompt: >
+      If the operator injects env/volume trust semantics, does the plan require API-level
+      reservation (CEL or equivalent) of operator-owned names in the contracts/API phase?
+    assertions:
+      - type: must_mention
+        value: CEL or API validation reserving operator-owned env or mount knobs
+      - type: must_cover_phase
+        value: API or contracts phase includes reservation before or with injection work
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: plan-r1-004-interaction-matrix
+    round: 1
+    stage: plan
+    source_issue_ids: [ESO-417, PR-149-review-validation]
+    input_refs:
+      - pattern: interaction_matrix_with_existing_trust_paths
+    prompt: >
+      Relative to alternate mechanisms listed in repo-assessment, does the plan document
+      skip/coexist/merge behavior and rejected cluster-wide-only alternatives where applicable?
+    assertions:
+      - type: must_mention
+        value: interaction or coexistence with existing injection or trust mechanisms
+      - type: must_mention
+        value: skip duplicate or merge semantics when overlapping mechanisms apply
+    scoring:
+      weight: 0.9
+    pass_threshold: 0.75
+
+  - id: plan-r1-005-component-scope-and-api-conventions
+    round: 1
+    stage: plan
+    source_issue_ids: [ESO-435, PR-2011-review-optional]
+    input_refs:
+      - pattern: component_scoped_deployment_mutation
+      - pattern: api_convention_enums_over_booleans
+    prompt: >
+      Does the plan explicitly scope which operand components receive the mutation and prefer
+      reference-policy enums over nested boolean optionality for optional references?
+    assertions:
+      - type: must_mention
+        value: which operand components are in scope and which are excluded
+      - type: must_mention
+        value: Required/Optional policy enum or equivalent non-boolean reference policy when optionality is needed
+      - type: must_reference_spec_ids
+        value: ties component scope or API shape back to spec/enhancement requirements
+    scoring:
+      weight: 0.9
+    pass_threshold: 0.75

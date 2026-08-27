@@ -76,6 +76,18 @@ harness-evals/harness-docs/
 
 **AI Agent Path**: `harness-evals/harness-docs/*-guidelines.md` (as needed) → `domain/` → `architecture/` → `decisions/` → `ESO_DEVELOPMENT.md`
 
+## OpenSpec (planning / evals)
+
+| Path | Role |
+|------|------|
+| `AGENTS.md` (this file) | Agent routing + architecture for `/opsx-*` |
+| `harness-evals/harness-docs/` | Source docs for `/opsx-constitute` |
+| `harness-evals/constitution.md` | Guardrails required before `plan.md` |
+| `harness-evals/evals/` | Stage eval quality gates (`/opsx-continue`, `/opsx-apply`) |
+| `eval-generation/` | Retrospective `/eval-loop` (fill `input/feature-bundle.yaml`) |
+
+See `harness-evals/README.md`. Stage eval cases in `harness-evals/evals/` are populated and active when the OpenSpec workflow loads them; `/eval-loop` accumulates further cases from completed features.
+
 ## Namespaces & Image Resolution
 
 | Namespace | Purpose |

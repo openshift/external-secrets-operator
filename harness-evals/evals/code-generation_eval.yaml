@@ -1,0 +1,156 @@
+stage: code-generation
+artifact: fork working copy (code + tests)
+version: 1
+eval_count: 8
+oape_commands:
+  - api-generate
+  - api-generate-tests
+  - api-implement
+  - e2e-generate
+  - manual
+  - any
+evals:
+  - id: cg-r1-001-api-reference-policy-enum
+    round: 1
+    stage: code-generation
+    oape_command: api-generate
+    source_issue_ids: [ESO-435, PR-2011-review-optional]
+    prompt: >
+      New optional ConfigMap/Secret reference types use an explicit Required/Optional policy enum
+      (or OpenShift-equivalent) rather than nested boolean optionality; defaults are documented.
+    assertions:
+      - type: must_mention
+        value: reference policy enum or equivalent non-boolean optionality
+      - type: must_mention
+        value: CRD/defaulting for key or policy fields when applicable
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: cg-r1-002-api-reserve-operator-env
+    round: 1
+    stage: code-generation
+    oape_command: api-generate
+    source_issue_ids: [ESO-435, ESO-417]
+    prompt: >
+      When the operator owns env var names for injected trust/config, the CRD CEL (or equivalent)
+      rejects those names on user overrideEnv-style fields in the same API change.
+    assertions:
+      - type: must_mention
+        value: CEL or validation rule reserving operator-owned env names
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.8
+
+  - id: cg-r1-003-api-tests-cel-and-defaults
+    round: 1
+    stage: code-generation
+    oape_command: api-generate-tests
+    source_issue_ids: [ESO-435]
+    prompt: >
+      API integration tests cover defaults for reference key/policy and rejection of reserved
+      operator-owned env names via override-style fields.
+    assertions:
+      - type: must_mention
+        value: test cases for defaults on reference fields
+      - type: must_mention
+        value: test cases for CEL rejection of reserved env names
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: cg-r1-004-validate-before-deploy-patch
+    round: 1
+    stage: code-generation
+    oape_command: api-implement
+    source_issue_ids: [ESO-396, PR-149-review-validation]
+    prompt: >
+      User-supplied trust/config material is validated before Deployment mutation; invalid material
+      maps to typed user-configuration errors and Degraded status without applying a broken trust patch.
+    assertions:
+      - type: must_mention
+        value: validation precedes Deployment update/patch
+      - type: must_mention
+        value: distinct error or event reasons for invalid material classes
+      - type: must_mention
+        value: Degraded or UserConfiguration-style status mapping
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.8
+
+  - id: cg-r1-005-watch-label-self-heal
+    round: 1
+    stage: code-generation
+    oape_command: api-implement
+    source_issue_ids: [ESO-396, ESO-237]
+    prompt: >
+      Referenced ConfigMaps/Secrets are watched (watching label or equivalent) so data fixes
+      requeue reconcile; operator-created co-managed ConfigMaps use update/reconcile paths that
+      tolerate ownership/label drift without permanent AlreadyExists dead-ends.
+    assertions:
+      - type: must_mention
+        value: watch or label for referenced user ConfigMap/Secret
+      - type: must_mention
+        value: update or reconcile path for co-managed ConfigMaps when applicable
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: cg-r1-006-component-scoped-mount
+    round: 1
+    stage: code-generation
+    oape_command: api-implement
+    source_issue_ids: [ESO-396]
+    prompt: >
+      Volume/env mutations for controller configuration apply only to in-scope operand components;
+      non-target Deployments remain unchanged.
+    assertions:
+      - type: must_mention
+        value: mutation gated to specific component or Deployment
+      - type: must_mention
+        value: unit tests asserting non-target components lack the volume or env
+    scoring:
+      weight: 0.9
+    pass_threshold: 0.75
+
+  - id: cg-r1-007-interaction-skip-path
+    round: 1
+    stage: code-generation
+    oape_command: api-implement
+    source_issue_ids: [ESO-396, PR-149-review-validation]
+    prompt: >
+      When an alternate injection path is already active (e.g. proxy/CNO bundle), the controller
+      skips duplicate mounts and emits an observable event or log reason while remaining Ready.
+    assertions:
+      - type: must_mention
+        value: skip path when alternate injection already satisfies trust
+      - type: must_mention
+        value: event or reason documenting the skip
+    scoring:
+      weight: 0.9
+    pass_threshold: 0.75
+
+  - id: cg-r1-008-e2e-recovery-and-negatives
+    round: 1
+    stage: code-generation
+    oape_command: e2e-generate
+    source_issue_ids: [ESO-396]
+    prompt: >
+      E2E coverage includes happy path, invalid material Degraded cases, recover-on-ConfigMap-fix
+      without CR edit, delete-after-success Degraded, component exclusion, and alternate-path skip matrix.
+    assertions:
+      - type: must_mention
+        value: happy path with valid referenced ConfigMap or Secret material
+      - type: must_mention
+        value: recovery without CR change after fixing referenced object
+      - type: must_mention
+        value: Degraded scenarios for missing or invalid referenced material
+      - type: must_mention
+        value: Degraded after delete-after-success of a previously valid reference
+      - type: must_mention
+        value: negative check for non-target components
+      - type: must_mention
+        value: coexistence or skip with alternate injection path
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75

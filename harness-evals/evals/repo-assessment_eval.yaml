@@ -1,0 +1,82 @@
+stage: repo-assessment
+template: templates/repo-assessment-template.md
+version: 1
+eval_count: 4
+evals:
+  - id: ra-r1-001-comanaged-config-inventory
+    round: 1
+    stage: repo-assessment
+    source_issue_ids: [ESO-237, ESO-396]
+    input_refs:
+      - pattern: co_managed_configmap_ownership
+      - pattern: user_referenced_object_watch_and_recovery
+    prompt: >
+      When a feature creates or references ConfigMaps/Secrets in the operand namespace,
+      does repo-assessment inventory co-managed vs user-referenced objects, ownership/watching
+      labels, and create-vs-update/reconcile paths with repo evidence?
+    assertions:
+      - type: must_identify_pattern
+        value: co-managed or user-referenced ConfigMap/Secret inventory with ownership or watching labels
+      - type: must_cite_repo_evidence
+        value: cites existing controller cache/watch or ConfigMap helpers as evidence
+      - type: must_cover_section
+        value: managed resources or watch/cache inventory discusses update-vs-create risk
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: ra-r1-002-alternate-trust-paths
+    round: 1
+    stage: repo-assessment
+    source_issue_ids: [RFE-8685, GH-124, ESO-417]
+    input_refs:
+      - pattern: missing_cr_scoped_trust_path
+      - pattern: interaction_matrix_with_existing_trust_paths
+    prompt: >
+      For TLS-facing or secret-backend connectivity features, does repo-assessment document
+      existing trust/injection mechanisms (system trust, proxy/CNO-style injection, per-resource
+      CA options) and the gap that motivates any new CR-scoped configuration?
+    assertions:
+      - type: must_identify_pattern
+        value: existing alternate trust or CA injection mechanisms
+      - type: must_mention
+        value: gap or limitation of cluster-wide-only or per-store-only approaches when relevant
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: ra-r1-003-component-applicability
+    round: 1
+    stage: repo-assessment
+    source_issue_ids: [ESO-396]
+    input_refs:
+      - pattern: component_scoped_deployment_mutation
+    prompt: >
+      When proposing operand Deployment mutations via controller configuration, does assessment
+      list which operand components/containers are valid targets and which must remain unchanged?
+    assertions:
+      - type: must_identify_pattern
+        value: per-component applicability for controllerConfig-like mutations
+      - type: must_mention
+        value: non-target components that must not receive the mutation
+    scoring:
+      weight: 0.8
+    pass_threshold: 0.75
+
+  - id: ra-r1-004-error-classification-hooks
+    round: 1
+    stage: repo-assessment
+    source_issue_ids: [ESO-396]
+    input_refs:
+      - pattern: user_pki_material_validation_degraded
+    prompt: >
+      Does repo-assessment cite existing error-classification / status-condition patterns
+      (Irrecoverable, Retry, UserConfiguration/Degraded) that a user-config feature should reuse?
+    assertions:
+      - type: must_cite_repo_evidence
+        value: points to existing error types or status condition helpers
+      - type: must_identify_pattern
+        value: user configuration errors map to Degraded or requeue semantics
+    scoring:
+      weight: 0.8
+    pass_threshold: 0.75

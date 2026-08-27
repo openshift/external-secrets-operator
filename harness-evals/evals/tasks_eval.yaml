@@ -1,0 +1,75 @@
+stage: tasks
+template: templates/tasks-template.md
+version: 1
+eval_count: 4
+evals:
+  - id: tasks-r1-001-api-before-controller
+    round: 1
+    stage: tasks
+    source_issue_ids: [ESO-435, ESO-396]
+    input_refs:
+      - pattern: enhancement_vs_ticket_field_name_drift
+    prompt: >
+      When a feature adds CR fields and reconcile behavior, does the task DAG sequence API/CRD
+      generation and API tests before controller tasks that consume the new fields?
+    assertions:
+      - type: must_respect_dag
+        value: API or CRD tasks precede controller implementation tasks that read the new fields
+      - type: must_assign_agent
+        value: API_Agent or equivalent owns API tasks; controller agent owns reconcile tasks
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.8
+
+  - id: tasks-r1-002-recovery-acceptance
+    round: 1
+    stage: tasks
+    source_issue_ids: [ESO-396]
+    input_refs:
+      - pattern: user_referenced_object_watch_and_recovery
+    prompt: >
+      Do controller task acceptance criteria include recover-on-referenced-object-fix without
+      CR change and Degraded when the reference disappears after success?
+    assertions:
+      - type: must_define_acceptance_criteria
+        value: recovery when referenced ConfigMap/Secret is fixed without CR edit
+      - type: must_define_acceptance_criteria
+        value: Degraded or equivalent when required reference is deleted after success
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
+
+  - id: tasks-r1-003-component-exclusion-acceptance
+    round: 1
+    stage: tasks
+    source_issue_ids: [ESO-396]
+    input_refs:
+      - pattern: component_scoped_deployment_mutation
+    prompt: >
+      Do acceptance criteria assert that non-target operand components do not receive the new
+      volume or env mutation?
+    assertions:
+      - type: must_define_acceptance_criteria
+        value: negative assertion for non-target Deployments or containers
+    scoring:
+      weight: 0.9
+    pass_threshold: 0.75
+
+  - id: tasks-r1-004-cel-api-tests
+    round: 1
+    stage: tasks
+    source_issue_ids: [ESO-435]
+    input_refs:
+      - pattern: operator_owned_env_cel_reservation
+      - pattern: api_convention_enums_over_booleans
+    prompt: >
+      Do API tasks that reserve operator-owned env names or add reference-policy enums include
+      API integration test coverage in acceptance criteria?
+    assertions:
+      - type: must_define_acceptance_criteria
+        value: API tests cover CEL rejection of reserved env names or policy/defaults behavior
+      - type: must_cover_all_spec_requirements
+        value: API contract requirements from the plan/spec are mapped to at least one task
+    scoring:
+      weight: 1.0
+    pass_threshold: 0.75
