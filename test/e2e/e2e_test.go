@@ -23,6 +23,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/url"
@@ -70,20 +71,29 @@ const (
 
 const (
 	// test resource names
-	operatorNamespace              = common.ExternalSecretsOperatorCommonName
-	operandNamespace               = externalsecrets.OperandDefaultNamespace
-	operatorPodPrefix              = common.ExternalSecretsOperatorCommonName + "-controller-manager-"
-	operandCoreControllerPodPrefix = externalsecrets.OperandCoreControllerPodPrefix
-	operandCertControllerPodPrefix = externalsecrets.OperandCertControllerPodPrefix
-	operandWebhookPodPrefix        = externalsecrets.OperandWebhookPodPrefix
-	testNamespacePrefix            = "external-secrets-e2e-test-"
-	vaultNamespace                 = "vault-test"
-	vaultManifestFile              = "testdata/vault/vault.yaml"
-	vaultServiceName               = "vault"
-	vaultAddr                      = "http://vault.vault-test.svc.cluster.local:8200"
-	targetSecretName                = "k8s-secret-to-create" //must match with external_secret.yaml target.name
+	operatorNamespace               = common.ExternalSecretsOperatorCommonName
+	operandNamespace                = externalsecrets.OperandDefaultNamespace
+	operatorPodPrefix               = common.ExternalSecretsOperatorCommonName + "-controller-manager-"
+	operandCoreControllerPodPrefix  = externalsecrets.OperandCoreControllerPodPrefix
+	operandCertControllerPodPrefix  = externalsecrets.OperandCertControllerPodPrefix
+	operandWebhookPodPrefix         = externalsecrets.OperandWebhookPodPrefix
+	testNamespacePrefix             = "external-secrets-e2e-test-"
+	vaultNamespace                  = "vault-test"
+	vaultManifestFile               = "testdata/vault/vault.yaml"
+	vaultIssuerFile                 = "testdata/vault/issuer.yaml"
+	vaultCACertificateFile          = "testdata/vault/ca_certificate.yaml"
+	vaultCAIssuerFile               = "testdata/vault/ca_issuer.yaml"
+	vaultCertificateFile            = "testdata/vault/certificate.yaml"
+	vaultServiceName                = "vault"
+	vaultAddr                       = "https://vault.vault-test.svc.cluster.local:8200"
+	vaultTLSSecretName              = "vault-server-tls"
+	vaultCASecretName               = "vault-ca"
+	vaultCAConfigMapName            = "vault-server-ca"
+	vaultSampleCAConfigMapName      = "vault-e2e-sample-ca"
+	targetSecretName                = "k8s-secret-to-create"        //must match with external_secret.yaml target.name
 	vaultEgressNetworkPolicyName    = "allow-vault-egress"          // logical name stored in ExternalSecretsConfig spec
 	vaultEgressNetworkPolicyK8sName = "eso-user-allow-vault-egress" // actual Kubernetes object name (operator prepends "eso-user-")
+	invalidProviderConfigReason     = "InvalidProviderConfig"
 )
 
 const (
@@ -150,6 +160,10 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 		Expect(utils.VerifyPodsReadyByPrefix(ctx, clientset, operatorNamespace, []string{
 			operatorPodPrefix,
 		})).To(Succeed())
+
+		By("Ensuring Red Hat cert-manager Operator is installed and ready")
+		Expect(ensureCertManagerOperatorReady(ctx, clientset, dynamicClient)).To(Succeed(),
+			"Red Hat cert-manager Operator is required for e2e (OLM install from redhat-operators); see test/e2e/README.md")
 
 		By("Ensuring ExternalSecretsConfig cluster CR exists and is Ready")
 		Expect(ensureExternalSecretsConfigReady(ctx)).To(Succeed(),
@@ -1871,11 +1885,12 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 	})
 
-	Context("Vault Secret Manager", Label("Platform:Generic", "Provider:Vault", "Skipped:Disconnected"), func() {
+	Context("Vault Secret Manager", Ordered, Label("Platform:Generic", "Provider:Vault", "Skipped:Disconnected"), func() {
 		const (
-			vaultSecretName  = "foo"
-			vaultSecretKey   = "my-value"
-			vaultSecretValue = "bar"
+			vaultSecretValue            = "bar"
+			vaultPushSourceSecretFile   = "testdata/vault/push_source_secret.yaml"
+			vaultPushSecretFile         = "testdata/vault/push_secret.yaml"
+			vaultPushSecretResourceName = "vault-push-secret"
 		)
 
 		var (
@@ -1886,6 +1901,33 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			var err error
 			// Re-use the suite rest.Config so that kubeconfig trust settings are preserved.
 			config = cfg
+
+			By("Ensuring Vault namespace exists")
+			Expect(ensureVaultNamespace(ctx, clientset)).To(Succeed())
+
+			By("Creating cert-manager self-signed Issuer")
+			vaultReplacements := map[string]string{
+				"{{VAULT_NAMESPACE}}": vaultNamespace,
+				"{{VAULT_ADDR}}":      vaultAddr,
+			}
+			loader.CreateFromFileWithReplacements(testassets.ReadFile, vaultIssuerFile, "", vaultReplacements)
+
+			By("Creating Vault CA Certificate (isCA=true)")
+			loader.CreateFromFileWithReplacements(testassets.ReadFile, vaultCACertificateFile, "", vaultReplacements)
+
+			By("Waiting for Vault CA secret from cert-manager")
+			Expect(waitForVaultCASecret(ctx, clientset)).To(Succeed(),
+				"vault CA secret %s/%s was not issued by cert-manager", vaultNamespace, vaultCASecretName)
+
+			By("Creating cert-manager CA Issuer for Vault server TLS")
+			loader.CreateFromFileWithReplacements(testassets.ReadFile, vaultCAIssuerFile, "", vaultReplacements)
+
+			By("Creating Vault server Certificate signed by the CA Issuer")
+			loader.CreateFromFileWithReplacements(testassets.ReadFile, vaultCertificateFile, "", vaultReplacements)
+
+			By("Waiting for Vault TLS secret from cert-manager")
+			Expect(waitForVaultTLSSecret(ctx, clientset)).To(Succeed(),
+				"vault TLS secret %s/%s was not issued by cert-manager", vaultNamespace, vaultTLSSecretName)
 
 			By("Deploying Vault")
 			Expect(applyVault(ctx, dynamicClient, clientset)).To(Succeed(),
@@ -1907,21 +1949,23 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			By("Creating vault-token Secret")
 			Expect(createVaultTokenSecret(ctx, clientset, rootToken)).To(Succeed(),
 				"createVaultTokenSecret: failed to create vault-token Secret in namespace %s", vaultNamespace)
-
-			By("Create test secret in vault")
-			Expect(createVaultTestSecret(
-				ctx,
-				clientset,
-				config,
-				rootToken,
-				vaultSecretName,
-				vaultSecretKey,
-				vaultSecretValue,
-			)).To(Succeed(),
-				"createVaultTestSecret: failed to write secret %q (key %q) to vault", vaultSecretName, vaultSecretKey)
 		})
 
 		AfterAll(func() {
+			// Cluster-scoped / operand-namespace leftovers that namespace deletion cannot cover.
+			By("Clearing trustedCABundle from ExternalSecretsConfig")
+			clearTrustedCABundle(ctx)
+
+			By("Deleting Vault CA ConfigMaps from operand namespace")
+			_ = clientset.CoreV1().ConfigMaps(operandNamespace).Delete(ctx, vaultCAConfigMapName, metav1.DeleteOptions{})
+			_ = clientset.CoreV1().ConfigMaps(operandNamespace).Delete(ctx, vaultSampleCAConfigMapName, metav1.DeleteOptions{})
+
+			// Vault egress NetworkPolicy entry on ExternalSecretsConfig is CEL-immutable once added;
+			// leave it (same pattern as other custom NP e2e). The K8s NetworkPolicy in the operand
+			// namespace is owned by the operator from that ESC entry.
+
+			// Namespaced Vault fixture (Issuer, Certificate, Vault, SecretStores, Push/ExternalSecrets,
+			// templating RBAC/Secrets, synced Secrets) is removed with the namespace.
 			By("Cleaning up Vault namespace")
 			safeDelete(ctx,
 				"delete",
@@ -1931,16 +1975,25 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 			)
 		})
 
-		It("should create secret mentioned in ExternalSecret using the referenced SecretStore", func() {
+		It("should fail SecretStore with a non-matching trustedCABundle then succeed after switching to the Vault CA, PushSecret, and ExternalSecret", Label("Feature:TrustedCABundle"), func() {
 			var (
-				// test bindata for Vault
 				externalsecretsConfigFile  = "testdata/vault/externalsecretsconfig.yaml"
 				vaultSecretStoreFile       = "testdata/vault/secret_store.yaml"
 				vaultExternalSecretFile    = "testdata/vault/external_secret.yaml"
 				secretStoreResourceName    = "vault-backend"
 				externalSecretResourceName = "vault-example"
-				targetSecretKey            = "password" //must match with external_secret.yaml data.secretKey
+				targetSecretKey            = "password" // must match external_secret.yaml data.secretKey
 			)
+
+			secretStoreReplacements := map[string]string{
+				"{{VAULT_NAMESPACE}}": vaultNamespace,
+				"{{VAULT_ADDR}}":      vaultAddr,
+			}
+			secretStoreGVR := schema.GroupVersionResource{
+				Group:    externalSecretsGroupName,
+				Version:  v1APIVersion,
+				Resource: secretStoresKind,
+			}
 
 			By("Ensuring ExternalSecretsConfig has Vault egress network policy")
 			updated, err := ensureVaultEgressOnExternalSecretsConfig(ctx, runtimeClient, externalsecretsConfigFile)
@@ -1956,35 +2009,69 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				}, 30*time.Second, 2*time.Second).Should(Succeed(), "NetworkPolicy %s should be created in namespace %s", vaultEgressNetworkPolicyK8sName, operandNamespace)
 			}
 
-			By("Creating SecretStore")
-			// Create template replacements map for SecretStore
-			secretStoreReplacements := map[string]string{
-				"{{VAULT_NAMESPACE}}": vaultNamespace,
-				"{{VAULT_ADDR}}":      vaultAddr,
-			}
+			By("Creating Vault CA ConfigMap and a sample CA ConfigMap in the operand namespace")
+			Expect(createVaultCAConfigMap(ctx, clientset)).To(Succeed())
+			Expect(createSampleCAConfigMap(ctx, clientset)).To(Succeed())
+
+			By("Creating SecretStore without caBundle/caProvider")
 			loader.CreateFromFileWithReplacements(
 				testassets.ReadFile,
 				vaultSecretStoreFile,
 				"",
 				secretStoreReplacements,
 			)
+			defer loader.DeleteFromFileWithReplacements(testassets.ReadFile, vaultSecretStoreFile, "", secretStoreReplacements)
 
-			By("Waiting for SecretStore to become Ready")
+			By("Pointing trustedCABundle at the sample CA ConfigMap")
+			setTrustedCABundle(ctx, vaultSampleCAConfigMapName, externalsecrets.UserCABundleKeyPath)
+			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+			By("Waiting for SecretStore Ready=False with reason InvalidProviderConfig (sample CA does not trust Vault)")
+			Expect(utils.WaitForESOResourceCondition(ctx, dynamicClient,
+				secretStoreGVR,
+				vaultNamespace, secretStoreResourceName,
+				"Ready", "False", invalidProviderConfigReason, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Switching trustedCABundle to the Vault CA ConfigMap")
+			setTrustedCABundle(ctx, vaultCAConfigMapName, externalsecrets.UserCABundleKeyPath)
+
+			By("Waiting for ExternalSecretsConfig to become Ready after trustedCABundle switch")
+			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+			By("Waiting for SecretStore to become Ready after switching to the Vault CA")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				secretStoreGVR,
+				vaultNamespace, secretStoreResourceName, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Creating source Secret for PushSecret")
+			pushReplacements := map[string]string{
+				"{{PUSH_SECRET_VALUE}}": vaultSecretValue,
+			}
+			loader.CreateFromFileWithReplacements(testassets.ReadFile, vaultPushSourceSecretFile, "", pushReplacements)
+			defer loader.DeleteFromFileWithReplacements(testassets.ReadFile, vaultPushSourceSecretFile, "", pushReplacements)
+
+			By("Creating PushSecret")
+			loader.CreateFromFile(testassets.ReadFile, vaultPushSecretFile, "")
+			defer loader.DeleteFromFile(testassets.ReadFile, vaultPushSecretFile, "")
+
+			By("Waiting for PushSecret to become Ready")
 			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
 				schema.GroupVersionResource{
 					Group:    externalSecretsGroupName,
-					Version:  v1APIVersion,
-					Resource: secretStoresKind,
+					Version:  v1alpha1APIVersion,
+					Resource: PushSecretsKind,
 				},
-				vaultNamespace, secretStoreResourceName, time.Minute,
+				vaultNamespace, vaultPushSecretResourceName, 2*time.Minute,
 			)).To(Succeed())
 
 			By("Creating ExternalSecret")
-			loader.CreateFromFile(
-				testassets.ReadFile,
-				vaultExternalSecretFile,
-				"",
-			)
+			loader.CreateFromFile(testassets.ReadFile, vaultExternalSecretFile, "")
+			defer loader.DeleteFromFile(testassets.ReadFile, vaultExternalSecretFile, "")
+			defer func() {
+				_ = clientset.CoreV1().Secrets(vaultNamespace).Delete(ctx, targetSecretName, metav1.DeleteOptions{})
+			}()
 
 			By("Waiting for ExternalSecret to become Ready")
 			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
@@ -1993,7 +2080,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 					Version:  v1APIVersion,
 					Resource: externalSecretsKind,
 				},
-				vaultNamespace, externalSecretResourceName, time.Minute,
+				vaultNamespace, externalSecretResourceName, 2*time.Minute,
 			)).To(Succeed())
 
 			By("Verifying the generated Kubernetes Secret contains expected value")
@@ -2010,7 +2097,147 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 				g.Expect(string(value)).To(Equal(vaultSecretValue),
 					"Secret %q key %q does not match expected value", targetSecretName, targetSecretKey)
+			}, time.Minute, 5*time.Second).Should(Succeed())
+		})
 
+		It("should merge Kubernetes and Vault dockerconfig secrets via ExternalSecret templating", Label("Feature:ExternalSecretsTemplating"), func() {
+			const (
+				externalsecretsConfigFile    = "testdata/vault/externalsecretsconfig.yaml"
+				vaultSecretStoreFile         = "testdata/vault/secret_store.yaml"
+				templatingK8sBackendFile     = "testdata/vault/templating_k8s_backend.yaml"
+				templatingSourceSecretsFile  = "testdata/vault/templating_source_secrets.yaml"
+				templatingPushSecretFile     = "testdata/vault/templating_push_secret.yaml"
+				templatingExternalSecretFile = "testdata/vault/templating_external_secret.yaml"
+				vaultSecretStoreResourceName = "vault-backend"
+				k8sSecretStoreResourceName   = "kubernetes-backend"
+				pushSecretResourceName       = "push-registry-auth-to-vault"
+				externalSecretResourceName   = "merge-registry-auths"
+				mergedSecretName             = "merged-registry-pull-secret"
+				baselineRegistryHost         = "cluster.registry.example.com"
+				vaultRegistryHost            = "private.registry.example.com"
+				baselineSecretName           = "registry-auth-baseline"
+				vaultSourceSecretName        = "registry-auth-vault-source"
+				secretReaderName             = "eso-secret-reader"
+			)
+
+			vaultReplacements := map[string]string{
+				"{{VAULT_NAMESPACE}}": vaultNamespace,
+				"{{VAULT_ADDR}}":      vaultAddr,
+			}
+
+			By("Ensuring ExternalSecretsConfig has Vault egress network policy")
+			updated, err := ensureVaultEgressOnExternalSecretsConfig(ctx, runtimeClient, externalsecretsConfigFile)
+			Expect(err).NotTo(HaveOccurred())
+			if updated {
+				By("Waiting for ExternalSecretsConfig to reconcile with Vault egress policy")
+				Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, "cluster", 2*time.Minute)).To(Succeed())
+
+				By("Waiting for Vault egress NetworkPolicy to be created")
+				Eventually(func() error {
+					_, err := clientset.NetworkingV1().NetworkPolicies(operandNamespace).Get(ctx, vaultEgressNetworkPolicyK8sName, metav1.GetOptions{})
+					return err
+				}, 30*time.Second, 2*time.Second).Should(Succeed(), "NetworkPolicy %s should be created in namespace %s", vaultEgressNetworkPolicyK8sName, operandNamespace)
+			}
+
+			By("Ensuring Vault CA ConfigMap and trustedCABundle are configured")
+			Expect(createVaultCAConfigMap(ctx, clientset)).To(Succeed())
+			setTrustedCABundle(ctx, vaultCAConfigMapName, externalsecrets.UserCABundleKeyPath)
+			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+			By("Creating Vault SecretStore")
+			Expect(utils.ApplyManifestFromReaderWithReplacements(ctx, dynamicClient, testassets.ReadFile, vaultSecretStoreFile, vaultReplacements)).To(Succeed())
+			defer loader.DeleteFromFileWithReplacements(testassets.ReadFile, vaultSecretStoreFile, "", vaultReplacements)
+
+			By("Waiting for Vault SecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: secretStoresKind,
+				},
+				vaultNamespace, vaultSecretStoreResourceName, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Creating Kubernetes SecretStore reader RBAC and SecretStore")
+			Expect(utils.ApplyManifestFromReaderWithReplacements(ctx, dynamicClient, testassets.ReadFile, templatingK8sBackendFile, vaultReplacements)).To(Succeed())
+			defer func() {
+				_ = dynamicClient.Resource(schema.GroupVersionResource{
+					Group: externalSecretsGroupName, Version: v1APIVersion, Resource: secretStoresKind,
+				}).Namespace(vaultNamespace).Delete(ctx, k8sSecretStoreResourceName, metav1.DeleteOptions{})
+				_ = clientset.RbacV1().RoleBindings(vaultNamespace).Delete(ctx, secretReaderName, metav1.DeleteOptions{})
+				_ = clientset.RbacV1().Roles(vaultNamespace).Delete(ctx, secretReaderName, metav1.DeleteOptions{})
+				_ = clientset.CoreV1().ServiceAccounts(vaultNamespace).Delete(ctx, secretReaderName, metav1.DeleteOptions{})
+			}()
+
+			By("Waiting for Kubernetes SecretStore to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: secretStoresKind,
+				},
+				vaultNamespace, k8sSecretStoreResourceName, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Creating baseline (Kubernetes) and vault-source dockerconfig Secrets")
+			Expect(utils.ApplyManifestFromReaderWithReplacements(ctx, dynamicClient, testassets.ReadFile, templatingSourceSecretsFile, vaultReplacements)).To(Succeed())
+			defer func() {
+				_ = clientset.CoreV1().Secrets(vaultNamespace).Delete(ctx, baselineSecretName, metav1.DeleteOptions{})
+				_ = clientset.CoreV1().Secrets(vaultNamespace).Delete(ctx, vaultSourceSecretName, metav1.DeleteOptions{})
+			}()
+
+			By("Pushing vault-source dockerconfig to Vault")
+			Expect(utils.ApplyManifestFromReaderWithReplacements(ctx, dynamicClient, testassets.ReadFile, templatingPushSecretFile, vaultReplacements)).To(Succeed())
+			defer func() {
+				_ = dynamicClient.Resource(schema.GroupVersionResource{
+					Group: externalSecretsGroupName, Version: v1alpha1APIVersion, Resource: PushSecretsKind,
+				}).Namespace(vaultNamespace).Delete(ctx, pushSecretResourceName, metav1.DeleteOptions{})
+			}()
+
+			By("Waiting for PushSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1alpha1APIVersion,
+					Resource: PushSecretsKind,
+				},
+				vaultNamespace, pushSecretResourceName, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Creating ExternalSecret that templates a merge of Kubernetes + Vault dockerconfigs")
+			Expect(utils.ApplyManifestFromReaderWithReplacements(ctx, dynamicClient, testassets.ReadFile, templatingExternalSecretFile, vaultReplacements)).To(Succeed())
+			defer func() {
+				_ = dynamicClient.Resource(schema.GroupVersionResource{
+					Group: externalSecretsGroupName, Version: v1APIVersion, Resource: externalSecretsKind,
+				}).Namespace(vaultNamespace).Delete(ctx, externalSecretResourceName, metav1.DeleteOptions{})
+				_ = clientset.CoreV1().Secrets(vaultNamespace).Delete(ctx, mergedSecretName, metav1.DeleteOptions{})
+			}()
+
+			By("Waiting for ExternalSecret to become Ready")
+			Expect(utils.WaitForESOResourceReady(ctx, dynamicClient,
+				schema.GroupVersionResource{
+					Group:    externalSecretsGroupName,
+					Version:  v1APIVersion,
+					Resource: externalSecretsKind,
+				},
+				vaultNamespace, externalSecretResourceName, 2*time.Minute,
+			)).To(Succeed())
+
+			By("Verifying merged dockerconfigjson contains both registry auths")
+			Eventually(func(g Gomega) {
+				secret, err := clientset.CoreV1().Secrets(vaultNamespace).Get(ctx, mergedSecretName, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(secret.Type).To(Equal(corev1.SecretTypeDockerConfigJson))
+
+				raw, ok := secret.Data[corev1.DockerConfigJsonKey]
+				g.Expect(ok).To(BeTrue(), "merged secret missing %s", corev1.DockerConfigJsonKey)
+
+				var parsed struct {
+					Auths map[string]json.RawMessage `json:"auths"`
+				}
+				g.Expect(json.Unmarshal(raw, &parsed)).To(Succeed())
+				g.Expect(parsed.Auths).To(HaveKey(baselineRegistryHost))
+				g.Expect(parsed.Auths).To(HaveKey(vaultRegistryHost))
 			}, time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -2064,48 +2291,13 @@ func expectedProxyPorts(httpsProxy, httpProxy string) []int32 {
 	return ports
 }
 
-// Apply vault manifest using dynamic client with architecture-specific image substitution
+// Apply vault manifest using dynamic client with architecture-specific image substitution.
+// Caller must ensure the vault TLS secret already exists (cert-manager Certificate Ready).
 func applyVault(ctx context.Context, dynamicClient *dynamic.DynamicClient, clientset *kubernetes.Clientset) error {
 	By(fmt.Sprintf("Applying vault manifest from: %s", vaultManifestFile))
 
-	// Ensure vault namespace exists and is not terminating
-	By(fmt.Sprintf("Ensuring namespace %s exists", vaultNamespace))
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: vaultNamespace,
-		},
-	}
-
-	// Try to get the namespace
-	existingNs, err := clientset.CoreV1().Namespaces().Get(ctx, vaultNamespace, metav1.GetOptions{})
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return fmt.Errorf("failed to check namespace: %w", err)
-		}
-		// Namespace doesn't exist, create it
-		_, err = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create namespace: %w", err)
-		}
-		By(fmt.Sprintf("Created namespace %s", vaultNamespace))
-	} else if existingNs.Status.Phase == corev1.NamespaceTerminating {
-		// Namespace is terminating — wait for full deletion then recreate.
-		By(fmt.Sprintf("Namespace %s is terminating, waiting for deletion (up to 2 minutes)", vaultNamespace))
-		Eventually(func() bool {
-			_, err := clientset.CoreV1().Namespaces().Get(ctx, vaultNamespace, metav1.GetOptions{})
-			return k8serrors.IsNotFound(err)
-		}).WithTimeout(2*time.Minute).WithPolling(2*time.Second).Should(BeTrue(),
-			"namespace %s was not fully deleted within 2 minutes", vaultNamespace)
-		By(fmt.Sprintf("Namespace %s has been deleted", vaultNamespace))
-
-		// Retry creating the namespace until the API server cache is fully cleared.
-		Eventually(func() error {
-			_, createErr := clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-			return createErr
-		}).WithTimeout(15*time.Second).WithPolling(1*time.Second).Should(Succeed())
-		By(fmt.Sprintf("Recreated namespace %s after termination", vaultNamespace))
-	} else {
-		By(fmt.Sprintf("Namespace %s already exists", vaultNamespace))
+	if err := ensureVaultNamespace(ctx, clientset); err != nil {
+		return err
 	}
 
 	// Get node information for debugging
@@ -2241,11 +2433,12 @@ func setupVault(ctx context.Context, client *kubernetes.Clientset, config *rest.
 
 	By(fmt.Sprintf("Initializing Vault, pod=%s", podName))
 
-	// Step 1: Initialize Vault
+	// Step 1: Initialize Vault (skip TLS verify for in-pod self-signed cert)
 	stdout, stderr, err := utils.ExecCommandInPod(ctx, client, config, utils.PodExecOptions{
 		Namespace: vaultNamespace,
 		PodName:   podName,
-		Command:   []string{"vault", "operator", "init", "-key-shares=1", "-key-threshold=1"},
+		Command: []string{"sh", "-c",
+			"VAULT_SKIP_VERIFY=true vault operator init -key-shares=1 -key-threshold=1"},
 	})
 
 	if err != nil {
@@ -2277,7 +2470,8 @@ func setupVault(ctx context.Context, client *kubernetes.Clientset, config *rest.
 	stdout, stderr, err = utils.ExecCommandInPod(ctx, client, config, utils.PodExecOptions{
 		Namespace: vaultNamespace,
 		PodName:   podName,
-		Command:   []string{"vault", "operator", "unseal", unsealKey},
+		Command: []string{"sh", "-c",
+			fmt.Sprintf("VAULT_SKIP_VERIFY=true vault operator unseal '%s'", escapeShellString(unsealKey))},
 	})
 
 	if err != nil {
@@ -2325,8 +2519,8 @@ func enableKVEngine(ctx context.Context, client *kubernetes.Clientset, config *r
 	// Only suppress the error when the secret/ mount is already enabled (exit code 2 from vault).
 	// Any other failure (permissions, CLI error) is propagated by checking vault secrets list.
 	command := fmt.Sprintf(
-		"VAULT_TOKEN='%s' vault secrets enable -path=secret kv-v2 || "+
-			"VAULT_TOKEN='%s' vault secrets list | grep -q '^secret/'",
+		"VAULT_SKIP_VERIFY=true VAULT_TOKEN='%s' vault secrets enable -path=secret kv-v2 || "+
+			"VAULT_SKIP_VERIFY=true VAULT_TOKEN='%s' vault secrets list | grep -q '^secret/'",
 		escapeShellString(token),
 		escapeShellString(token),
 	)
@@ -2342,37 +2536,6 @@ func enableKVEngine(ctx context.Context, client *kubernetes.Clientset, config *r
 	}
 
 	By("KV secrets engine enabled successfully")
-
-	return err
-}
-
-// Create a vault test secret using client-go
-func createVaultTestSecret(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, token string, secretname string, key, value string) error {
-	podName, err := getVaultPodName(ctx, client)
-	if err != nil {
-		return err
-	}
-
-	// Use shell command with VAULT_TOKEN environment variable for security.
-	// secretname, key and value are escaped so shell metacharacters cannot alter the command.
-	command := fmt.Sprintf("VAULT_TOKEN='%s' vault kv put secret/%s '%s'='%s'",
-		escapeShellString(token),
-		escapeShellString(secretname),
-		escapeShellString(key),
-		escapeShellString(value),
-	)
-
-	_, _, err = utils.ExecCommandInPod(ctx, client, config, utils.PodExecOptions{
-		Namespace: vaultNamespace,
-		PodName:   podName,
-		Command:   []string{"sh", "-c", command},
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to create vault secret '%s': %w", secretname, err)
-	}
-
-	By(fmt.Sprintf("Vault secret '%s' created successfully", secretname))
 
 	return err
 }
@@ -2514,6 +2677,160 @@ func loadExternalSecretsConfigFromFile(assetFunc func(string) ([]byte, error), f
 		return nil, err
 	}
 	return esc, nil
+}
+
+// ensureVaultNamespace creates vault-test if missing, or waits/recreates if terminating.
+func ensureVaultNamespace(ctx context.Context, clientset *kubernetes.Clientset) error {
+	By(fmt.Sprintf("Ensuring namespace %s exists", vaultNamespace))
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vaultNamespace,
+		},
+	}
+
+	existingNs, err := clientset.CoreV1().Namespaces().Get(ctx, vaultNamespace, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("failed to check namespace: %w", err)
+		}
+		_, err = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create namespace: %w", err)
+		}
+		By(fmt.Sprintf("Created namespace %s", vaultNamespace))
+		return nil
+	}
+
+	if existingNs.Status.Phase == corev1.NamespaceTerminating {
+		By(fmt.Sprintf("Namespace %s is terminating, waiting for deletion (up to 2 minutes)", vaultNamespace))
+		Eventually(func() bool {
+			_, err := clientset.CoreV1().Namespaces().Get(ctx, vaultNamespace, metav1.GetOptions{})
+			return k8serrors.IsNotFound(err)
+		}).WithTimeout(2*time.Minute).WithPolling(2*time.Second).Should(BeTrue(),
+			"namespace %s was not fully deleted within 2 minutes", vaultNamespace)
+
+		Eventually(func() error {
+			_, createErr := clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+			return createErr
+		}).WithTimeout(15 * time.Second).WithPolling(1 * time.Second).Should(Succeed())
+		By(fmt.Sprintf("Recreated namespace %s after termination", vaultNamespace))
+		return nil
+	}
+
+	By(fmt.Sprintf("Namespace %s already exists", vaultNamespace))
+	return nil
+}
+
+// waitForVaultCASecret waits until cert-manager has issued vault-ca with a CA certificate.
+func waitForVaultCASecret(ctx context.Context, clientset *kubernetes.Clientset) error {
+	return wait.PollUntilContextTimeout(ctx, 5*time.Second, 3*time.Minute, true, func(ctx context.Context) (bool, error) {
+		secret, err := clientset.CoreV1().Secrets(vaultNamespace).Get(ctx, vaultCASecretName, metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		// For isCA Certificates, tls.crt is the CA certificate used by trustedCABundle.
+		if len(secret.Data["tls.crt"]) == 0 || len(secret.Data["tls.key"]) == 0 {
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
+// waitForVaultTLSSecret waits until cert-manager has issued vault-server-tls with cert, key, and CA.
+func waitForVaultTLSSecret(ctx context.Context, clientset *kubernetes.Clientset) error {
+	return wait.PollUntilContextTimeout(ctx, 5*time.Second, 3*time.Minute, true, func(ctx context.Context) (bool, error) {
+		secret, err := clientset.CoreV1().Secrets(vaultNamespace).Get(ctx, vaultTLSSecretName, metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		if len(secret.Data["tls.crt"]) == 0 || len(secret.Data["tls.key"]) == 0 || len(secret.Data["ca.crt"]) == 0 {
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
+// createVaultCAConfigMap copies the Vault issuing CA into the operand namespace for trustedCABundle.
+// Prefer vault-ca tls.crt (isCA Certificate) so the bundle passes operator CA validation.
+func createVaultCAConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error {
+	caSecret, err := clientset.CoreV1().Secrets(vaultNamespace).Get(ctx, vaultCASecretName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get vault CA secret: %w", err)
+	}
+	caPEM := caSecret.Data["tls.crt"]
+	if len(caPEM) == 0 {
+		return fmt.Errorf("vault CA secret %s/%s missing tls.crt", vaultNamespace, vaultCASecretName)
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vaultCAConfigMapName,
+			Namespace: operandNamespace,
+		},
+		Data: map[string]string{
+			externalsecrets.UserCABundleKeyPath: string(caPEM),
+		},
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, err := clientset.CoreV1().ConfigMaps(operandNamespace).Get(ctx, vaultCAConfigMapName, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) {
+			_, err = clientset.CoreV1().ConfigMaps(operandNamespace).Create(ctx, cm, metav1.CreateOptions{})
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		existing.Data = cm.Data
+		_, err = clientset.CoreV1().ConfigMaps(operandNamespace).Update(ctx, existing, metav1.UpdateOptions{})
+		return err
+	})
+}
+
+// createSampleCAConfigMap creates a valid CA ConfigMap that does not issue Vault's TLS cert.
+// Used to assert trustedCABundle switches: sample CA keeps SecretStore InvalidProviderConfig.
+func createSampleCAConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vaultSampleCAConfigMapName,
+			Namespace: operandNamespace,
+		},
+		Data: map[string]string{
+			externalsecrets.UserCABundleKeyPath: testCACertPEM(),
+		},
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, err := clientset.CoreV1().ConfigMaps(operandNamespace).Get(ctx, vaultSampleCAConfigMapName, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) {
+			_, err = clientset.CoreV1().ConfigMaps(operandNamespace).Create(ctx, cm, metav1.CreateOptions{})
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		existing.Data = cm.Data
+		_, err = clientset.CoreV1().ConfigMaps(operandNamespace).Update(ctx, existing, metav1.UpdateOptions{})
+		return err
+	})
+}
+
+// clearTrustedCABundle clears ExternalSecretsConfig.spec.controllerConfig.trustedCABundle.
+func clearTrustedCABundle(ctx context.Context) {
+	GinkgoHelper()
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		esc := &operatorv1alpha1.ExternalSecretsConfig{}
+		if err := suiteRuntimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc); err != nil {
+			return err
+		}
+		esc.Spec.ControllerConfig.TrustedCABundle = nil
+		return suiteRuntimeClient.Update(ctx, esc)
+	})
+	Expect(err).NotTo(HaveOccurred(), "should clear trustedCABundle from ExternalSecretsConfig")
 }
 
 // ensureVaultEgressOnExternalSecretsConfig ensures the cluster ExternalSecretsConfig has the Vault egress

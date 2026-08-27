@@ -22,8 +22,9 @@ data:
     ui = true
 
     listener "tcp" {
-      address     = "0.0.0.0:8200"
-      tls_disable = 1
+      address       = "0.0.0.0:8200"
+      tls_cert_file = "/vault/tls/tls.crt"
+      tls_key_file  = "/vault/tls/tls.key"
     }
 
     storage "file" {
@@ -47,10 +48,11 @@ spec:
     metadata:
       labels:
         app: vault
-      annotations:        
+      annotations:
         openshift.io/scc: restricted-v2
     spec:
       serviceAccountName: vault
+      automountServiceAccountToken: false
       # No pod-level securityContext: restricted-v2 assigns the UID from the
       # namespace range and applies its own seccomp profile automatically.
       # Explicit runAsUser/seccompProfile fields are rejected by this cluster.
@@ -75,10 +77,14 @@ spec:
             - name: VAULT_API_ADDR
               value: {{VAULT_ADDR}}
             - name: VAULT_ADDR
-              value: http://127.0.0.1:8200
+              value: https://127.0.0.1:8200
+            - name: VAULT_SKIP_VERIFY
+              value: "true"
           ports:
             - containerPort: 8200
           securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -94,18 +100,19 @@ spec:
             - name: config
               mountPath: /vault/config
             - name: data
-              mountPath: /vault/data          
+              mountPath: /vault/data
+            - name: tls
+              mountPath: /vault/tls
+              readOnly: true
           startupProbe:
-            httpGet:
-              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+            tcpSocket:
               port: 8200
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 24
           readinessProbe:
-            httpGet:
-              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+            tcpSocket:
               port: 8200
             initialDelaySeconds: 0
             periodSeconds: 5
@@ -117,6 +124,9 @@ spec:
             name: vault-config
         - name: data
           emptyDir: {}
+        - name: tls
+          secret:
+            secretName: vault-server-tls
 
 ---
 apiVersion: v1
@@ -128,6 +138,6 @@ spec:
   selector:
     app: vault
   ports:
-    - name: http
+    - name: https
       port: 8200
       targetPort: 8200

@@ -113,7 +113,23 @@ func WaitForESOResourceReady(
 	namespace, name string,
 	timeout time.Duration,
 ) error {
-	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+	return WaitForESOResourceCondition(ctx, client, gvr, namespace, name, "Ready", "True", "", timeout)
+}
+
+// WaitForESOResourceCondition polls until the named condition on an ESO custom resource
+// (SecretStore, PushSecret, ExternalSecret, etc.) has the expected status. When reason is
+// non-empty, the condition's reason must match exactly. Message matching is intentionally
+// omitted so callers can assert status/reason without scraping logs or message text.
+func WaitForESOResourceCondition(
+	ctx context.Context,
+	client dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	namespace, name, condType, condStatus, reason string,
+	timeout time.Duration,
+) error {
+	var lastCondition map[string]interface{}
+
+	err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		u, err := client.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return false, nil // retry
@@ -129,20 +145,42 @@ func WaitForESOResourceReady(
 			if !ok {
 				continue
 			}
-			t := cond["type"]
-			s := cond["status"]
-			msg := cond["message"]
-
-			if t == "Ready" {
-				if s == "True" {
-					return true, nil
-				} else {
-					fmt.Printf("resource %s/%s not ready: %v\n", namespace, name, msg)
+			if cond["type"] != condType {
+				continue
+			}
+			lastCondition = cond
+			if cond["status"] != condStatus {
+				fmt.Printf("resource %s/%s condition %s status=%v reason=%v message=%v\n",
+					namespace, name, condType, cond["status"], cond["reason"], cond["message"])
+				return false, nil
+			}
+			if reason != "" {
+				gotReason, _ := cond["reason"].(string)
+				if gotReason != reason {
+					fmt.Printf("resource %s/%s condition %s status=%v reason=%v (want %s) message=%v\n",
+						namespace, name, condType, cond["status"], cond["reason"], reason, cond["message"])
+					return false, nil
 				}
 			}
+			return true, nil
 		}
 		return false, nil
 	})
+
+	if err != nil && wait.Interrupted(err) {
+		got := "not set"
+		if lastCondition != nil {
+			got = fmt.Sprintf("status=%v reason=%v message=%v",
+				lastCondition["status"], lastCondition["reason"], lastCondition["message"])
+		}
+		want := fmt.Sprintf("status=%s", condStatus)
+		if reason != "" {
+			want = fmt.Sprintf("%s reason=%s", want, reason)
+		}
+		return fmt.Errorf("timeout waiting for %s/%s condition %s (%s): last observed %s",
+			namespace, name, condType, want, got)
+	}
+	return err
 }
 
 // WaitForExternalSecretsConfigReady waits for the ExternalSecretsConfig CR to have both Ready and Degraded
