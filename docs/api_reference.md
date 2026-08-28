@@ -130,6 +130,7 @@ _Appears in:_
 | `componentName` _[ComponentName](#componentname)_ | componentName identifies which external-secrets component this configuration applies to.<br />Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br /> |
 | `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component. |  |  |
 | `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.<br />Names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved prefixes and will be rejected.<br />The exact names 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved. |  | MaxItems: 50 <br /> |
+| `advancedOverrides` _[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#rawextension-runtime-pkg)_ | advancedOverrides applies raw patches on top of the final operator generated Deployment spec.<br />WARNING: DO NOT USE UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING.<br />This field can overwrite your own first-class CRD settings. You must NOT use this<br />field to add or modify containers, initContainers, or ports, as doing so breaks<br />the structural integrity of the operand and will fail deployment reconciliation.<br />Only the allowlisted paths are applied. |  | Optional: \{\} <br /> |
 
 
 #### ComponentName
@@ -256,6 +257,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes.<br />This allows rolling back to previous deployment versions using 'kubectl rollout undo'.<br />Must be at least 1 to ensure rollback capability. Maximum value is 50 to limit resource usage.<br />If not specified, defaults to 10. | 10 | Maximum: 50 <br />Minimum: 1 <br /> |
+| `replicas` _integer_ | replicas sets the desired replica count for this component's Deployment.<br />When omitted, defaults to 1. For ExternalSecretsCoreController, replicas > 1 enables --enable-leader-election. | 1 | Maximum: 10 <br />Minimum: 1 <br /> |
 
 
 #### ExternalSecretsConfig

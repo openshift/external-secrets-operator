@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func init() {
@@ -191,6 +192,16 @@ type ComponentConfig struct {
 	// +listMapKey=name
 	// +optional
 	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+
+	// advancedOverrides applies raw patches on top of the final operator generated Deployment spec.
+	// WARNING: DO NOT USE UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING.
+	// This field can overwrite your own first-class CRD settings. You must NOT use this
+	// field to add or modify containers, initContainers, or ports, as doing so breaks
+	// the structural integrity of the operand and will fail deployment reconciliation.
+	// Only the allowlisted paths are applied.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	AdvancedOverrides *runtime.RawExtension `json:"advancedOverrides,omitempty"`
 }
 
 // DeploymentConfig defines configuration overrides for a Kubernetes Deployment resource.
@@ -204,6 +215,14 @@ type DeploymentConfig struct {
 	// +kubebuilder:validation:Maximum=50
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
+
+	// replicas sets the desired replica count for this component's Deployment.
+	// When omitted, defaults to 1. For ExternalSecretsCoreController, replicas > 1 enables --enable-leader-election.
+	// +kubebuilder:default:=1
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:validation:Maximum:=10
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
