@@ -66,11 +66,12 @@ The `hack/update-external-secrets-manifests.sh` script:
 - Renders templates (cert-manager enabled + disabled variants)
 - Strips Helm labels, relabels `managed-by`
 - Customizes core deployment (disables leader election, cluster-store/push-secret reconcilers)
-- Splits into individual YAML files in `bindata/external-secrets/`
+- Refreshes helm-rendered files under `bindata/external-secrets/operand/` (preserves `namespace_external-secrets.yml` and `certificate_bitwarden-tls-certs.yml`)
+- Network policies live under `bindata/external-secrets/networkpolicies/` and are not touched by the script
 
 ### 2. Add a New Managed Resource Type
 
-1. Add bindata YAML to `bindata/external-secrets/resources/`
+1. Add bindata YAML to `bindata/external-secrets/operand/`
 2. Run `make update-bindata` so `pkg/operator/assets/bindata.go` picks up the new asset
 3. Add asset name constant in `pkg/controller/external_secrets/constants.go`
 4. Add `Decode*ObjBytes` function in `pkg/controller/common/utils.go`

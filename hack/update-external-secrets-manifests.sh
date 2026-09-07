@@ -4,8 +4,9 @@ set -o nounset
 set -o pipefail
 set -o errexit
 
-EXTERNAL_SECRETS_VERSION=${1:?"missing external-secrets version. Please specify a version from https://github.com/external-secrets/external-secrets/releases"}
+EXTERNAL_SECRETS_VERSION=${1:?"missing external-secrets helm chart version. See https://charts.external-secrets.io or https://github.com/external-secrets/external-secrets/releases"}
 MANIFESTS_PATH=./_output/manifests
+OPERAND_BINDATA=bindata/external-secrets/operand
 
 mkdir -p ${MANIFESTS_PATH}
 
@@ -45,8 +46,14 @@ echo "---- Patching external-secrets manifests ----"
 # add custom label to all CRDs
 ./bin/yq e 'select(.kind == "CustomResourceDefinition").metadata.labels."app" = "external-secrets"' -i ${MANIFESTS_PATH}/manifests.yaml
 
-# regenerate all bindata
-rm -rf bindata/external-secrets/resources
+# refresh helm-rendered operand bindata; preserve operator-owned manifests.
+mkdir -p "${OPERAND_BINDATA}"
+shopt -s extglob nullglob
+(
+	cd "${OPERAND_BINDATA}"
+	rm !(namespace_external-secrets.yml|certificate_bitwarden-tls-certs.yml)
+)
+shopt -u extglob nullglob
 rm -f config/crd/bases/customresourcedefinition_*
 
 # split into individual manifest files
@@ -59,11 +66,8 @@ rm -f config/crd/bases/customresourcedefinition_*
 rm ${MANIFESTS_PATH}/customresourcedefinition_fakes.generators.external-secrets.io.yml
 
 # Move resource manifests to appropriate location
-mkdir -p bindata/external-secrets/resources
-
 mv ${MANIFESTS_PATH}/customresourcedefinition_* config/crd/bases/
-mv ${MANIFESTS_PATH}/*.yml bindata/external-secrets/resources
+mv ${MANIFESTS_PATH}/*.yml "${OPERAND_BINDATA}"
 
 # Clean up
 rm -r ${MANIFESTS_PATH}
-
