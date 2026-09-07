@@ -20,20 +20,18 @@ set -o errexit
 # KNOWN_VULNS_UNTIL (UTC, YYYY-MM-DD): ignores are valid through this date inclusive.
 # After it expires, re-run the scan, drop fixed IDs, re-justify remaining ones, and
 # advance this date (typically ~2 weeks).
-KNOWN_VULNS_UNTIL="2026-08-28"
+KNOWN_VULNS_UNTIL="2026-09-21"
 #
 ## Below vulnerabilities are in the kubernetes package, which impacts the server and not the operator, which is the client.
-# - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes --
-# - https://pkg.go.dev/vuln/GO-2025-3547 - Kubernetes kube-apiserver Vulnerable to Race Condition in k8s.io/kubernetes --
+# - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes
+# - https://pkg.go.dev/vuln/GO-2025-3547 - Kubernetes kube-apiserver Vulnerable to Race Condition in k8s.io/kubernetes
 #
 ## Below vulnerabilities are in the go packages, which doesn't impact the operator code and requires the fix to be available downstream.
-# - https://pkg.go.dev/vuln/GO-2026-4918 - HTTP/2 infinite loop via SETTINGS_MAX_FRAME_SIZE of 0 in net/http, golang.org/x/net --
-# - https://pkg.go.dev/vuln/GO-2026-5026 - x/net/idna: ToUnicode accepts Punycode labels encoding pure ASCII labels --
-# - https://pkg.go.dev/vuln/GO-2026-5970 - x/text/unicode/norm: infinite loop on invalid UTF-8 input. --
+# - https://pkg.go.dev/vuln/GO-2026-5026 - x/net/idna: ToUnicode accepts Punycode labels encoding pure ASCII labels
 # - https://pkg.go.dev/vuln/GO-2026-5972 - Enforce maximum recursion depth in encoding/asn1
 # - https://pkg.go.dev/vuln/GO-2026-6090 - Limit handshake messages we are willing to accept post-handshake in crypto/tls
 # - https://pkg.go.dev/vuln/GO-2026-6218 - Avoid quadratic complexity in resolvePath in net/url
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-4918|GO-2026-5026|GO-2026-5970|GO-2026-5972|GO-2026-6090|GO-2026-6218"
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-5026|GO-2026-5972|GO-2026-6090|GO-2026-6218"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"
