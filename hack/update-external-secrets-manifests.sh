@@ -51,7 +51,9 @@ mkdir -p "${OPERAND_BINDATA}"
 shopt -s extglob nullglob
 (
 	cd "${OPERAND_BINDATA}"
-	rm !(namespace_external-secrets.yml|certificate_bitwarden-tls-certs.yml)
+	for manifest in !(namespace_external-secrets.yml|certificate_bitwarden-tls-certs.yml); do
+		rm -- "${manifest}"
+	done
 )
 shopt -u extglob nullglob
 rm -f config/crd/bases/customresourcedefinition_*
