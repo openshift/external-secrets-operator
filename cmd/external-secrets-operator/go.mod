@@ -1,6 +1,6 @@
 module github.com/openshift/external-secrets-operator/cmd/external-secrets-operator
 
-go 1.26.6
+go 1.26.0
 
 require (
 	github.com/cert-manager/cert-manager v1.18.5
