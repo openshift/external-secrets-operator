@@ -16,9 +16,9 @@ export XDG_CONFIG_HOME ?= $(PROJECT_ROOT)/_output/.config
 
 # IMG_VERSION defines the images version for the operator, bundle and catalog (must be valid semver: Major.Minor.Patch).
 # To re-generate any image for another specific version without changing the standard setup, you can:
-# - use the IMG_VERSION as arg of the specific image build and push targets (e.g make IMG_VERSION=1.2.0 bundle-build bundle-push)
-# - use environment variables to overwrite this value (e.g export IMG_VERSION=1.2.0)
-IMG_VERSION ?= 1.2.0
+# - use the IMG_VERSION as arg of the specific image build and push targets (e.g make IMG_VERSION=1.2.1 bundle-build bundle-push)
+# - use environment variables to overwrite this value (e.g export IMG_VERSION=1.2.1)
+IMG_VERSION ?= 1.2.1
 
 # Validate IMG_VERSION is valid semver (Major.Minor.Patch), fallback to default if not.
 ifneq ($(shell echo '$(IMG_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && echo valid),valid)
@@ -73,7 +73,7 @@ endif
 
 # IMG is the image URL used for building/pushing image targets.
 # Default tag is 'latest' to avoid unnecessary changes in checked-in manifests.
-# Override with a specific version when building release images (e.g., IMG=openshift.io/external-secrets-operator:v1.2.0).
+# Override with a specific version when building release images (e.g., IMG=openshift.io/external-secrets-operator:v1.2.1).
 IMG ?= openshift.io/external-secrets-operator:latest
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -99,7 +99,7 @@ GO_PACKAGE ?= github.com/openshift/external-secrets-operator
 SOURCE_GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-# Extract major/minor from IMG_VERSION (e.g., 1.2.0 -> major=1, minor=1)
+# Extract major/minor from IMG_VERSION (e.g., 1.2.1 -> major=1, minor=2)
 IMG_VERSION_MAJOR = $(word 1,$(subst ., ,$(IMG_VERSION)))
 IMG_VERSION_MINOR = $(word 2,$(subst ., ,$(IMG_VERSION)))
 
