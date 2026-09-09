@@ -377,6 +377,18 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
+// getCoreControllerReplicas returns the user-configured replica count for the core controller,
+// or 1 if not configured.
+func getCoreControllerReplicas(esc *operatorv1alpha1.ExternalSecretsConfig) int32 {
+	for _, cc := range esc.Spec.ControllerConfig.ComponentConfigs {
+		if cc.ComponentName == operatorv1alpha1.CoreController &&
+			cc.DeploymentConfigs != nil && cc.DeploymentConfigs.Replicas != nil {
+			return *cc.DeploymentConfigs.Replicas
+		}
+	}
+	return 1
+}
+
 // argument list for external-secrets deployment resource.
 func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
@@ -389,8 +401,12 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
-		"--enable-leader-election=true",
 		"--enable-push-secret-reconciler=true",
+	}
+
+	// Enable leader election only when core controller replicas > 1.
+	if getCoreControllerReplicas(esc) > 1 {
+		args = append(args, LeaderElectionArg)
 	}
 
 	// when spec.appConfig.operatingNamespace is configured, which is for restricting the
@@ -940,6 +956,7 @@ func applyOperandArgsFromEnv(deployment *appsv1.Deployment, containerName, envVa
 }
 
 // applyUserDeploymentConfigs updates the deployment resource spec with user specified configurations.
+// Apply order per EP: operator-managed settings → replicas → overrideEnv → advancedOverrides → re-assert leader election.
 func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, assetName string) error {
 	componentName, containerName, err := getComponentNameFromAsset(assetName)
 	if err != nil {
@@ -947,26 +964,71 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 	}
 
 	for _, i := range esc.Spec.ControllerConfig.ComponentConfigs {
-		if i.ComponentName == componentName {
-			// Apply RevisionHistoryLimit if set
-			if i.DeploymentConfigs != nil && i.DeploymentConfigs.RevisionHistoryLimit != nil {
-				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
-			}
+		if i.ComponentName != componentName {
+			continue
+		}
 
-			// Apply OverrideEnv only to the target component container.
-			if len(i.OverrideEnv) > 0 {
-				for j := range deployment.Spec.Template.Spec.Containers {
-					if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
-						mergeUserEnvVars(&deployment.Spec.Template.Spec.Containers[j], i.OverrideEnv)
-						break
-					}
+		// Apply RevisionHistoryLimit if set.
+		if i.DeploymentConfigs != nil && i.DeploymentConfigs.RevisionHistoryLimit != nil {
+			deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
+		}
+
+		// Apply Replicas if set.
+		if i.DeploymentConfigs != nil && i.DeploymentConfigs.Replicas != nil {
+			deployment.Spec.Replicas = i.DeploymentConfigs.Replicas
+		}
+
+		// Apply OverrideEnv only to the target component container.
+		if len(i.OverrideEnv) > 0 {
+			for j := range deployment.Spec.Template.Spec.Containers {
+				if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
+					mergeUserEnvVars(&deployment.Spec.Template.Spec.Containers[j], i.OverrideEnv)
+					break
 				}
 			}
-			break
 		}
+
+		// Apply AdvancedOverrides (strategic merge patch on allowlisted paths).
+		if i.AdvancedOverrides != nil {
+			if err := validateAndApplyAdvancedOverrides(deployment, i.AdvancedOverrides, containerName); err != nil {
+				return err
+			}
+		}
+
+		// Re-assert --enable-leader-election=true on core controller when replicas > 1.
+		// This is necessary because advancedOverrides containers[*].args is an allowlisted
+		// path and strategic merge replaces the args list wholesale.
+		if componentName == operatorv1alpha1.CoreController {
+			replicas := int32(1)
+			if i.DeploymentConfigs != nil && i.DeploymentConfigs.Replicas != nil {
+				replicas = *i.DeploymentConfigs.Replicas
+			}
+			reassertLeaderElection(deployment, containerName, replicas)
+		}
+
+		break
 	}
 
 	return nil
+}
+
+// reassertLeaderElection ensures --enable-leader-election=true is present in the core controller
+// args when replicas > 1, and absent when replicas == 1.
+func reassertLeaderElection(deployment *appsv1.Deployment, containerName string, replicas int32) {
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name != containerName {
+			continue
+		}
+		args := deployment.Spec.Template.Spec.Containers[i].Args
+		hasLeaderElection := slices.Contains(args, LeaderElectionArg)
+		if replicas > 1 && !hasLeaderElection {
+			args = append(args, LeaderElectionArg)
+		} else if replicas <= 1 && hasLeaderElection {
+			args = slices.DeleteFunc(args, func(s string) bool { return s == LeaderElectionArg })
+		}
+		deployment.Spec.Template.Spec.Containers[i].Args = args
+		return
+	}
 }
 
 // mergeUserEnvVars merges user-defined environment variables into a container.
