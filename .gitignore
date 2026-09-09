@@ -30,3 +30,13 @@ _output
 # do not apply ignore rules to anything in vendor/ dir
 !vendor/
 !vendor/**
+
+# ─── OpenSpec / local tooling (install via openspec install.sh; do not commit) ───
+# Leading / = repo root only (do not ignore harness-evals/evals/).
+/.cursor/
+/.work/
+/openspec/
+/eval-generation/
+/evals/
+/dashboard/
+# Operator-owned harness stays committed: harness-evals/{harness-docs,constitution.md,evals}/
