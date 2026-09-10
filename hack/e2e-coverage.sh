@@ -76,11 +76,35 @@ collect() {
     fi
     echo "Operator pod: ${pod}"
 
-    echo "Sending SIGTERM to operator process to flush coverage data..."
-    oc exec -n "${NAMESPACE}" "${pod}" -c manager -- /bin/sh -c 'kill -TERM 1' || true
+    local restart_count
+    restart_count=$(oc get pod "${pod}" -n "${NAMESPACE}" \
+        -o jsonpath='{.status.containerStatuses[0].restartCount}')
+    if [[ -z "${restart_count}" ]]; then
+        echo "Error: could not determine restart count for operator container" >&2
+        exit 1
+    fi
 
-    echo "Waiting for container to restart..."
-    oc wait pod/"${pod}" --for=condition=Ready=False -n "${NAMESPACE}" --timeout=30s 2>/dev/null || true
+    echo "Sending SIGTERM to operator process to flush coverage data..."
+    oc exec -n "${NAMESPACE}" "${pod}" -c manager -- /bin/sh -c 'kill -TERM 1'
+
+    echo "Waiting for container restart count to increment..."
+    local expected_count=$((restart_count + 1))
+    local current_count="${restart_count}"
+    local deadline=$((SECONDS + 120))
+    while (( SECONDS < deadline )); do
+        current_count=$(oc get pod "${pod}" -n "${NAMESPACE}" \
+            -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
+        if (( current_count >= expected_count )); then
+            break
+        fi
+        sleep 2
+    done
+    if (( current_count < expected_count )); then
+        echo "Error: timed out waiting for container restart" >&2
+        exit 1
+    fi
+    echo "Container restarted (count: ${restart_count} -> ${current_count})"
+
     oc wait pod/"${pod}" --for=condition=Ready -n "${NAMESPACE}" --timeout=120s
 
     mkdir -p "${coverage_dir}"
@@ -100,6 +124,8 @@ collect() {
         echo "============================="
         echo ""
         echo "Coverage profile: ${coverage_profile} ($(wc -l < "${coverage_profile}") lines)"
+
+        rm -rf "${coverage_dir}"
 
         if [[ -n "${CODECOV_TOKEN:-}" ]]; then
             echo "Uploading to Codecov..."
