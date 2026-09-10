@@ -204,6 +204,17 @@ type DeploymentConfig struct {
 	// +kubebuilder:validation:Maximum=50
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
+
+	// replicas specifies the desired number of pod replicas for this component's Deployment.
+	// When set to greater than 1 on the ExternalSecretsCoreController, leader election is
+	// automatically enabled to ensure only one replica actively reconciles at a time.
+	// Other components (Webhook, CertController, BitwardenSDKServer) do not use leader election
+	// regardless of replica count.
+	// +kubebuilder:default:=1
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // BitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider and for setting up the additional service required for connecting with the bitwarden server.
