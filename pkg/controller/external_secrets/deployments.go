@@ -953,6 +953,21 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
 			}
 
+			// Apply Replicas if set
+			if i.DeploymentConfigs != nil && i.DeploymentConfigs.Replicas != nil {
+				deployment.Spec.Replicas = i.DeploymentConfigs.Replicas
+			}
+
+			// Inject or remove leader election arg for the core controller based on replica count.
+			if componentName == operatorv1alpha1.CoreController {
+				for j := range deployment.Spec.Template.Spec.Containers {
+					if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
+						applyLeaderElection(&deployment.Spec.Template.Spec.Containers[j], deployment.Spec.Replicas)
+						break
+					}
+				}
+			}
+
 			// Apply OverrideEnv only to the target component container.
 			if len(i.OverrideEnv) > 0 {
 				for j := range deployment.Spec.Template.Spec.Containers {
@@ -967,6 +982,27 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 	}
 
 	return nil
+}
+
+// applyLeaderElection injects --enable-leader-election=true when replicas > 1 and
+// removes it when replicas <= 1 (or nil) to ensure single-replica deployments do not
+// pay the leader election overhead.
+func applyLeaderElection(container *corev1.Container, replicas *int32) {
+	wantLeaderElection := replicas != nil && *replicas > 1
+
+	if wantLeaderElection {
+		container.Args = mergeContainerArgs(container.Args, []string{LeaderElectionArg})
+		return
+	}
+
+	// Remove the leader election arg if present
+	filtered := make([]string, 0, len(container.Args))
+	for _, arg := range container.Args {
+		if argFlagKey(arg) != argFlagKey(LeaderElectionArg) {
+			filtered = append(filtered, arg)
+		}
+	}
+	container.Args = filtered
 }
 
 // mergeUserEnvVars merges user-defined environment variables into a container.
