@@ -3,9 +3,9 @@ resources:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
-- name: controller
-  newName: openshift.io/external-secrets-operator
-  newTag: latest
+- digest: sha256:b25faf3ea1a2532049fcedbf04a04d7f4ccb8ed05f91f3a8b03e81f464d0487b
+  name: controller
+  newName: registry.stage.redhat.io/external-secrets-operator/external-secrets-operator-rhel9
 generatorOptions:
   disableNameSuffixHash: true
 configMapGenerator:
