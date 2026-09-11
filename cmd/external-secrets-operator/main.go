@@ -35,16 +35,19 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/textlogger"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	configv1 "github.com/openshift/api/config/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
 	"github.com/openshift/external-secrets-operator/pkg/operator"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 	"github.com/openshift/external-secrets-operator/pkg/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -106,6 +109,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(crdv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.Install(scheme))
 
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -203,6 +207,41 @@ func main() {
 
 	// Create the cache builder with CRD checks
 	restConfig := ctrl.GetConfigOrDie()
+
+	// Resolve cluster TLS profile for the operator's own serving endpoints.
+	// This uses an uncached client because the manager cache is not started yet.
+	uncachedClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "failed to create uncached client for TLS profile resolution")
+		os.Exit(1)
+	}
+	tlsSpec, err := tlsprofile.ResolveHonoredTLSProfile(
+		ctx,
+		tlsprofile.NewClientReaderAPIServerFetch(tlsprofile.NewClientReaderObjectGetter(uncachedClient)),
+		"external-secrets-operator",
+		tlsprofile.FetchErrorPropagateExceptNotFound,
+	)
+	if err != nil {
+		setupLog.Error(err, "failed to resolve cluster TLS profile")
+		os.Exit(1)
+	}
+	if tlsSpec != nil {
+		tlsCfg, err := tlsprofile.ClientTLSConfig(tlsSpec, nil)
+		if err != nil {
+			setupLog.Error(err, "failed to build TLS config from cluster profile")
+			os.Exit(1)
+		}
+		setupLog.Info("applying cluster TLS profile to operator serving endpoints",
+			"minTLSVersion", tlsSpec.MinTLSVersion)
+		applyClusterTLS := func(c *tls.Config) {
+			c.MinVersion = tlsCfg.MinVersion
+			c.CipherSuites = tlsCfg.CipherSuites
+			c.CurvePreferences = tlsCfg.CurvePreferences
+		}
+		metricsTLSOpts = append(metricsTLSOpts, applyClusterTLS)
+		webhookTLSOpts = append(webhookTLSOpts, applyClusterTLS)
+	}
+
 	cacheBuilder := escontroller.NewCacheBuilder(restConfig)
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{

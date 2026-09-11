@@ -13,6 +13,7 @@ import (
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 )
 
 var (
@@ -32,6 +33,26 @@ var (
 func (r *Reconciler) reconcileExternalSecretsDeployment(esc *operatorv1alpha1.ExternalSecretsConfig, recon bool) error {
 	if err := r.validateExternalSecretsConfig(esc); err != nil {
 		return err
+	}
+
+	// Resolve cluster TLS profile for operand deployments.
+	// TODO: once the upstream external-secrets operand supports --tls-min-version,
+	// --tls-ciphers, and --tls-curve-preferences flags, pass tlsSpec to
+	// createOrApplyDeployments and inject the flags into container args.
+	tlsSpec, err := tlsprofile.ResolveHonoredTLSProfile(
+		r.ctx,
+		tlsprofile.NewClientReaderAPIServerFetch(r.CtrlClient),
+		"external-secrets",
+		tlsprofile.FetchErrorPropagateExceptNotFound,
+	)
+	if err != nil {
+		r.log.Error(err, "failed to resolve cluster TLS profile")
+		return err
+	}
+	if tlsSpec != nil {
+		r.log.V(2).Info("resolved cluster TLS profile for operand deployments",
+			"minTLSVersion", tlsSpec.MinTLSVersion,
+			"cipherCount", len(tlsSpec.Ciphers))
 	}
 
 	resourceMetadata, err := r.getResourceMetadata(esc)
