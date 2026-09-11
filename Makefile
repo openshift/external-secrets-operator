@@ -25,8 +25,8 @@ ifneq ($(shell echo '$(IMG_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && e
 $(error IMG_VERSION '$(IMG_VERSION)' is not valid semver (expected: Major.Minor.Patch))
 endif
 
-# EXTERNAL_SECRETS_VERSION defines the external-secrets release version to fetch helm charts.
-EXTERNAL_SECRETS_VERSION ?= v2.5.0
+# EXTERNAL_SECRETS_VERSION defines the upstream Helm chart version (SemVer, no "v" prefix).
+EXTERNAL_SECRETS_VERSION ?= 2.5.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")

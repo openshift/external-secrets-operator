@@ -12,7 +12,7 @@
 
 The operator deploys and manages upstream **external-secrets** and the optional **bitwarden-sdk-server** plugin via **embedded manifests in `bindata/external-secrets/`**. The operator **never** reimplements upstream secret-sync logic (provider authentication, ExternalSecret reconciliation, generator behavior, Bitwarden SDK protocol). Operator packages reconcile operator CRs and deploy/configure operand workloads only.
 
-**Evidence:** `bindata/external-secrets/resources/` — operand YAML from upstream helm; `pkg/controller/external_secrets/` installs deployments/RBAC/webhooks but contains zero provider-specific secret-fetch logic. `README.md` states the operator uses upstream helm charts.
+**Evidence:** `bindata/external-secrets/operand/` — operand YAML from upstream helm; `pkg/controller/external_secrets/` installs deployments/RBAC/webhooks but contains zero provider-specific secret-fetch logic. `README.md` states the operator uses upstream helm charts.
 
 ### II. Operand Workloads — Core, Conditional TLS Helper, Plugin
 
@@ -56,7 +56,7 @@ Runtime feature toggles are defined on `ExternalSecretsManager.Spec.Features[]` 
 
 Webhook TLS uses either cert-manager `Certificate` CRs (`certProvider.certManager.mode == Enabled`) **or** the in-tree `external-secrets-cert-controller` deployment — never both. cert-controller deployment is skipped when cert-manager path is active.
 
-**Evidence:** `pkg/controller/external_secrets/deployments.go` — `certControllerDeploymentAssetName` condition `!isCertManagerConfigEnabled(esc)`; `pkg/controller/external_secrets/certificate.go`; `bindata/external-secrets/resources/certificate_external-secrets-webhook.yml` vs `bindata/external-secrets/resources/secret_external-secrets-webhook.yml`.
+**Evidence:** `pkg/controller/external_secrets/deployments.go` — `certControllerDeploymentAssetName` condition `!isCertManagerConfigEnabled(esc)`; `pkg/controller/external_secrets/certificate.go`; `bindata/external-secrets/operand/certificate_external-secrets-webhook.yml` vs `bindata/external-secrets/operand/secret_external-secrets-webhook.yml`.
 
 ### VIII. Bindata / Manifest Regeneration — Never Hand-Edit, Always `make update`
 
@@ -78,9 +78,9 @@ E2E (`make test-e2e`, build tag `e2e`) requires a live cluster.
 
 ### X. RBAC Least Privilege — Explicit Operator and Operand Manifests
 
-Operator RBAC is in `config/rbac/`. Operand RBAC is embedded in `bindata/external-secrets/resources/` and applied by `pkg/controller/external_secrets/rbacs.go`. New permissions MUST be explicit ClusterRole rules in bindata or operator RBAC — not broad cluster-admin grants.
+Operator RBAC is in `config/rbac/`. Operand RBAC is embedded in `bindata/external-secrets/operand/` and applied by `pkg/controller/external_secrets/rbacs.go`. New permissions MUST be explicit ClusterRole rules in bindata or operator RBAC — not broad cluster-admin grants.
 
-**Evidence:** `config/rbac/role.yaml`; `bindata/external-secrets/resources/` — per-component RBAC YAML; `pkg/controller/external_secrets/rbacs.go`.
+**Evidence:** `config/rbac/role.yaml`; `bindata/external-secrets/operand/` — per-component RBAC YAML; `pkg/controller/external_secrets/rbacs.go`.
 
 ### XI. OLM Bundle and Related Images
 
@@ -131,7 +131,7 @@ Operator runs in `external-secrets-operator` namespace. Operand runs in `externa
 | **OperatorController_Agent** | `pkg/controller/external_secrets/` (incl. `pkg/controller/external_secrets/trusted_ca_bundle.go`), `pkg/controller/external_secrets_manager/`, `pkg/controller/crd_annotator/`, `pkg/operator/setup_manager.go` | Core operand reconciliation, wiring, user trusted CA |
 | **ManifestsBindata_Agent** | `bindata/`, `hack/update-external-secrets-manifests.sh`, operand CRDs | Operand manifest refresh, version pins |
 | **BitwardenPlugin_Agent** | `Plugins.BitwardenSecretManagerProvider`, bitwarden bindata assets | Bitwarden SDK plugin workload |
-| **WebhookTLS_Agent** | `pkg/controller/external_secrets/certificate.go`, webhook deployments under `bindata/external-secrets/resources/` | Webhook TLS paths (cert-manager Certificate vs in-tree cert-controller) |
+| **WebhookTLS_Agent** | `pkg/controller/external_secrets/certificate.go`, webhook deployments under `bindata/external-secrets/operand/` | Webhook TLS paths (cert-manager Certificate vs in-tree cert-controller) |
 | **RBACSecurity_Agent** | `config/rbac/`, `pkg/controller/external_secrets/rbacs.go`, `pkg/controller/external_secrets/networkpolicy.go` | RBAC and network policy |
 | **OLMRelease_Agent** | `bundle/`, `config/manifests/` | CSV, relatedImages |
 | **Testing_Agent** | `test/e2e/`, `test/apis/` | Test authoring |
