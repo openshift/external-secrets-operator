@@ -47,6 +47,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -620,6 +621,189 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 					g.Expect(*deployment.Spec.RevisionHistoryLimit).To(Equal(certControllerLimit), "revisionHistoryLimit should be %d for cert-controller", certControllerLimit)
 				}, time.Minute, 5*time.Second).Should(Succeed())
 			}
+		})
+	})
+
+	Context("Per-Component Replica Scaling", Label("Platform:Generic", "Feature:Replicas"), func() {
+		It("should default to replicas=1 when not configured", func() {
+			By("Verifying default replicas for core controller deployment")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying default replicas for webhook deployment")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandWebhookDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should scale components, enable leader election, persist across reconciles, and scale back", func() {
+			esc := &operatorv1alpha1.ExternalSecretsConfig{}
+			Expect(runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc)).To(Succeed())
+
+			// --- Phase 1: Scale core controller to 2 with leader election ---
+
+			replicaConfigs := []operatorv1alpha1.ComponentConfig{
+				{
+					ComponentName: operatorv1alpha1.CoreController,
+					DeploymentConfigs: &operatorv1alpha1.DeploymentConfig{
+						Replicas: ptr.To(int32(2)),
+					},
+				},
+			}
+			applicableConfigs := componentConfigsForESC(esc, replicaConfigs)
+
+			By("Updating ExternalSecretsConfig with replicas=2 for core controller")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, existingCR); err != nil {
+					return err
+				}
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig.ComponentConfigs = applicableConfigs
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig with replicas=2")
+
+			By("Verifying core controller deployment has replicas=2 with all pods ready")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(2)), "core controller should have 2 replicas")
+				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(2)), "core controller should have 2 ready replicas")
+			}, 3*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying --enable-leader-election=true is set on core controller")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCoreControllerContainer, externalsecrets.LeaderElectionArg)
+				g.Expect(found).To(BeTrue(), "core controller container should exist")
+				g.Expect(hasArg).To(BeTrue(), "core controller should have --enable-leader-election=true when replicas > 1")
+			}, time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying leader election lease exists in operand namespace")
+			Eventually(func(g Gomega) {
+				leases, err := clientset.CoordinationV1().Leases(operandNamespace).List(ctx, metav1.ListOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				leaseFound := false
+				for _, lease := range leases.Items {
+					if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+						leaseFound = true
+						break
+					}
+				}
+				g.Expect(leaseFound).To(BeTrue(), "a held leader election lease should exist in %s", operandNamespace)
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			// --- Phase 2: Scale webhook independently, verify no leader election ---
+
+			replicaConfigs = []operatorv1alpha1.ComponentConfig{
+				{
+					ComponentName: operatorv1alpha1.CoreController,
+					DeploymentConfigs: &operatorv1alpha1.DeploymentConfig{
+						Replicas: ptr.To(int32(2)),
+					},
+				},
+				{
+					ComponentName: operatorv1alpha1.Webhook,
+					DeploymentConfigs: &operatorv1alpha1.DeploymentConfig{
+						Replicas: ptr.To(int32(2)),
+					},
+				},
+			}
+			applicableConfigs = componentConfigsForESC(esc, replicaConfigs)
+
+			By("Updating ExternalSecretsConfig with replicas=2 for core controller and webhook")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, existingCR); err != nil {
+					return err
+				}
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig.ComponentConfigs = applicableConfigs
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig")
+
+			By("Verifying webhook deployment has 2 ready replicas")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandWebhookDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(2)), "webhook should have 2 replicas")
+				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(2)), "webhook should have 2 ready replicas")
+			}, 3*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying webhook does NOT have leader election arg")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandWebhookDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				args, found := getDeploymentContainerArgs(deployment, externalsecrets.OperandWebhookContainer)
+				g.Expect(found).To(BeTrue(), "webhook container should exist")
+				for _, arg := range args {
+					g.Expect(arg).NotTo(ContainSubstring("--enable-leader-election"), "webhook should not have leader election arg")
+				}
+			}, time.Minute, 5*time.Second).Should(Succeed())
+
+			// --- Phase 3: Verify replica counts persist across reconcile loops ---
+
+			By("Verifying replica counts are stable across reconcile cycles")
+			Consistently(func(g Gomega) {
+				for _, check := range []struct {
+					name     string
+					replicas int32
+				}{
+					{externalsecrets.OperandCoreControllerDeployment, 2},
+					{externalsecrets.OperandWebhookDeployment, 2},
+				} {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, check.name, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+					g.Expect(*deployment.Spec.Replicas).To(Equal(check.replicas),
+						fmt.Sprintf("%s should maintain replicas=%d", check.name, check.replicas))
+				}
+			}, 30*time.Second, 10*time.Second).Should(Succeed(), "replica counts should persist across reconcile loops")
+
+			// --- Phase 4: Scale back to 1 and verify leader election removed ---
+
+			By("Clearing componentConfigs from ExternalSecretsConfig")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, existingCR); err != nil {
+					return err
+				}
+				updatedCR := existingCR.DeepCopy()
+				updatedCR.Spec.ControllerConfig.ComponentConfigs = nil
+				return runtimeClient.Update(ctx, updatedCR)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should clear componentConfigs")
+
+			By("Verifying core controller reverts to replicas=1 with pod ready")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int			By("Verifying --enable-leader-election=true is set on core controller")
+				32(1)), "core controller should revert to 1 replica")
+				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "core controller should have 1 ready replica")
+			}, 3*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying webhook reverts to replicas=1 with pod ready")
+			Eventually(func(g Gomega) {
+				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandWebhookDeployment, metav1.GetOptions{})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "webhook should revert to 1 replica")
+				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "webhook should have 1 ready replica")
+			}, 3*time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
 

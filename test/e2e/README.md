@@ -37,6 +37,8 @@ make test-e2e E2E_GINKGO_LABEL_FILTER=""
 | `Proxy` | Proxy egress network policy (requires cluster-wide OpenShift proxy) |
 | `TrustedCABundle` | trustedCABundle ConfigMap mounting/validation and Vault TLS failure→recovery |
 | `ExternalSecretsTemplating` | ExternalSecret template merge (Kubernetes + Vault → dockerconfigjson) |
+| `Replicas` | Per-component replica scaling and leader election |
+| `TrustedCABundle` | trustedCABundle ConfigMap mounting and validation |
 | `Upgrade` | Post-upgrade migration checks (temporary) |
 
 ## Default filter
@@ -95,6 +97,7 @@ If a prerequisite is missing, the affected spec **fails** with a message pointin
 | `Feature:NetworkPolicy` | Static and custom network policy naming |
 | `Feature:OverrideEnv` | Component override env vars |
 | `Feature:OverrideOperandArgs` | Operator `OPERAND_*_ARGS` env overrides for operand Deployments |
+| `Feature:Replicas` | Per-component replica scaling and leader election |
 | `Feature:RevisionHistoryLimit` | Revision history limit defaults and overrides |
 | `Feature:UnsafeAllowGenericTargets` | UnsafeAllowGenericTargets feature propagation |
 | `Feature:CustomAnnotations` | Annotation lifecycle tests |
@@ -140,6 +143,7 @@ File: `e2e_test.go`
 | Feature | Context |
 |---------|---------|
 | `OverrideEnv` | Environment Variables |
+| `Replicas` | Per-Component Replica Scaling |
 | `RevisionHistoryLimit` | Deployment Revision History Limit |
 | `UnsafeAllowGenericTargets` | UnsafeAllowGenericTargets feature |
 | `CustomAnnotations` | Annotations; Managed Annotation Restoration |
