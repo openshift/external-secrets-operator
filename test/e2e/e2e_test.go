@@ -791,8 +791,7 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
-				g.Expect(*deployment.Spec.Replicas).To(Equal(int			By("Verifying --enable-leader-election=true is set on core controller")
-				32(1)), "core controller should revert to 1 replica")
+				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "core controller should revert to 1 replica")
 				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "core controller should have 1 ready replica")
 			}, 3*time.Minute, 5*time.Second).Should(Succeed())
 
