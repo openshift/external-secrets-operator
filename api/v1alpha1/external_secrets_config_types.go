@@ -205,7 +205,6 @@ type DeploymentConfig struct {
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 
-
 	// replicas specifies the desired number of pod replicas for this component's Deployment.
 	// When set to greater than 1 on the ExternalSecretsCoreController, leader election is
 	// automatically enabled to ensure only one replica actively reconciles at a time.
