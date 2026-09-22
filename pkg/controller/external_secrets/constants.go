@@ -39,10 +39,8 @@ const (
 	// UnsafeAllowGenericTargetsArg is the core controller argument that enables generic target support.
 	UnsafeAllowGenericTargetsArg = "--unsafe-allow-generic-targets=true"
 
-	// LeaderElectionArg is included in the default container args for the core controller
-	// and cert-controller so that only one replica actively reconciles at a time. It is
-	// kept even at replicas=1 because rolling updates can briefly run two pods.
-	// For more details, refer https://github.com/openshift/external-secrets-operator/pull/189#discussion_r4255826454
+	// LeaderElectionArg is injected into the core controller when replicas > 1 so that
+	// only one replica actively reconciles at a time.
 	LeaderElectionArg = "--enable-leader-election=true"
 
 	// OperandBitwardenContainer is the bitwarden container name.
