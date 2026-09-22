@@ -25,7 +25,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if o, ok := obj.(*corev1.Service); ok {
-						svc := testService("external-secrets/resources/service_external-secrets-webhook.yml")
+						svc := testService("external-secrets/operand/service_external-secrets-webhook.yml")
 						svc.DeepCopyInto(o)
 						return true, nil
 					}
@@ -38,7 +38,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if o, ok := obj.(*corev1.Service); ok {
-						svc := testService("external-secrets/resources/service_bitwarden-sdk-server.yml")
+						svc := testService("external-secrets/operand/service_bitwarden-sdk-server.yml")
 						svc.DeepCopyInto(o)
 						return false, nil
 					}
@@ -79,7 +79,7 @@ func TestCreateOrApplyServices(t *testing.T) {
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
 					if o, ok := obj.(*corev1.Service); ok {
-						svc := testService("external-secrets/resources/service_external-secrets-webhook.yml")
+						svc := testService("external-secrets/operand/service_external-secrets-webhook.yml")
 						svc.SetLabels(nil) // Trigger update
 						svc.DeepCopyInto(o)
 						return true, nil
