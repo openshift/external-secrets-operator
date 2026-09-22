@@ -35,7 +35,9 @@ pkg/operator/
 │   ├── setup_manager.go              # Controller registration, default ESM creation
 │   └── assets/bindata.go             # Generated — DO NOT EDIT
 pkg/version/                           # Build-time ldflags (commit, version, date)
-bindata/external-secrets/              # Source YAML manifests for operand resources
+bindata/external-secrets/
+├── operand/                           # Helm-rendered + operator-preserved operand YAML
+└── networkpolicies/                   # Operator-owned NetworkPolicy YAML
 config/                                # CRDs, RBAC, manager deployment, samples, console
 bundle/                                # OLM bundle (CRDs, metadata, console quickstarts)
 hack/                                  # Build/update scripts
@@ -158,8 +160,9 @@ Operand manifests are sourced from upstream Helm charts, processed by `hack/upda
 ```text
 upstream Helm chart → helm template (cert-manager enabled + disabled variants)
   → strip Helm labels → relabel managed-by → split into individual YAML files
-  → bindata/external-secrets/ → openshift/build-machinery-go add-bindata
-  → pkg/operator/assets/bindata.go (DO NOT EDIT)
+  → bindata/external-secrets/operand/ (preserves operator-owned namespace + bitwarden cert)
+  → bindata/external-secrets/networkpolicies/ (unchanged by update script)
+  → openshift/build-machinery-go add-bindata → pkg/operator/assets/bindata.go (DO NOT EDIT)
 ```
 
 Customizations applied during rendering: leader election disabled, cluster-store and push-secret reconcilers disabled in core deployment.

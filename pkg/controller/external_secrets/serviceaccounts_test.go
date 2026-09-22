@@ -18,10 +18,10 @@ var errTest = fmt.Errorf("test client error")
 
 func staticServiceAccounts() map[string]string {
 	return map[string]string{
-		"external-secrets":                 "external-secrets/resources/serviceaccount_external-secrets.yml",
-		"external-secrets-cert-controller": "external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml",
-		"external-secrets-webhook":         "external-secrets/resources/serviceaccount_external-secrets-webhook.yml",
-		"bitwarden-sdk-server":             "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml",
+		"external-secrets":                 "external-secrets/operand/serviceaccount_external-secrets.yml",
+		"external-secrets-cert-controller": "external-secrets/operand/serviceaccount_external-secrets-cert-controller.yml",
+		"external-secrets-webhook":         "external-secrets/operand/serviceaccount_external-secrets-webhook.yml",
+		"bitwarden-sdk-server":             "external-secrets/operand/serviceaccount_bitwarden-sdk-server.yml",
 	}
 }
 
@@ -62,7 +62,7 @@ func TestCreateOrApplyServiceAccounts(t *testing.T) {
 					return false, nil
 				})
 				m.CreateCalls(func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-					expectedSA := testServiceAccount("external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml")
+					expectedSA := testServiceAccount("external-secrets/operand/serviceaccount_bitwarden-sdk-server.yml")
 					if sa, ok := obj.(*corev1.ServiceAccount); ok {
 						if sa.Name == expectedSA.Name {
 							return nil
