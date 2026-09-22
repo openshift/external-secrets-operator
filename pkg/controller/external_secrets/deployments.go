@@ -962,11 +962,36 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 					}
 				}
 			}
+
+			// Apply advancedOverrides as a strategic merge patch after all first-class fields.
+			if err := applyAdvancedOverrides(deployment, i.AdvancedOverrides, componentName, containerName); err != nil {
+				return fmt.Errorf("failed to apply advancedOverrides for %s: %w", componentName, err)
+			}
 			break
 		}
 	}
 
 	return nil
+}
+
+// applyLeaderElection injects --enable-leader-election=true when replicas > 1 and
+// removes it when replicas <= 1 (or nil) to ensure single-replica deployments do not
+// pay the leader election overhead.
+func applyLeaderElection(container *corev1.Container, replicas *int32) {
+	wantLeaderElection := replicas != nil && *replicas > 1
+
+	if wantLeaderElection {
+		container.Args = mergeContainerArgs(container.Args, []string{LeaderElectionArg})
+		return
+	}
+
+	filtered := make([]string, 0, len(container.Args))
+	for _, arg := range container.Args {
+		if argFlagKey(arg) != argFlagKey(LeaderElectionArg) {
+			filtered = append(filtered, arg)
+		}
+	}
+	container.Args = filtered
 }
 
 // mergeUserEnvVars merges user-defined environment variables into a container.
