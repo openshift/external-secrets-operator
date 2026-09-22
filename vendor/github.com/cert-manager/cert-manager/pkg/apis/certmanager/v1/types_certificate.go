@@ -27,6 +27,16 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`
+// +kubebuilder:printcolumn:name="Secret",type="string",JSONPath=`.spec.secretName`
+// +kubebuilder:printcolumn:name="Issuer",type="string",JSONPath=`.spec.issuerRef.name`,priority=1
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].message`,priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`,description="CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC."
+// +kubebuilder:resource:scope=Namespaced,shortName={cert,certs},categories=cert-manager
+// +kubebuilder:selectablefield:JSONPath=.spec.issuerRef.group
+// +kubebuilder:selectablefield:JSONPath=.spec.issuerRef.kind
+// +kubebuilder:selectablefield:JSONPath=.spec.issuerRef.name
+// +kubebuilder:subresource:status
 
 // A Certificate resource should be created to ensure an up to date and signed
 // X.509 certificate is stored in the Kubernetes Secret resource named in `spec.secretName`.
@@ -85,11 +95,9 @@ type PrivateKeyEncoding string
 
 const (
 	// PKCS1 private key encoding.
-	// PKCS1 produces a PEM block that contains the private key algorithm
-	// in the header and the private key in the body. A key that uses this
-	// can be recognised by its `BEGIN RSA PRIVATE KEY` or `BEGIN EC PRIVATE KEY` header.
-	// NOTE: This encoding is not supported for Ed25519 keys. Attempting to use
-	// this encoding with an Ed25519 key will be ignored and default to PKCS8.
+	// For RSA keys: produces PEM block with `BEGIN RSA PRIVATE KEY` header and private key in PKCS#1 format.
+	// For EC keys: produces PEM block with `BEGIN EC PRIVATE KEY` header and private key in SEC 1 format.
+	// For Ed25519 keys: option will be ignored and PKCS8 encoding will be used instead.
 	PKCS1 PrivateKeyEncoding = "PKCS1"
 
 	// PKCS8 private key encoding.
@@ -198,16 +206,24 @@ type CertificateSpec struct {
 	// +optional
 	RenewBeforePercentage *int32 `json:"renewBeforePercentage,omitempty"`
 
+	// `renewal` allows configuration of how your certificate is renewed. If the policy mentioned is
+	// `RenewBefore` then the controller respects `renewBefore` and `renewBeforePercentage`.
+	// +optional
+	Renewal *CertificateRenewal `json:"renewal,omitempty"`
+
 	// Requested DNS subject alternative names.
 	// +optional
+	// +listType=atomic
 	DNSNames []string `json:"dnsNames,omitempty"`
 
 	// Requested IP address subject alternative names.
 	// +optional
+	// +listType=atomic
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 
 	// Requested URI subject alternative names.
 	// +optional
+	// +listType=atomic
 	URIs []string `json:"uris,omitempty"`
 
 	// `otherNames` is an escape hatch for SAN that allows any type. We currently restrict the support to string like otherNames, cf RFC 5280 p 37
@@ -215,10 +231,12 @@ type CertificateSpec struct {
 	// Most commonly this would be UPN set with oid: 1.3.6.1.4.1.311.20.2.3
 	// You should ensure that any OID passed is valid for the UTF8String type as we do not explicitly validate this.
 	// +optional
+	// +listType=atomic
 	OtherNames []OtherName `json:"otherNames,omitempty"`
 
 	// Requested email subject alternative names.
 	// +optional
+	// +listType=atomic
 	EmailAddresses []string `json:"emailAddresses,omitempty"`
 
 	// Name of the Secret resource that will be automatically created and
@@ -245,7 +263,7 @@ type CertificateSpec struct {
 	// from any namespace.
 	//
 	// The `name` field of the reference must always be specified.
-	IssuerRef cmmeta.ObjectReference `json:"issuerRef"`
+	IssuerRef cmmeta.IssuerReference `json:"issuerRef"`
 
 	// Requested basic constraints isCA value.
 	// The isCA value is used to set the `isCA` field on the created CertificateRequest
@@ -264,6 +282,7 @@ type CertificateSpec struct {
 	//
 	// If unset, defaults to `digital signature` and `key encipherment`.
 	// +optional
+	// +listType=atomic
 	Usages []KeyUsage `json:"usages,omitempty"`
 
 	// Private key options. These include the key algorithm and size, the used
@@ -299,6 +318,7 @@ type CertificateSpec struct {
 	// Defines extra output formats of the private key and signed certificate chain
 	// to be written to this Certificate's target Secret.
 	// +optional
+	// +listType=atomic
 	AdditionalOutputFormats []CertificateAdditionalOutputFormat `json:"additionalOutputFormats,omitempty"`
 
 	// x.509 certificate NameConstraint extension which MUST NOT be used in a non-CA certificate.
@@ -338,9 +358,6 @@ type CertificatePrivateKey struct {
 	// will be generated whenever a re-issuance occurs.
 	// Default is `Always`.
 	// The default was changed from `Never` to `Always` in cert-manager >=v1.18.0.
-	// The new default can be disabled by setting the
-	// `--feature-gates=DefaultPrivateKeyRotationPolicyAlways=false` option on
-	// the controller component.
 	// +optional
 	RotationPolicy PrivateKeyRotationPolicy `json:"rotationPolicy,omitempty"`
 
@@ -439,24 +456,31 @@ type CertificateAdditionalOutputFormat struct {
 type X509Subject struct {
 	// Organizations to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	Organizations []string `json:"organizations,omitempty"`
 	// Countries to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	Countries []string `json:"countries,omitempty"`
 	// Organizational Units to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	OrganizationalUnits []string `json:"organizationalUnits,omitempty"`
 	// Cities to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	Localities []string `json:"localities,omitempty"`
 	// State/Provinces to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	Provinces []string `json:"provinces,omitempty"`
 	// Street addresses to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	StreetAddresses []string `json:"streetAddresses,omitempty"`
 	// Postal codes to be used on the Certificate.
 	// +optional
+	// +listType=atomic
 	PostalCodes []string `json:"postalCodes,omitempty"`
 	// Serial number to be used on the Certificate.
 	// +optional
@@ -507,7 +531,7 @@ type JKSKeystore struct {
 	// Mutually exclusive with passwordSecretRef.
 	// One of password or passwordSecretRef must provide a password with a non-zero length.
 	// +optional
-	Password *string `json:"password,omitempty"`
+	Password *string `json:"password,omitempty"` // #nosec G117 -- field is part of API spec and may contain a secret; not hardcoded
 }
 
 // PKCS12 configures options for storing a PKCS12 keystore in the
@@ -533,6 +557,11 @@ type PKCS12Keystore struct {
 	// `Modern2023`: Secure algorithm. Use this option in case you have to always use secure algorithms
 	// (e.g., because of company policy). Please note that the security of the algorithm is not that important
 	// in reality, because the unencrypted certificate and private key are also stored in the Secret.
+	// `Modern2026`: Encodes PKCS#12 files using algorithms that are considered modern as of 2026.
+	// Private keys and certificates are encrypted using PBES2 with PBKDF2-HMAC-SHA-256 and AES-256-CBC.
+	// The MAC algorithm is PBMAC1 with PBKDF2-HMAC-SHA-256 and HMAC-SHA256.
+	// Files produced with this profile can be read by OpenSSL 3.4.0 and higher, Java 26 and higher,
+	// or with Java using compatible versions of Bouncy Castle. Meets FIPS 140-3 requirements.
 	// +optional
 	Profile PKCS12Profile `json:"profile,omitempty"`
 
@@ -547,10 +576,10 @@ type PKCS12Keystore struct {
 	// Mutually exclusive with passwordSecretRef.
 	// One of password or passwordSecretRef must provide a password with a non-zero length.
 	// +optional
-	Password *string `json:"password,omitempty"`
+	Password *string `json:"password,omitempty"` // #nosec G117 -- field is part of API spec and may contain a secret; not hardcoded
 }
 
-// +kubebuilder:validation:Enum=LegacyRC2;LegacyDES;Modern2023
+// +kubebuilder:validation:Enum=LegacyRC2;LegacyDES;Modern2023;Modern2026
 type PKCS12Profile string
 
 const (
@@ -562,15 +591,64 @@ const (
 
 	// see: https://pkg.go.dev/software.sslmate.com/src/go-pkcs12#Modern2023
 	Modern2023PKCS12Profile PKCS12Profile = "Modern2023"
+
+	// see: https://pkg.go.dev/software.sslmate.com/src/go-pkcs12#Modern2026
+	Modern2026PKCS12Profile PKCS12Profile = "Modern2026"
 )
+
+type CertificateRenewal struct {
+	// `policy` must be one of `Disabled`, `RenewBefore`.
+	// +kubebuilder:validation:Enum=RenewBefore;Disabled
+	Policy CertificateRenewalPolicy `json:"policy,omitempty"`
+
+	// `windows` mentions the behavior of when the renewal must happen.
+	// +listType=atomic
+	// +optional
+	Windows []CertificateRenewalWindows `json:"windows,omitempty"`
+}
+
+type CertificateRenewalPolicy string
+
+const (
+	CertificateRenewalPolicyRenewBefore CertificateRenewalPolicy = "RenewBefore"
+	CertificateRenewalPolicyDisabled    CertificateRenewalPolicy = "Disabled"
+)
+
+// CertificateRenewalWindows is the definition for renewal windows
+type CertificateRenewalWindows struct {
+	// `timezone` is IANA compliant timezone. For example America/Denver.
+	// If this field is not set, timezone is treated as UTC.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Timezone string `json:"timezone,omitempty"`
+
+	// `windowDuration` is how long the cron definition is active for.
+	// Value must be in units accepted by Go time.ParseDuration https://golang.org/pkg/time/#ParseDuration.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(s|m|h))+$"
+	// +required
+	WindowDuration *metav1.Duration `json:"windowDuration,omitempty"`
+
+	// `cron` is a cron compliant string to allow when the renewal should be allowed. Format is as shown below:
+	// * * * * *
+	// | | | | |
+	// | | | | day of the week (0–6) (Sunday to Saturday;
+	// | | | month (1–12)             7 is also Sunday on some systems)
+	// | | day of the month (1–31)
+	// | hour (0–23)
+	// minute (0–59)
+	// +kubebuilder:validation:MinLength=1
+	// +required
+	Cron string `json:"cron,omitempty"`
+}
 
 // CertificateStatus defines the observed state of Certificate
 type CertificateStatus struct {
 	// List of status conditions to indicate the status of certificates.
 	// Known condition types are `Ready` and `Issuing`.
+	// +optional
 	// +listType=map
 	// +listMapKey=type
-	// +optional
 	Conditions []CertificateCondition `json:"conditions,omitempty"`
 
 	// LastFailureTime is set only if the latest issuance for this
@@ -630,6 +708,10 @@ type CertificateStatus struct {
 	// time.Hour * 2 ^ (failedIssuanceAttempts - 1).
 	// +optional
 	FailedIssuanceAttempts *int `json:"failedIssuanceAttempts,omitempty"`
+
+	// ACME stores information that is fetched from the ACME CA server.
+	// +optional
+	ACME *CertificateACMEStatus `json:"acme,omitempty"`
 }
 
 // CertificateCondition contains condition information for a Certificate.
@@ -729,18 +811,65 @@ type NameConstraintItem struct {
 	// DNSDomains is a list of DNS domains that are permitted or excluded.
 	//
 	// +optional
+	// +listType=atomic
 	DNSDomains []string `json:"dnsDomains,omitempty"`
 	// IPRanges is a list of IP Ranges that are permitted or excluded.
 	// This should be a valid CIDR notation.
 	//
 	// +optional
+	// +listType=atomic
 	IPRanges []string `json:"ipRanges,omitempty"`
 	// EmailAddresses is a list of Email Addresses that are permitted or excluded.
 	//
 	// +optional
+	// +listType=atomic
 	EmailAddresses []string `json:"emailAddresses,omitempty"`
 	// URIDomains is a list of URI domains that are permitted or excluded.
 	//
 	// +optional
+	// +listType=atomic
 	URIDomains []string `json:"uriDomains,omitempty"`
+}
+
+type CertificateACMEStatus struct {
+	// ARI stores the ACME Renewal Information that is fetched from the ACME server
+	// in accordance with RFC 9773. This is only populated if the ARI feature gate is enabled.
+	//
+	// +optional
+	ARI *CertificateACMEARIStatus `json:"ari,omitempty"`
+}
+
+type CertificateACMEARIStatus struct {
+	// SuggestedWindow is the suggested renewal window as returned by the ACME server in accordance with RFC 9773.
+	//
+	// +optional
+	SuggestedWindow *ACMERenewalWindow `json:"suggestedWindow,omitempty"`
+	// ExplanationURL is a human-readable URL that may explain why the suggested window
+	// has its current value.
+	//
+	// +optional
+	ExplanationURL string `json:"explanationURL,omitempty"`
+	// LastChecked is the time at which the ACME server was last checked for renewal information.
+	//
+	// +optional
+	LastChecked *metav1.Time `json:"lastChecked,omitempty"`
+	// NextCheck is the time at which the ACME server will next be checked for renewal information.
+	//
+	// +optional
+	NextCheck *metav1.Time `json:"nextCheck,omitempty"`
+	// LastError is the last error encountered when checking the ACME server for renewal information, if any.
+	//
+	// +optional
+	LastError string `json:"lastError,omitempty"`
+}
+
+type ACMERenewalWindow struct {
+	// Start is the start of the suggested renewal window.
+	//
+	// +required
+	Start *metav1.Time `json:"start"`
+	// End is the end of the suggested renewal window.
+	//
+	// +required
+	End *metav1.Time `json:"end"`
 }

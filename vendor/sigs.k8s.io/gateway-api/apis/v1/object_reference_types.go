@@ -27,12 +27,15 @@ package v1
 type LocalObjectReference struct {
 	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
 	// When unspecified or empty string, core API group is inferred.
+	// +required
 	Group Group `json:"group"`
 
 	// Kind is kind of the referent. For example "HTTPRoute" or "Service".
+	// +required
 	Kind Kind `json:"kind"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 }
 
@@ -51,15 +54,16 @@ type SecretObjectReference struct {
 	//
 	// +optional
 	// +kubebuilder:default=""
-	Group *Group `json:"group"`
+	Group *Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "Secret".
 	//
 	// +optional
 	// +kubebuilder:default=Secret
-	Kind *Kind `json:"kind"`
+	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 
 	// Namespace is the namespace of the referenced object. When unspecified, the local
@@ -92,6 +96,10 @@ type SecretObjectReference struct {
 // be rejected by the implementation, with appropriate Conditions set
 // on the containing object.
 //
+// If the backend service requires TLS, use BackendTLSPolicy to tell the
+// implementation to supply the TLS details to be used to connect to that
+// backend.
+//
 // +kubebuilder:validation:XValidation:message="Must have port for Service reference",rule="(size(self.group) == 0 && self.kind == 'Service') ? has(self.port) : true"
 type BackendObjectReference struct {
 	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
@@ -121,6 +129,7 @@ type BackendObjectReference struct {
 	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 
 	// Namespace is the namespace of the backend. When unspecified, the local
@@ -143,6 +152,8 @@ type BackendObjectReference struct {
 	// resource or this field.
 	//
 	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port *PortNumber `json:"port,omitempty"`
 }
 
@@ -156,13 +167,16 @@ type BackendObjectReference struct {
 // on the containing object.
 type ObjectReference struct {
 	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
-	// When unspecified or empty string, core API group is inferred.
+	// When set to the empty string, core API group is inferred.
+	// +required
 	Group Group `json:"group"`
 
 	// Kind is kind of the referent. For example "ConfigMap" or "Service".
+	// +required
 	Kind Kind `json:"kind"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 
 	// Namespace is the namespace of the referenced object. When unspecified, the local

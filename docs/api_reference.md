@@ -29,14 +29,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  |  |
-| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  |  |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
-| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br /> |
-| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  |  |
-| `operatingNamespace` _string_ | operatingNamespace is for restricting the external-secrets operations to the provided namespace.<br />When configured `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled. |  | MaxLength: 63 <br />MinLength: 1 <br /> |
-| `webhookConfig` _[WebhookConfig](#webhookconfig)_ | webhookConfig is for configuring external-secrets webhook specifics. |  |  |
+| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  | Optional: \{\} <br /> |
+| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  | Optional: \{\} <br /> |
+| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
+| `operatingNamespace` _string_ | operatingNamespace is for restricting the external-secrets operations to the provided namespace.<br />When configured `ClusterSecretStore` and `ClusterExternalSecret` are implicitly disabled. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookConfig` _[WebhookConfig](#webhookconfig)_ | webhookConfig is for configuring external-secrets webhook specifics. |  | Optional: \{\} <br /> |
 
 
 #### BitwardenSecretManagerProvider
@@ -52,8 +52,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[Mode](#mode)_ | mode indicates bitwarden secrets manager provider state, which can be indicated by setting Enabled or Disabled.<br />Enabled: Enables the Bitwarden provider plugin. The operator will ensure the plugin is deployed and its state is synchronized.<br />Disabled: Disables reconciliation of the Bitwarden provider plugin. The plugin and its resources will remain in their current state and will not be managed by the operator. | Disabled | Enum: [Enabled Disabled] <br /> |
-| `secretRef` _SecretReference_ | secretRef is the Kubernetes secret containing the TLS key pair to be used for the bitwarden server.<br />The issuer in CertManagerConfig will be utilized to generate the required certificate if the secret reference is not provided and CertManagerConfig is configured.<br />The key names in secret for certificate must be `tls.crt`, for private key must be `tls.key` and for CA certificate key name must be `ca.crt`. |  |  |
+| `mode` _[Mode](#mode)_ | mode indicates bitwarden secrets manager provider state, which can be indicated by setting Enabled or Disabled.<br />Enabled: Enables the Bitwarden provider plugin. The operator will ensure the plugin is deployed and its state is synchronized.<br />Disabled: Disables reconciliation of the Bitwarden provider plugin. The plugin and its resources will remain in their current state and will not be managed by the operator. | Disabled | Enum: [Enabled Disabled] <br />Optional: \{\} <br /> |
+| `secretRef` _SecretReference_ | secretRef is the Kubernetes secret containing the TLS key pair to be used for the bitwarden server.<br />The issuer in CertManagerConfig will be utilized to generate the required certificate if the secret reference is not provided and CertManagerConfig is configured.<br />The key names in secret for certificate must be `tls.crt`, for private key must be `tls.key` and for CA certificate key name must be `ca.crt`. |  | Optional: \{\} <br /> |
 
 
 #### CertManagerConfig
@@ -69,11 +69,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[Mode](#mode)_ | mode indicates whether to use cert-manager for certificate management, instead of built-in cert-controller.<br />Enabled: Makes use of cert-manager for obtaining the certificates for webhook server and other components.<br />Disabled: Makes use of in-built cert-controller for obtaining the certificates for webhook server, which is the default behavior.<br />This field is immutable once set. |  | Enum: [Enabled Disabled] <br /> |
-| `injectAnnotations` _string_ | injectAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the webhooks and CRDs to automatically setup webhook to use the cert-manager CA. This requires CA Injector to be enabled in cert-manager.<br />Use `true` or `false` to indicate the preference. This field is immutable once set. | false | Enum: [true false] <br /> |
-| `issuerRef` _ObjectReference_ | issuerRef contains details of the referenced object used for obtaining certificates.<br />When `issuerRef.Kind` is `Issuer`, it must exist in the `external-secrets` namespace.<br />This field is immutable once set. |  |  |
-| `certificateDuration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateDuration is the validity period of the webhook certificate. | 8760h |  |
-| `certificateRenewBefore` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateRenewBefore is the ahead time to renew the webhook certificate before expiry. | 30m |  |
+| `mode` _[Mode](#mode)_ | mode indicates whether to use cert-manager for certificate management, instead of built-in cert-controller.<br />Enabled: Makes use of cert-manager for obtaining the certificates for webhook server and other components.<br />Disabled: Makes use of in-built cert-controller for obtaining the certificates for webhook server, which is the default behavior.<br />This field is immutable once set. |  | Enum: [Enabled Disabled] <br />Required: \{\} <br /> |
+| `injectAnnotations` _string_ | injectAnnotations is for adding the `cert-manager.io/inject-ca-from` annotation to the webhooks and CRDs to automatically setup webhook to use the cert-manager CA. This requires CA Injector to be enabled in cert-manager.<br />Use `true` or `false` to indicate the preference. This field is immutable once set. | false | Enum: [true false] <br />Optional: \{\} <br /> |
+| `issuerRef` _ObjectReference_ | issuerRef contains details of the referenced object used for obtaining certificates.<br />When `issuerRef.Kind` is `Issuer`, it must exist in the `external-secrets` namespace.<br />This field is immutable once set. |  | Optional: \{\} <br /> |
+| `certificateDuration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateDuration is the validity period of the webhook certificate. | 8760h | Optional: \{\} <br /> |
+| `certificateRenewBefore` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateRenewBefore is the ahead time to renew the webhook certificate before expiry. | 30m | Optional: \{\} <br /> |
 
 
 #### CertProvidersConfig
@@ -89,7 +89,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `certManager` _[CertManagerConfig](#certmanagerconfig)_ | certManager is for configuring cert-manager provider specifics. |  |  |
+| `certManager` _[CertManagerConfig](#certmanagerconfig)_ | certManager is for configuring cert-manager provider specifics. |  | Optional: \{\} <br /> |
 
 
 #### CommonConfigs
@@ -106,12 +106,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  |  |
-| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  |  |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
-| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br /> |
-| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  |  |
+| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  | Optional: \{\} <br /> |
+| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  | Optional: \{\} <br /> |
+| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
 
 
 #### ComponentConfig
@@ -127,9 +127,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `componentName` _[ComponentName](#componentname)_ | componentName identifies which external-secrets component this configuration applies to.<br />Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br /> |
-| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component. |  |  |
-| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.<br />Names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved prefixes and will be rejected.<br />The exact names 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved. |  | MaxItems: 50 <br /> |
+| `componentName` _[ComponentName](#componentname)_ | componentName identifies which external-secrets component this configuration applies to.<br />Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component. |  | Optional: \{\} <br /> |
+| `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.<br />Names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved prefixes and will be rejected.<br />The exact names 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### ComponentName
@@ -165,9 +165,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | type of the condition |  |  |
-| `status` _[ConditionStatus](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#conditionstatus-v1-meta)_ | status of the condition |  |  |
-| `message` _string_ | message provides details about the state. |  |  |
+| `type` _string_ | type of the condition |  | Required: \{\} <br /> |
+| `status` _[ConditionStatus](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#conditionstatus-v1-meta)_ | status of the condition |  | Optional: \{\} <br /> |
+| `message` _string_ | message provides details about the state. |  | Optional: \{\} <br /> |
 
 
 #### ConditionalStatus
@@ -183,7 +183,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | conditions holds information of the current state of deployment. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | conditions holds information of the current state of deployment. |  | Optional: \{\} <br /> |
 
 
 #### ConfigMapKeyReference
@@ -199,8 +199,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name of the ConfigMap resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
-| `key` _string_ | key is the specific key in the ConfigMap to be utilized.<br />When omitted, defaults to "ca-bundle.crt". | ca-bundle.crt | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[-._a-zA-Z0-9]+$` <br /> |
+| `name` _string_ | name of the ConfigMap resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `key` _string_ | key is the specific key in the ConfigMap to be utilized.<br />When omitted, defaults to "ca-bundle.crt". | ca-bundle.crt | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[-._a-zA-Z0-9]+$` <br />Optional: \{\} <br /> |
 
 
 #### ControllerConfig
@@ -216,12 +216,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  |  |
-| `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
-| `annotations` _object (keys:string, values:string)_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment.<br />The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.<br />Annotation keys containing domains `kubernetes.io/`, `openshift.io/`, `cert-manager.io/` or `k8s.io/` (including subdomains like `*.kubernetes.io/`) are not allowed. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
-| `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />The operator prepends "eso-user-" to the provided name when creating the Kubernetes object.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
-| `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings for each component independently.<br />Each component can only have one configuration entry. |  | MaxItems: 4 <br />MinItems: 0 <br /> |
-| `trustedCABundle` _[ConfigMapKeyReference](#configmapkeyreference)_ | trustedCABundle references a ConfigMap containing PEM-encoded CA certificates for the external-secrets core controller to trust when making outbound TLS connections.<br />If specified, this bundle is used for all outbound TLS traffic, including connections to external secret management systems and configured proxies.<br />The ConfigMap must exist in the external-secrets operand namespace and must not carry the CNO inject-trusted-cabundle label when proxy is configured.<br />When omitted, external providers use standard system certificates. When proxy is configured, proxy TLS connections use the operator-managed<br />OpenShift trusted CA bundle injected by the Cluster Network Operator. |  |  |
+| `certProvider` _[CertProvidersConfig](#certprovidersconfig)_ | certProvider is for defining the configuration for certificate providers used to manage TLS certificates for webhook and plugins. |  | Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | labels to apply to all resources created for the external-secrets operand deployment.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | annotations are for adding custom annotations to all the resources created for external-secrets deployment.<br />The annotations are merged with any default annotations set by the operator. User-specified annotations take precedence over defaults in case of conflicts.<br />Annotation keys containing domains `kubernetes.io/`, `openshift.io/`, `cert-manager.io/` or `k8s.io/` (including subdomains like `*.kubernetes.io/`) are not allowed. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `networkPolicies` _[NetworkPolicy](#networkpolicy) array_ | networkPolicies specifies the list of network policy configurations<br />to be applied to external-secrets pods.<br />Each entry allows specifying a name for the generated NetworkPolicy object,<br />along with its full Kubernetes NetworkPolicy definition.<br />The operator prepends "eso-user-" to the provided name when creating the Kubernetes object.<br />If this field is not provided, external-secrets components will be isolated<br />with deny-all network policies, which will prevent proper operation. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `componentConfigs` _[ComponentConfig](#componentconfig) array_ | componentConfigs allows specifying deployment-level configuration overrides for individual external-secrets components. This field enables fine-grained control over deployment settings for each component independently.<br />Each component can only have one configuration entry. |  | MaxItems: 4 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `trustedCABundle` _[ConfigMapKeyReference](#configmapkeyreference)_ | trustedCABundle references a ConfigMap containing PEM-encoded CA certificates for the external-secrets core controller to trust when making outbound TLS connections.<br />If specified, this bundle is used for all outbound TLS traffic, including connections to external secret management systems and configured proxies.<br />The ConfigMap must exist in the external-secrets operand namespace and must not carry the CNO inject-trusted-cabundle label when proxy is configured.<br />When omitted, external providers use standard system certificates. When proxy is configured, proxy TLS connections use the operator-managed<br />OpenShift trusted CA bundle injected by the Cluster Network Operator. |  | Optional: \{\} <br /> |
 
 
 #### ControllerStatus
@@ -237,9 +237,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name of the controller for which the observed condition is recorded. |  |  |
+| `name` _string_ | name of the controller for which the observed condition is recorded. |  | Required: \{\} <br /> |
 | `conditions` _[Condition](#condition) array_ | conditions holds information of the current state of the external-secrets-operator controllers. |  |  |
-| `observedGeneration` _integer_ | observedGeneration represents the .metadata.generation on the observed resource. |  | Minimum: 0 <br /> |
+| `observedGeneration` _integer_ | observedGeneration represents the .metadata.generation on the observed resource. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### DeploymentConfig
@@ -255,7 +255,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes.<br />This allows rolling back to previous deployment versions using 'kubectl rollout undo'.<br />Must be at least 1 to ensure rollback capability. Maximum value is 50 to limit resource usage.<br />If not specified, defaults to 10. | 10 | Maximum: 50 <br />Minimum: 1 <br /> |
+| `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes.<br />This allows rolling back to previous deployment versions using 'kubectl rollout undo'.<br />Must be at least 1 to ensure rollback capability. Maximum value is 50 to limit resource usage.<br />If not specified, defaults to 10. | 10 | Maximum: 50 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
@@ -276,9 +276,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `operator.openshift.io/v1alpha1` | | |
 | `kind` _string_ | `ExternalSecretsConfig` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[ExternalSecretsConfigSpec](#externalsecretsconfigspec)_ | spec is the specification of the desired behavior of the ExternalSecretsConfig. |  |  |
-| `status` _[ExternalSecretsConfigStatus](#externalsecretsconfigstatus)_ | status is the most recently observed status of the ExternalSecretsConfig. |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Required: \{\} <br /> |
+| `spec` _[ExternalSecretsConfigSpec](#externalsecretsconfigspec)_ | spec is the specification of the desired behavior of the ExternalSecretsConfig. |  | Optional: \{\} <br /> |
+| `status` _[ExternalSecretsConfigStatus](#externalsecretsconfigstatus)_ | status is the most recently observed status of the ExternalSecretsConfig. |  | Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfigList
@@ -312,9 +312,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `appConfig` _[ApplicationConfig](#applicationconfig)_ | appConfig is for specifying the configurations for the `external-secrets` operand. |  |  |
-| `plugins` _[PluginsConfig](#pluginsconfig)_ | plugins is for configuring the optional provider plugins. |  |  |
-| `controllerConfig` _[ControllerConfig](#controllerconfig)_ | controllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins. |  |  |
+| `appConfig` _[ApplicationConfig](#applicationconfig)_ | appConfig is for specifying the configurations for the `external-secrets` operand. |  | Optional: \{\} <br /> |
+| `plugins` _[PluginsConfig](#pluginsconfig)_ | plugins is for configuring the optional provider plugins. |  | Optional: \{\} <br /> |
+| `controllerConfig` _[ControllerConfig](#controllerconfig)_ | controllerConfig is for specifying the configurations for the controller to use while installing the `external-secrets` operand and the plugins. |  | Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfigStatus
@@ -330,9 +330,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | conditions holds information of the current state of deployment. |  |  |
-| `externalSecretsImage` _string_ | externalSecretsImage is the name of the image and the tag used for deploying external-secrets. |  |  |
-| `bitwardenSDKServerImage` _string_ | bitwardenSDKServerImage is the name of the image and the tag used for deploying bitwarden-sdk-server. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | conditions holds information of the current state of deployment. |  | Optional: \{\} <br /> |
+| `externalSecretsImage` _string_ | externalSecretsImage is the name of the image and the tag used for deploying external-secrets. |  | Optional: \{\} <br /> |
+| `bitwardenSDKServerImage` _string_ | bitwardenSDKServerImage is the name of the image and the tag used for deploying bitwarden-sdk-server. |  | Optional: \{\} <br /> |
 
 
 #### ExternalSecretsManager
@@ -354,9 +354,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `operator.openshift.io/v1alpha1` | | |
 | `kind` _string_ | `ExternalSecretsManager` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[ExternalSecretsManagerSpec](#externalsecretsmanagerspec)_ | spec is the specification of the desired behavior |  |  |
-| `status` _[ExternalSecretsManagerStatus](#externalsecretsmanagerstatus)_ | status is the most recently observed status of controllers used by External Secrets Operator. |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Required: \{\} <br /> |
+| `spec` _[ExternalSecretsManagerSpec](#externalsecretsmanagerspec)_ | spec is the specification of the desired behavior |  | Optional: \{\} <br /> |
+| `status` _[ExternalSecretsManagerStatus](#externalsecretsmanagerstatus)_ | status is the most recently observed status of controllers used by External Secrets Operator. |  | Optional: \{\} <br /> |
 
 
 #### ExternalSecretsManagerList
@@ -390,8 +390,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `globalConfig` _[GlobalConfig](#globalconfig)_ | globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator. |  |  |
-| `features` _[Feature](#feature) array_ | features configures optional capabilities across deployments managed by the external-secrets-operator,<br />including the operator itself and any current or future operands.<br />Each entry is uniquely identified by name and can be individually enabled or disabled.<br />This field can have a maximum of 1 entry. |  | MaxItems: 1 <br />MinItems: 0 <br /> |
+| `globalConfig` _[GlobalConfig](#globalconfig)_ | globalConfig is for configuring the behavior of deployments that are managed by external secrets-operator. |  | Optional: \{\} <br /> |
+| `features` _[Feature](#feature) array_ | features configures optional capabilities across deployments managed by the external-secrets-operator,<br />including the operator itself and any current or future operands.<br />Each entry is uniquely identified by name and can be individually enabled or disabled.<br />This field can have a maximum of 1 entry. |  | MaxItems: 1 <br />MinItems: 0 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsManagerStatus
@@ -407,8 +407,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `controllerStatuses` _[ControllerStatus](#controllerstatus) array_ | controllerStatuses holds the observed conditions of the controllers part of the operator. |  |  |
-| `lastTransitionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | lastTransitionTime is the last time the condition transitioned from one status to another. |  | Format: date-time <br />Type: string <br /> |
+| `controllerStatuses` _[ControllerStatus](#controllerstatus) array_ | controllerStatuses holds the observed conditions of the controllers part of the operator. |  | Optional: \{\} <br /> |
+| `lastTransitionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | lastTransitionTime is the last time the condition transitioned from one status to another. |  | Format: date-time <br />Type: string <br />Optional: \{\} <br /> |
 
 
 #### Feature
@@ -424,8 +424,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _[FeatureName](#featurename)_ | name identifies the optional feature to configure.<br />Currently, the only supported value is UnsafeAllowGenericTargets. |  | Enum: [UnsafeAllowGenericTargets] <br /> |
-| `mode` _[Mode](#mode)_ | mode controls whether the feature is active.<br />When set to Enabled, the operator applies the configuration associated with the named feature to the relevant managed deployments.<br />For UnsafeAllowGenericTargets, this passes the `--unsafe-allow-generic-targets` flag to the external-secrets core controller,<br />allowing ExternalSecret resources to target Kubernetes resources other than Secrets (for example, ConfigMaps or custom resources).<br />Warning: Generic targets require additional RBAC permissions on the affected operand; enabling this feature without the appropriate permissions will cause reconciliation failures. | Disabled | Enum: [Enabled Disabled] <br /> |
+| `name` _[FeatureName](#featurename)_ | name identifies the optional feature to configure.<br />Currently, the only supported value is UnsafeAllowGenericTargets. |  | Enum: [UnsafeAllowGenericTargets] <br />Required: \{\} <br /> |
+| `mode` _[Mode](#mode)_ | mode controls whether the feature is active.<br />When set to Enabled, the operator applies the configuration associated with the named feature to the relevant managed deployments.<br />For UnsafeAllowGenericTargets, this passes the `--unsafe-allow-generic-targets` flag to the external-secrets core controller,<br />allowing ExternalSecret resources to target Kubernetes resources other than Secrets (for example, ConfigMaps or custom resources).<br />Warning: Generic targets require additional RBAC permissions on the affected operand; enabling this feature without the appropriate permissions will cause reconciliation failures. | Disabled | Enum: [Enabled Disabled] <br />Optional: \{\} <br /> |
 
 
 #### FeatureName
@@ -457,13 +457,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  |  |
-| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  |  |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br /> |
-| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br /> |
-| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  |  |
-| `labels` _object (keys:string, values:string)_ | labels to apply to all resources created by the operator.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br /> |
+| `logLevel` _integer_ | logLevel supports value range as per [Kubernetes logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md#what-method-to-use). | 1 | Maximum: 5 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | resources is for defining the resource requirements.<br />Cannot be updated.<br />ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ |  | Optional: \{\} <br /> |
+| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | affinity is for setting scheduling affinity rules.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/ |  | Optional: \{\} <br /> |
+| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | tolerations is for setting the pod tolerations.<br />ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/<br />This field can have a maximum of 50 entries. |  | MaxItems: 50 <br />MinItems: 0 <br />Optional: \{\} <br /> |
+| `nodeSelector` _object (keys:string, values:string)_ | nodeSelector is for defining the scheduling criteria using node labels.<br />ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/<br />This field can have a maximum of 50 entries. |  | MaxProperties: 50 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
+| `proxy` _[ProxyConfig](#proxyconfig)_ | proxy is for setting the proxy configurations which will be made available in operand containers managed by the operator as environment variables. |  | Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | labels to apply to all resources created by the operator.<br />This field can have a maximum of 20 entries. |  | MaxProperties: 20 <br />MinProperties: 0 <br />Optional: \{\} <br /> |
 
 
 #### ManagementState
@@ -516,9 +516,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the logical identifier for this network policy entry.<br />The operator prepends "eso-user-" to this value when creating the Kubernetes<br />NetworkPolicy object (e.g. "allow-egress" becomes "eso-user-allow-egress").<br />Maximum length is 243 to accommodate the prefix within the 253-character Kubernetes name limit. |  | MaxLength: 243 <br />MinLength: 1 <br /> |
-| `componentName` _[ComponentName](#componentname)_ | componentName specifies which external-secrets component this network policy applies to. |  | Enum: [ExternalSecretsCoreController BitwardenSDKServer] <br /> |
-| `egress` _[NetworkPolicyEgressRule](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#networkpolicyegressrule-v1-networking) array_ | egress is a list of egress rules to be applied to the selected pods. Outgoing traffic<br />is allowed if there are no NetworkPolicies selecting the pod (and cluster policy<br />otherwise allows the traffic), OR if the traffic matches at least one egress rule<br />across all the NetworkPolicy objects whose podSelector matches the pod. If<br />this field is empty then this NetworkPolicy limits all outgoing traffic (and serves<br />solely to ensure that the pods it selects are isolated by default).<br />The operator will automatically handle ingress rules based on the current running ports. |  |  |
+| `name` _string_ | Name is the logical identifier for this network policy entry.<br />The operator prepends "eso-user-" to this value when creating the Kubernetes<br />NetworkPolicy object (e.g. "allow-egress" becomes "eso-user-allow-egress").<br />Maximum length is 243 to accommodate the prefix within the 253-character Kubernetes name limit. |  | MaxLength: 243 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `componentName` _[ComponentName](#componentname)_ | componentName specifies which external-secrets component this network policy applies to. |  | Enum: [ExternalSecretsCoreController BitwardenSDKServer] <br />Required: \{\} <br /> |
+| `egress` _[NetworkPolicyEgressRule](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#networkpolicyegressrule-v1-networking) array_ | egress is a list of egress rules to be applied to the selected pods. Outgoing traffic<br />is allowed if there are no NetworkPolicies selecting the pod (and cluster policy<br />otherwise allows the traffic), OR if the traffic matches at least one egress rule<br />across all the NetworkPolicy objects whose podSelector matches the pod. If<br />this field is empty then this NetworkPolicy limits all outgoing traffic (and serves<br />solely to ensure that the pods it selects are isolated by default).<br />The operator will automatically handle ingress rules based on the current running ports. |  | Required: \{\} <br /> |
 
 
 #### ObjectReference
@@ -547,7 +547,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `bitwardenSecretManagerProvider` _[BitwardenSecretManagerProvider](#bitwardensecretmanagerprovider)_ | bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider plugin for connecting with the bitwarden secrets manager. |  |  |
+| `bitwardenSecretManagerProvider` _[BitwardenSecretManagerProvider](#bitwardensecretmanagerprovider)_ | bitwardenSecretManagerProvider is for enabling the bitwarden secrets manager provider plugin for connecting with the bitwarden secrets manager. |  | Optional: \{\} <br /> |
 
 
 #### ProxyConfig
@@ -565,10 +565,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `httpProxy` _string_ | httpProxy is the URL of the proxy for HTTP requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br /> |
-| `httpsProxy` _string_ | httpsProxy is the URL of the proxy for HTTPS requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br /> |
-| `noProxy` _string_ | noProxy is a comma-separated list of hostnames and/or CIDRs and/or IPs for which the proxy should not be used.<br />This field can have a maximum of 4096 characters. |  | MaxLength: 4096 <br />MinLength: 0 <br /> |
-| `networkPolicyProvisioning` _[ManagementState](#managementstate)_ | networkPolicyProvisioning defines the management strategy for the proxy egress rule.<br />When set to Managed, the operator automatically provisions and maintains a NetworkPolicy allowing traffic to the configured proxy.<br />If no proxy is configured, no NetworkPolicy will be created regardless of this setting. | Managed | Enum: [Managed Unmanaged] <br /> |
+| `httpProxy` _string_ | httpProxy is the URL of the proxy for HTTP requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br />Optional: \{\} <br /> |
+| `httpsProxy` _string_ | httpsProxy is the URL of the proxy for HTTPS requests.<br />This field can have a maximum of 2048 characters. |  | MaxLength: 2048 <br />MinLength: 0 <br />Optional: \{\} <br /> |
+| `noProxy` _string_ | noProxy is a comma-separated list of hostnames and/or CIDRs and/or IPs for which the proxy should not be used.<br />This field can have a maximum of 4096 characters. |  | MaxLength: 4096 <br />MinLength: 0 <br />Optional: \{\} <br /> |
+| `networkPolicyProvisioning` _[ManagementState](#managementstate)_ | networkPolicyProvisioning defines the management strategy for the proxy egress rule.<br />When set to Managed, the operator automatically provisions and maintains a NetworkPolicy allowing traffic to the configured proxy.<br />If no proxy is configured, no NetworkPolicy will be created regardless of this setting. | Managed | Enum: [Managed Unmanaged] <br />Optional: \{\} <br /> |
 
 
 #### SecretReference
@@ -584,7 +584,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name of the secret resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
+| `name` _string_ | name of the secret resource being referred to. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### WebhookConfig
@@ -600,6 +600,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `certificateCheckInterval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateCheckInterval is for configuring the polling interval to check the certificate validity. | 5m |  |
+| `certificateCheckInterval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | certificateCheckInterval is for configuring the polling interval to check the certificate validity. | 5m | Optional: \{\} <br /> |
 
 

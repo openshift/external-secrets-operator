@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck // ST1001 dot imports are idiomatic for Ginkgo
@@ -163,7 +164,7 @@ func generateOnCreateTable(onCreateTests []OnCreateTestSpec) {
 
 		err = k8sClient.Create(ctx, initialObj)
 		if in.expectedError != "" {
-			Expect(err).To(MatchError(ContainSubstring(in.expectedError)))
+			matchExpectedAPIError(err, in.expectedError)
 			return
 		}
 		Expect(err).ToNot(HaveOccurred())
@@ -311,7 +312,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 
 		err = k8sClient.Update(ctx, updatedObj)
 		if in.expectedError != "" {
-			Expect(err).To(MatchError(ContainSubstring(in.expectedError)))
+			matchExpectedAPIError(err, in.expectedError)
 			return
 		}
 		Expect(err).ToNot(HaveOccurred(), "unexpected error updating spec")
@@ -321,7 +322,7 @@ func generateOnUpdateTable(onUpdateTests []OnUpdateTestSpec, crdFileName string)
 
 			err := k8sClient.Status().Update(ctx, updatedObj)
 			if in.expectedStatusError != "" {
-				Expect(err).To(MatchError(ContainSubstring(in.expectedStatusError)))
+				matchExpectedAPIError(err, in.expectedStatusError)
 				return
 			}
 			Expect(err).ToNot(HaveOccurred(), "unexpected error updating status")
@@ -582,4 +583,27 @@ func perTestRuntimeInfo(suitePath, crdName string) (*PerTestRuntimeInfo, error) 
 		CRDFilenames: crdFilesToCheck,
 	}
 	return ret, nil
+}
+
+// normalizeValidationError strips volatile formatting from Kubernetes API validation error
+// messages so assertions remain stable across envtest/Kubernetes versions.
+func normalizeValidationError(msg string) string {
+	// Handle "null" before the generic quoted-value matcher below.
+	msg = strings.ReplaceAll(msg, `Invalid value: "null":`, `Invalid value: null:`)
+	msg = invalidValuePrefixRE.ReplaceAllString(msg, `Invalid value: `)
+	msg = strings.ReplaceAll(msg, `map[string]interface {}`, ``)
+	msg = duplicateValueRE.ReplaceAllStringFunc(msg, func(s string) string {
+		return strings.ReplaceAll(s, `, `, `,`)
+	})
+	return msg
+}
+
+var (
+	invalidValuePrefixRE = regexp.MustCompile(`Invalid value: "[^"]*": `)
+	duplicateValueRE     = regexp.MustCompile(`Duplicate value: \{[^}]+\}`)
+)
+
+func matchExpectedAPIError(err error, expected string) {
+	Expect(err).To(HaveOccurred())
+	Expect(normalizeValidationError(err.Error())).To(ContainSubstring(normalizeValidationError(expected)))
 }

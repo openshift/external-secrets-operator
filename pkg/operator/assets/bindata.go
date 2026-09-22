@@ -159,7 +159,7 @@ metadata:
   labels:
     app.kubernetes.io/name: external-secrets-webhook
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
     external-secrets.io/component: webhook
 spec:
@@ -209,7 +209,7 @@ metadata:
   labels:
     app.kubernetes.io/name: bitwarden-sdk-server
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   podSelector:
@@ -254,7 +254,7 @@ metadata:
   labels:
     app.kubernetes.io/name: external-secrets-cert-controller
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   podSelector:
@@ -300,7 +300,7 @@ metadata:
   labels:
     app.kubernetes.io/name: external-secrets
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   podSelector:
@@ -344,7 +344,7 @@ metadata:
   labels:
     app.kubernetes.io/name: external-secrets
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
   name: eso-sys-allow-to-dns
 spec:
@@ -398,7 +398,7 @@ metadata:
   labels:
     app.kubernetes.io/name: external-secrets
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.2.0"
+    app.kubernetes.io/version: "v1.3.0"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   podSelector: {}

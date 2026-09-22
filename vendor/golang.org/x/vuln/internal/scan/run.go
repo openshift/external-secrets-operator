@@ -22,9 +22,8 @@ import (
 	"golang.org/x/vuln/internal/sarif"
 )
 
-// RunGovulncheck performs main govulncheck functionality and exits the
-// program upon success with an appropriate exit status. Otherwise,
-// returns an error.
+// RunGovulncheck performs main govulncheck functionality.
+// On failure, the returned error wraps an exit code error (see scan.Cmd.Wait).
 func RunGovulncheck(ctx context.Context, env []string, r io.Reader, stdout io.Writer, stderr io.Writer, args []string) error {
 	cfg := &config{env: env}
 	if err := parseFlags(cfg, stderr, args); err != nil {
@@ -53,6 +52,12 @@ func RunGovulncheck(ctx context.Context, env []string, r io.Reader, stdout io.Wr
 
 	if err := handler.Config(&cfg.Config); err != nil {
 		return err
+	}
+
+	if cfg.version {
+		// If the -version flag is passed, exit before doing anything else. This is different than
+		// passing -show which includes "version".
+		return nil
 	}
 
 	incTelemetryFlagCounters(cfg)
@@ -104,7 +109,7 @@ func prepareConfig(ctx context.Context, cfg *config, client *client.Client) {
 // this binary used from the build info.
 func scannerVersion(cfg *config, bi *debug.BuildInfo) {
 	if bi.Path != "" {
-		cfg.ScannerName = path.Base(bi.Path)
+		cfg.ScannerName = strings.TrimSuffix(path.Base(bi.Path), ".test")
 	}
 	if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 		cfg.ScannerVersion = bi.Main.Version
