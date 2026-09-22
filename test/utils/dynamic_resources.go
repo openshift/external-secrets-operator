@@ -59,13 +59,19 @@ func NewDynamicResourceLoader(context context.Context, t *testing.T) DynamicReso
 }
 
 func (d DynamicResourceLoader) DeleteFromFile(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string) {
+	d.DeleteFromFileWithReplacements(assetFunc, filename, overrideNamespace, nil)
+}
+
+// DeleteFromFileWithReplacements deletes a resource from a file after applying template replacements
+// (same placeholders as CreateFromFileWithReplacements).
+func (d DynamicResourceLoader) DeleteFromFileWithReplacements(assetFunc func(name string) ([]byte, error), filename string, overrideNamespace string, replacements map[string]string) {
 	d.t.Logf("Deleting resource %v\n", filename)
 	deleteFunc := func(t *testing.T, unstructured *unstructured.Unstructured, dynamicResourceInterface dynamic.ResourceInterface) {
 		err := dynamicResourceInterface.Delete(d.context, unstructured.GetName(), metav1.DeleteOptions{})
 		d.noErrorSkipNotExisting(err)
 	}
 
-	d.do(deleteFunc, assetFunc, filename, overrideNamespace)
+	d.doWithReplacements(deleteFunc, assetFunc, filename, overrideNamespace, replacements)
 	d.t.Logf("Resource %v deleted\n", filename)
 }
 

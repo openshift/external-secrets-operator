@@ -222,6 +222,45 @@ var _ = Describe("Trusted CA Bundle", Ordered, Label("Platform:Generic", "Featur
 		}, time.Minute, 5*time.Second).Should(Succeed(), "core controller should have user CA bundle removed after clearing")
 	})
 
+	It("should restore the watch label on the trustedCABundle ConfigMap after external removal", func() {
+		By("Creating a ConfigMap and configuring trustedCABundle")
+		createTestCAConfigMap(ctx, trustedCABundleTestCMName, externalsecrets.UserCABundleKeyPath, testCACertPEM(), nil)
+		setTrustedCABundle(ctx, trustedCABundleTestCMName, externalsecrets.UserCABundleKeyPath)
+
+		By("Waiting for ExternalSecretsConfig to be Ready")
+		Expect(utils.WaitForExternalSecretsConfigReady(ctx, suiteDynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+		By("Verifying the operator applied the watch label on the referenced ConfigMap")
+		Eventually(func(g Gomega) {
+			cm, err := suiteClientset.CoreV1().ConfigMaps(operandNamespace).Get(ctx, trustedCABundleTestCMName, metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cm.Labels).To(HaveKeyWithValue(externalsecrets.WatchedResourceLabelKey, externalsecrets.WatchedResourceLabelValue))
+		}, time.Minute, 5*time.Second).Should(Succeed())
+
+		By("Removing the watch label from the trustedCABundle ConfigMap")
+		Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			cm, err := suiteClientset.CoreV1().ConfigMaps(operandNamespace).Get(ctx, trustedCABundleTestCMName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if cm.Labels == nil {
+				return nil
+			}
+			delete(cm.Labels, externalsecrets.WatchedResourceLabelKey)
+			_, err = suiteClientset.CoreV1().ConfigMaps(operandNamespace).Update(ctx, cm, metav1.UpdateOptions{})
+			return err
+		})).To(Succeed(), "should remove the watch label")
+
+		By("Waiting for the operator to restore the watch label")
+		Eventually(func(g Gomega) {
+			cm, err := suiteClientset.CoreV1().ConfigMaps(operandNamespace).Get(ctx, trustedCABundleTestCMName, metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cm.Labels).To(HaveKeyWithValue(externalsecrets.WatchedResourceLabelKey, externalsecrets.WatchedResourceLabelValue),
+				"operator should restore %s=%s on trustedCABundle ConfigMap %s",
+				externalsecrets.WatchedResourceLabelKey, externalsecrets.WatchedResourceLabelValue, trustedCABundleTestCMName)
+		}, 2*time.Minute, 5*time.Second).Should(Succeed())
+	})
+
 	It("should set ExternalSecretsConfig to Degraded when ConfigMap does not exist", func() {
 		By("Setting trustedCABundle pointing to a non-existent ConfigMap")
 		setTrustedCABundle(ctx, "does-not-exist-ca-bundle", externalsecrets.UserCABundleKeyPath)

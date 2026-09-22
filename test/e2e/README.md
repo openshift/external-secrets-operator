@@ -19,7 +19,7 @@ make test-e2e E2E_GINKGO_LABEL_FILTER=""
 | Key | Values | Meaning |
 |-----|--------|---------|
 | `Platform` | `AWS`, `GCP`, `Generic` | Cluster or portability requirement |
-| `Provider` | `AWS`, `Bitwarden` | External secret backend integration |
+| `Provider` | `AWS`, `Bitwarden`, `Vault` | External secret backend integration |
 | `API` | `Bitwarden` | Direct HTTP tests against bitwarden-sdk-server |
 | `Feature` | see below | Optional capability or functional area |
 
@@ -35,7 +35,8 @@ make test-e2e E2E_GINKGO_LABEL_FILTER=""
 | `CustomLabels` | Custom and managed label lifecycle |
 | `NetworkPolicy` | Static and custom network policy naming |
 | `Proxy` | Proxy egress network policy (requires cluster-wide OpenShift proxy) |
-| `TrustedCABundle` | trustedCABundle ConfigMap mounting and validation |
+| `TrustedCABundle` | trustedCABundle ConfigMap mounting/validation and Vault TLS failure→recovery |
+| `ExternalSecretsTemplating` | ExternalSecret template merge (Kubernetes + Vault → dockerconfigjson) |
 | `Upgrade` | Post-upgrade migration checks (temporary) |
 
 ## Default filter
@@ -51,10 +52,6 @@ This runs portable tests plus AWS provider tests, and **API:Bitwarden** health/a
 ## Prerequisites
 
 ### Secrets you provision
-
-```bash
-hack/e2e-setup-secrets.sh setup
-```
 
 | Secret | Namespace | Keys | Required when filter includes |
 |--------|-----------|------|-------------------------------|
@@ -74,6 +71,7 @@ The bitwarden-sdk-server plugin uses **`bitwarden-tls-certs`** (TLS materials fo
 | Requirement | Required when filter includes |
 |-------------|-------------------------------|
 | Cluster-wide OpenShift proxy (`proxy.config.openshift.io/cluster`) | `Feature:Proxy` |
+| OpenShift with `redhat-operators` catalog (`openshift-marketplace`) | Main e2e Describe (`e2e_test.go`) — root `BeforeAll` installs Red Hat cert-manager Operator via OLM if not already present |
 
 If a prerequisite is missing, the affected spec **fails** with a message pointing here — it does not skip.
 
@@ -87,9 +85,11 @@ If a prerequisite is missing, the affected spec **fails** with a message pointin
 | `Platform:GCP && Provider:AWS` | GCP cluster using AWS Secrets Manager |
 | `Provider:AWS` | Any AWS Secrets Manager integration (`Platform:AWS` or `Platform:GCP`) |
 | `Provider:Bitwarden` | Bitwarden provider sync and API Secrets API |
+| `Provider:Vault` | Vault HTTPS + trustedCABundle failure/recovery (uses suite-installed Red Hat cert-manager Operator) |
 | `API:Bitwarden` | bitwarden-sdk-server HTTP API (deploys plugin + `bitwarden-tls-certs` automatically) |
 | `API:Bitwarden \|\| Provider:Bitwarden` | All Bitwarden HTTP and provider tests (requires `bitwarden-creds` for Secrets API / provider sync) |
-| `Feature:TrustedCABundle` | Trusted CA bundle suite |
+| `Feature:TrustedCABundle` | Trusted CA bundle suite (mount/validation + Vault TLS path when combined with `Provider:Vault`) |
+| `Feature:ExternalSecretsTemplating` | ExternalSecret templating merge (Kubernetes + Vault dockerconfig) |
 | `Feature:Proxy` | Proxy egress network policy |
 | `Feature:Upgrade` | Post-upgrade network policy migration check |
 | `Feature:NetworkPolicy` | Static and custom network policy naming |
@@ -112,6 +112,9 @@ make test-e2e E2E_GINKGO_LABEL_FILTER="Feature:NetworkPolicy || Feature:Proxy"
 
 # AWS integration only (any platform label that uses AWS SM)
 make test-e2e E2E_GINKGO_LABEL_FILTER="Provider:AWS"
+
+# Vault TLS + trustedCABundle (uses cert-manager from root BeforeAll)
+make test-e2e E2E_GINKGO_LABEL_FILTER="Provider:Vault"
 ```
 
 ## Specs by label
@@ -155,9 +158,26 @@ File: `trusted_ca_bundle_test.go`
 
 | Feature | Describe |
 |---------|----------|
-| `TrustedCABundle` | Trusted CA Bundle |
+| `TrustedCABundle` | Trusted CA Bundle (mount / `SSL_CERT_DIR` / Degraded / watch-label restore) |
 
-The **Custom Network Policy Naming** spec adds a dummy egress port to `ExternalSecretsConfig` (if not already present — entries cannot be removed due to CEL immutability), verifies the operator creates `eso-user-e2e-test-custom-np` in the operand namespace (`external-secrets`), and leaves the CR entry in place.
+### `Provider:Vault` + `Feature:TrustedCABundle`
+
+File: `e2e_test.go` — **Vault Secret Manager**
+
+- **BeforeAll:** cert-manager CA (`isCA`) + server Certificate for Vault HTTPS; Vault deploy/init
+- Uses Red Hat cert-manager Operator installed by the root `BeforeAll` of the main e2e Describe (`ensureCertManagerOperatorReady`)
+- Asserts SecretStore `Ready=False` / `InvalidProviderConfig` when `trustedCABundle` points at a valid but non-matching CA (`vault-e2e-sample-ca`), then Ready after switching to the Vault CA ConfigMap (`vault-server-ca` from the isCA Certificate)
+- After trustedCABundle switch: SecretStore Ready → PushSecret → ExternalSecret → verify synced Secret
+- Excluded from the default label filter (longer Vault HTTPS setup)
+- Does not uninstall cert-manager on teardown (shared for other suites)
+
+### `Provider:Vault` + `Feature:ExternalSecretsTemplating`
+
+File: `e2e_test.go` — **Vault Secret Manager** (same Context)
+
+- Creates a namespaced Kubernetes SecretStore (`kubernetes-backend`) with dedicated `eso-secret-reader` SA/Role/RoleBinding (no existing e2e Kubernetes-provider fixture)
+- Pushes a dockerconfigjson Secret to Vault, reads another from Kubernetes, merges both via ExternalSecret `target.template` into `merged-registry-pull-secret`
+- Asserts the target Secret is `kubernetes.io/dockerconfigjson` and contains both registry auth hosts
 
 ### `Provider:Bitwarden`
 
