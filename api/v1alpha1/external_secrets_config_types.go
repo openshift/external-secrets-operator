@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func init() {
@@ -191,6 +192,19 @@ type ComponentConfig struct {
 	// +listMapKey=name
 	// +optional
 	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+
+	// advancedOverrides applies a strategic merge patch on top of the final operator-generated Deployment spec for this component.
+	// WARNING: DO NOT USE UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING.
+	// Only the following paths are allowed: spec.template.spec.affinity, spec.template.spec.tolerations,
+	// spec.template.spec.nodeSelector, spec.template.spec.topologySpreadConstraints,
+	// spec.template.spec.containers[*].args, and spec.template.spec.containers[*].resources.
+	// Any other path is rejected and sets a Degraded condition. This field can overwrite your own first-class
+	// CRD settings. You must NOT use this field to add or modify containers, initContainers, or ports,
+	// as doing so breaks the structural integrity of the operand and will fail deployment reconciliation.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	AdvancedOverrides *runtime.RawExtension `json:"advancedOverrides,omitempty"`
 }
 
 // DeploymentConfig defines configuration overrides for a Kubernetes Deployment resource.
