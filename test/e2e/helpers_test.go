@@ -20,12 +20,14 @@ limitations under the License.
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 
@@ -34,6 +36,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -537,4 +540,84 @@ func isOperatorPodReady(pod *corev1.Pod) bool {
 		}
 	}
 	return ready && containersReady
+}
+
+// rawJSON marshals v into a runtime.RawExtension suitable for advancedOverrides.
+func rawJSON(v any) *runtime.RawExtension {
+	data, err := json.Marshal(v)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "should marshal override JSON")
+	return &runtime.RawExtension{Raw: data}
+}
+
+// setAdvancedOverrides updates the ExternalSecretsConfig CR to set advancedOverrides
+// on the specified component. Creates the componentConfigs entry if it does not exist.
+func setAdvancedOverrides(ctx context.Context, c client.Client, componentName operatorv1alpha1.ComponentName, overrides *runtime.RawExtension, replicas *int32) {
+	GinkgoHelper()
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		esc := &operatorv1alpha1.ExternalSecretsConfig{}
+		if err := c.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc); err != nil {
+			return err
+		}
+		found := false
+		for i := range esc.Spec.ControllerConfig.ComponentConfigs {
+			if esc.Spec.ControllerConfig.ComponentConfigs[i].ComponentName == componentName {
+				esc.Spec.ControllerConfig.ComponentConfigs[i].AdvancedOverrides = overrides
+				if replicas != nil {
+					if esc.Spec.ControllerConfig.ComponentConfigs[i].DeploymentConfigs == nil {
+						esc.Spec.ControllerConfig.ComponentConfigs[i].DeploymentConfigs = &operatorv1alpha1.DeploymentConfig{}
+					}
+					esc.Spec.ControllerConfig.ComponentConfigs[i].DeploymentConfigs.Replicas = replicas
+				}
+
+				found = true
+				break
+			}
+		}
+		if !found {
+			cc := operatorv1alpha1.ComponentConfig{
+				ComponentName:     componentName,
+				AdvancedOverrides: overrides,
+			}
+			if replicas != nil {
+				cc.DeploymentConfigs = &operatorv1alpha1.DeploymentConfig{Replicas: replicas}
+			}
+			esc.Spec.ControllerConfig.ComponentConfigs = append(esc.Spec.ControllerConfig.ComponentConfigs, cc)
+		}
+		return c.Update(ctx, esc)
+	})
+	Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig advancedOverrides for %s", componentName)
+}
+
+// clearAdvancedOverrides removes advancedOverrides from all component configs in the ExternalSecretsConfig CR.
+func clearAdvancedOverrides(ctx context.Context, c client.Client) {
+	GinkgoHelper()
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		esc := &operatorv1alpha1.ExternalSecretsConfig{}
+		if err := c.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc); err != nil {
+			return err
+		}
+		for i := range esc.Spec.ControllerConfig.ComponentConfigs {
+			esc.Spec.ControllerConfig.ComponentConfigs[i].AdvancedOverrides = nil
+		}
+		return c.Update(ctx, esc)
+	})
+	Expect(err).NotTo(HaveOccurred(), "should clear advancedOverrides from ExternalSecretsConfig")
+}
+
+// getOperandDeployment fetches a Deployment from the operand namespace by name.
+func getOperandDeployment(ctx context.Context, clientset kubernetes.Interface, name string) *appsv1.Deployment {
+	GinkgoHelper()
+	dep, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, name, metav1.GetOptions{})
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "should get %s deployment", name)
+	return dep
+}
+
+// containerByName returns the container with the given name from the Deployment, or nil.
+func containerByName(dep *appsv1.Deployment, name string) *corev1.Container {
+	for i := range dep.Spec.Template.Spec.Containers {
+		if dep.Spec.Template.Spec.Containers[i].Name == name {
+			return &dep.Spec.Template.Spec.Containers[i]
+		}
+	}
+	return nil
 }
