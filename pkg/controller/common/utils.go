@@ -365,6 +365,10 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
+	if !reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
+		return true
+	}
+
 	if desired.Spec.RevisionHistoryLimit != nil && !reflect.DeepEqual(desired.Spec.RevisionHistoryLimit, fetched.Spec.RevisionHistoryLimit) {
 		return true
 	}
