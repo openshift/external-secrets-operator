@@ -206,10 +206,10 @@ type DeploymentConfig struct {
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 
 	// replicas specifies the desired number of pod replicas for this component's Deployment.
-	// When set to greater than 1 on the ExternalSecretsCoreController, leader election is
-	// automatically enabled to ensure only one replica actively reconciles at a time.
-	// Other components (Webhook, CertController, BitwardenSDKServer) do not use leader election
-	// regardless of replica count.
+	// When set to greater than 1 on ExternalSecretsCoreController or CertController,
+	// leader election is automatically enabled to ensure only one replica actively
+	// reconciles at a time. Other components (Webhook, BitwardenSDKServer) do not use
+	// leader election regardless of replica count.
 	// +kubebuilder:default:=1
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10
