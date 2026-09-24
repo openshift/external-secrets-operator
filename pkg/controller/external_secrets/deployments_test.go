@@ -2082,9 +2082,14 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 		assetName                string
 		containerName            string
 		componentName            v1alpha1.ComponentName
+		initialReplicas          *int32
 		replicas                 *int32
 		existingArgs             []string
+		revisionHistoryLimit     *int32
+		overrideEnv              []corev1.EnvVar
 		expectedReplicas         *int32
+		expectedRevHistoryLimit  *int32
+		expectedEnv              []corev1.EnvVar
 		expectLeaderElectionArg  bool
 		expectNoLeaderElectionIn bool
 	}{
@@ -2111,8 +2116,9 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(1)),
 			replicas:                nil,
-			expectedReplicas:        nil,
+			expectedReplicas:        ptr.To(int32(1)),
 			expectLeaderElectionArg: false,
 		},
 		{
@@ -2126,14 +2132,32 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			expectNoLeaderElectionIn: true,
 		},
 		{
-			name:                     "replicas=2 on cert-controller sets replicas, no leader election",
-			assetName:                certControllerDeploymentAssetName,
-			containerName:            OperandCertControllerContainer,
-			componentName:            v1alpha1.CertController,
-			replicas:                 ptr.To(int32(2)),
-			expectedReplicas:         ptr.To(int32(2)),
-			expectLeaderElectionArg:  false,
-			expectNoLeaderElectionIn: true,
+			name:                    "replicas=2 on cert-controller sets replicas and injects leader election",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(2)),
+			expectedReplicas:        ptr.To(int32(2)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "replicas=1 on cert-controller sets replicas and does NOT inject leader election",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(1)),
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                    "replicas=1 on cert-controller removes pre-existing leader election arg",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(1)),
+			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
 		},
 		{
 			name:                     "replicas=2 on bitwarden sets replicas, no leader election",
@@ -2155,6 +2179,46 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			expectedReplicas:        ptr.To(int32(1)),
 			expectLeaderElectionArg: false,
 		},
+		{
+			name:                    "replicas coexists with revisionHistoryLimit and overrideEnv",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(3)),
+			revisionHistoryLimit:    ptr.To(int32(5)),
+			overrideEnv:             []corev1.EnvVar{{Name: "LOG_LEVEL", Value: "debug"}},
+			expectedReplicas:        ptr.To(int32(3)),
+			expectedRevHistoryLimit: ptr.To(int32(5)),
+			expectedEnv:             []corev1.EnvVar{{Name: "LOG_LEVEL", Value: "debug"}},
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=2 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(2)),
+			expectedReplicas:        ptr.To(int32(2)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=5 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(5)),
+			expectedReplicas:        ptr.To(int32(5)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=10 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(10)),
+			expectedReplicas:        ptr.To(int32(10)),
+			expectLeaderElectionArg: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -2163,6 +2227,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			r := testReconciler(t)
 			deployment := &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
+					Replicas: tt.initialReplicas,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -2178,10 +2243,12 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 
 			componentConfig := v1alpha1.ComponentConfig{
 				ComponentName: tt.componentName,
+				OverrideEnv:   tt.overrideEnv,
 			}
-			if tt.replicas != nil {
+			if tt.replicas != nil || tt.revisionHistoryLimit != nil {
 				componentConfig.DeploymentConfigs = &v1alpha1.DeploymentConfig{
-					Replicas: tt.replicas,
+					Replicas:             tt.replicas,
+					RevisionHistoryLimit: tt.revisionHistoryLimit,
 				}
 			}
 
@@ -2223,109 +2290,25 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 					}
 				}
 			}
+			if tt.expectedRevHistoryLimit != nil {
+				if deployment.Spec.RevisionHistoryLimit == nil || *deployment.Spec.RevisionHistoryLimit != *tt.expectedRevHistoryLimit {
+					t.Errorf("expected RevisionHistoryLimit=%d, got %v", *tt.expectedRevHistoryLimit, deployment.Spec.RevisionHistoryLimit)
+				}
+			}
+			for _, expected := range tt.expectedEnv {
+				found := false
+				for _, env := range container.Env {
+					if env.Name == expected.Name && env.Value == expected.Value {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected env %s=%s to be applied", expected.Name, expected.Value)
+				}
+			}
 		})
 	}
-}
-
-func TestApplyUserDeploymentConfigsReplicasRegression(t *testing.T) {
-	t.Parallel()
-
-	t.Run("replicas does not break existing revisionHistoryLimit and overrideEnv", func(t *testing.T) {
-		t.Parallel()
-		r := testReconciler(t)
-		deployment := &appsv1.Deployment{
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{Name: OperandCoreControllerContainer},
-						},
-					},
-				},
-			},
-		}
-
-		esc := &v1alpha1.ExternalSecretsConfig{
-			Spec: v1alpha1.ExternalSecretsConfigSpec{
-				ControllerConfig: v1alpha1.ControllerConfig{
-					ComponentConfigs: []v1alpha1.ComponentConfig{
-						{
-							ComponentName: v1alpha1.CoreController,
-							DeploymentConfigs: &v1alpha1.DeploymentConfig{
-								RevisionHistoryLimit: ptr.To(int32(5)),
-								Replicas:             ptr.To(int32(3)),
-							},
-							OverrideEnv: []corev1.EnvVar{
-								{Name: "LOG_LEVEL", Value: "debug"},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		if err := r.applyUserDeploymentConfigs(deployment, esc, controllerDeploymentAssetName); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if deployment.Spec.RevisionHistoryLimit == nil || *deployment.Spec.RevisionHistoryLimit != 5 {
-			t.Errorf("expected RevisionHistoryLimit=5, got %v", deployment.Spec.RevisionHistoryLimit)
-		}
-		if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 3 {
-			t.Errorf("expected Replicas=3, got %v", deployment.Spec.Replicas)
-		}
-		container := &deployment.Spec.Template.Spec.Containers[0]
-		if !slices.Contains(container.Args, LeaderElectionArg) {
-			t.Errorf("expected leader election arg for replicas=3, got args: %v", container.Args)
-		}
-		envFound := false
-		for _, env := range container.Env {
-			if env.Name == "LOG_LEVEL" && env.Value == "debug" {
-				envFound = true
-			}
-		}
-		if !envFound {
-			t.Error("expected LOG_LEVEL=debug env var to be applied")
-		}
-	})
-
-	t.Run("valid replicas value does not set Degraded condition", func(t *testing.T) {
-		t.Parallel()
-		r := testReconciler(t)
-		deployment := &appsv1.Deployment{
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{Name: OperandCoreControllerContainer},
-						},
-					},
-				},
-			},
-		}
-
-		for _, replicas := range []int32{1, 2, 5, 10} {
-			esc := &v1alpha1.ExternalSecretsConfig{
-				Spec: v1alpha1.ExternalSecretsConfigSpec{
-					ControllerConfig: v1alpha1.ControllerConfig{
-						ComponentConfigs: []v1alpha1.ComponentConfig{
-							{
-								ComponentName: v1alpha1.CoreController,
-								DeploymentConfigs: &v1alpha1.DeploymentConfig{
-									Replicas: ptr.To(replicas),
-								},
-							},
-						},
-					},
-				},
-			}
-
-			err := r.applyUserDeploymentConfigs(deployment, esc, controllerDeploymentAssetName)
-			if err != nil {
-				t.Errorf("replicas=%d: unexpected error (would set Degraded): %v", replicas, err)
-			}
-		}
-	})
 }
 
 func TestApplyLeaderElection(t *testing.T) {

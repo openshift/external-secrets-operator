@@ -958,21 +958,6 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 				deployment.Spec.Replicas = i.DeploymentConfigs.Replicas
 			}
 
-			// Inject or remove leader election arg for the core controller based on replica count.
-			if componentName == operatorv1alpha1.CoreController {
-				found := false
-				for j := range deployment.Spec.Template.Spec.Containers {
-					if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
-						found = true
-						applyLeaderElection(&deployment.Spec.Template.Spec.Containers[j], deployment.Spec.Replicas)
-						break
-					}
-				}
-				if !found {
-					return fmt.Errorf("container %s not found in deployment %s", containerName, deployment.GetName())
-				}
-			}
-
 			// Apply OverrideEnv only to the target component container.
 			if len(i.OverrideEnv) > 0 {
 				for j := range deployment.Spec.Template.Spec.Containers {
@@ -982,7 +967,17 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 					}
 				}
 			}
+
 			break
+		}
+	}
+	// Apply leader election if the component is a core controller or cert controller
+	if componentName == operatorv1alpha1.CoreController || componentName == operatorv1alpha1.CertController {
+		for j := range deployment.Spec.Template.Spec.Containers {
+			if deployment.Spec.Template.Spec.Containers[j].Name == containerName {
+				applyLeaderElection(&deployment.Spec.Template.Spec.Containers[j], deployment.Spec.Replicas)
+				break
+			}
 		}
 	}
 

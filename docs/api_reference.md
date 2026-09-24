@@ -256,7 +256,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes.<br />This allows rolling back to previous deployment versions using 'kubectl rollout undo'.<br />Must be at least 1 to ensure rollback capability. Maximum value is 50 to limit resource usage.<br />If not specified, defaults to 10. | 10 | Maximum: 50 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `replicas` _integer_ | replicas specifies the desired number of pod replicas for this component's Deployment.<br />When set to greater than 1 on the ExternalSecretsCoreController, leader election is<br />automatically enabled to ensure only one replica actively reconciles at a time.<br />Other components (Webhook, CertController, BitwardenSDKServer) do not use leader election<br />regardless of replica count. | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | replicas specifies the desired number of pod replicas for this component's Deployment.<br />When set to greater than 1 on ExternalSecretsCoreController or CertController,<br />leader election is automatically enabled to ensure only one replica actively<br />reconciles at a time. Other components (Webhook, BitwardenSDKServer) do not use<br />leader election regardless of replica count. | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
