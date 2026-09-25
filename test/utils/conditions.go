@@ -55,7 +55,11 @@ const (
 
 type AssetFunc func(string) ([]byte, error)
 
-// VerifyPodsReadyByPrefix checks if all pods matching the given prefixes are Ready and ContainersReady.
+// VerifyPodsReadyByPrefix checks that, for every given prefix, at least one pod
+// exists and all pods matching that prefix are Running, Ready and ContainersReady.
+// It intentionally does not require an exact 1:1 pod-to-prefix count so that
+// multi-replica deployments (e.g. a core controller scaled via deploymentConfigs.replicas)
+// and transient rollout surge pods do not cause a false negative.
 func VerifyPodsReadyByPrefix(ctx context.Context, clientset kubernetes.Interface, namespace string, prefixes []string) error {
 	// 5 minutes: allows for image-pull latency in CI (can be 60-90s from Docker Hub)
 	// plus initialDelaySeconds:20 + up to failureThreshold:10 x periodSeconds:5 = 70s probe window.
@@ -65,21 +69,20 @@ func VerifyPodsReadyByPrefix(ctx context.Context, clientset kubernetes.Interface
 			return false, err
 		}
 
-		matched := map[string]*corev1.Pod{}
-		for _, pod := range podList.Items {
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(pod.Name, prefix) {
-					matched[pod.Name] = &pod
+		for _, prefix := range prefixes {
+			matched := 0
+			for i := range podList.Items {
+				pod := &podList.Items[i]
+				if !strings.HasPrefix(pod.Name, prefix) {
+					continue
+				}
+				matched++
+				if pod.Status.Phase != corev1.PodRunning || !isPodReady(pod) {
+					return false, nil
 				}
 			}
-		}
-
-		if len(matched) != len(prefixes) {
-			return false, nil
-		}
-
-		for _, pod := range matched {
-			if pod.Status.Phase != corev1.PodRunning || !isPodReady(pod) {
+			// Every prefix must have at least one matching pod.
+			if matched == 0 {
 				return false, nil
 			}
 		}
