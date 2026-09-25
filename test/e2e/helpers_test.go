@@ -588,7 +588,11 @@ func setAdvancedOverrides(ctx context.Context, c client.Client, componentName op
 	Expect(err).NotTo(HaveOccurred(), "should update ExternalSecretsConfig advancedOverrides for %s", componentName)
 }
 
-// clearAdvancedOverrides removes advancedOverrides from all component configs in the ExternalSecretsConfig CR.
+// clearAdvancedOverrides removes advancedOverrides from all component configs in the
+// ExternalSecretsConfig CR and resets any replica overrides applied by tests
+// (e.g. the leader-election spec that scales the core controller to >1). Leaving
+// deploymentConfigs.replicas set would leak a multi-replica operand deployment into
+// later suites and make their operand-pod-ready waits fail.
 func clearAdvancedOverrides(ctx context.Context, c client.Client) {
 	GinkgoHelper()
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -598,6 +602,9 @@ func clearAdvancedOverrides(ctx context.Context, c client.Client) {
 		}
 		for i := range esc.Spec.ControllerConfig.ComponentConfigs {
 			esc.Spec.ControllerConfig.ComponentConfigs[i].AdvancedOverrides = nil
+			if esc.Spec.ControllerConfig.ComponentConfigs[i].DeploymentConfigs != nil {
+				esc.Spec.ControllerConfig.ComponentConfigs[i].DeploymentConfigs.Replicas = nil
+			}
 		}
 		return c.Update(ctx, esc)
 	})
