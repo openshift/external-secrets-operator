@@ -19,7 +19,7 @@ Primary CR that triggers installation and configuration of the external-secrets 
 type ExternalSecretsConfigSpec struct {
     ApplicationConfig  ApplicationConfig  // Operand behavior: logLevel, resources, affinity, tolerations, nodeSelector, proxy, operatingNamespace, webhookConfig
     Plugins            PluginsConfig       // Optional provider plugins (BitwardenSecretManagerProvider)
-    ControllerConfig   ControllerConfig    // Deployment config: certProvider, labels, annotations, networkPolicies, componentConfigs, trustedCABundle
+    ControllerConfig   ControllerConfig    // Deployment config: certProvider, labels, annotations, networkPolicies, componentConfigs, trustedCABundle, replicas
 }
 ```
 
@@ -46,6 +46,7 @@ type ExternalSecretsConfigSpec struct {
 | `networkPolicies` | `[]NetworkPolicy` (max 50) | Custom egress rules per component; name+componentName immutable once added; operator prepends `eso-user-` prefix |
 | `componentConfigs` | `[]ComponentConfig` (max 4) | Per-component overrides: `overrideEnv`, `revisionHistoryLimit` |
 | `trustedCABundle` | `*ConfigMapKeyReference` | User CA bundle ConfigMap for outbound TLS; must exist in operand namespace |
+| `replicas` | `*int32` (≥1) | Desired pod count for the **core controller** deployment (`external-secrets`); defaults to **1** when unset. Values less than 1 are rejected at admission. When greater than 1, the operator enables leader election so exactly one controller instance reconciles at a time. Does not scale the webhook or cert-controller deployments. |
 
 ### ComponentConfig
 
@@ -102,6 +103,20 @@ metadata:
   name: cluster
 spec: {}
 ```
+
+## Example: High Availability (Multiple Controller Replicas)
+
+```yaml
+apiVersion: operator.openshift.io/v1alpha1
+kind: ExternalSecretsConfig
+metadata:
+  name: cluster
+spec:
+  controllerConfig:
+    replicas: 3
+```
+
+The operator sets `Deployment.spec.replicas` on the core controller to the declared value on every reconcile. Leader election is enabled automatically when `replicas` is greater than 1. Manual `kubectl scale` drift is corrected on the next reconcile cycle.
 
 ## Example: Full Configuration
 

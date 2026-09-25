@@ -135,6 +135,7 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 
 	switch assetName {
 	case controllerDeploymentAssetName:
+		applyControllerReplicas(deployment, esc)
 		r.updateContainerSpec(deployment, esc, image, logLevel)
 		if err := applyOperandArgsFromEnv(deployment, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
 			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
@@ -377,6 +378,17 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
+func controllerReplicaCount(esc *operatorv1alpha1.ExternalSecretsConfig) int32 {
+	if esc.Spec.ControllerConfig.Replicas != nil {
+		return *esc.Spec.ControllerConfig.Replicas
+	}
+	return 1
+}
+
+func applyControllerReplicas(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) {
+	deployment.Spec.Replicas = ptr.To(controllerReplicaCount(esc))
+}
+
 // argument list for external-secrets deployment resource.
 func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
@@ -384,12 +396,13 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 		enableClusterExternalSecretsArgFmt = "--enable-cluster-external-secret-reconciler=%s"
 	)
 
+	replicas := controllerReplicaCount(esc)
 	args := []string{
 		"--concurrent=1",
 		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
-		"--enable-leader-election=true",
+		fmt.Sprintf("--enable-leader-election=%t", replicas > 1),
 		"--enable-push-secret-reconciler=true",
 	}
 

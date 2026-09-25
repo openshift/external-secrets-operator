@@ -167,6 +167,12 @@ type ControllerConfig struct {
 	// OpenShift trusted CA bundle injected by the Cluster Network Operator.
 	// +optional
 	TrustedCABundle *ConfigMapKeyReference `json:"trustedCABundle,omitempty"`
+
+	// replicas is the desired number of pods for the external-secrets core controller deployment.
+	// When unset, the operator defaults to one replica.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // ComponentConfig defines configuration overrides for a specific external-secrets component.

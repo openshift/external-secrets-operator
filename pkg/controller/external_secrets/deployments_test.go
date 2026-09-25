@@ -3130,6 +3130,137 @@ func TestGetDeploymentObjectOperandArgsFromEnv(t *testing.T) {
 	})
 }
 
+func TestGetDeploymentObjectControllerReplicas(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	resourceMetadata := testResourceMetadata(commontest.TestExternalSecretsConfig())
+	r := testReconciler(t)
+
+	t.Run("defaults to one replica when unset", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 1 {
+			t.Fatalf("Spec.Replicas = %v, want 1", dep.Spec.Replicas)
+		}
+	})
+
+	t.Run("applies explicit replica count", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 3 {
+			t.Fatalf("Spec.Replicas = %v, want 3", dep.Spec.Replicas)
+		}
+	})
+
+	t.Run("scales when replica count changes", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(1))
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 1 {
+			t.Fatalf("Spec.Replicas = %v, want 1", dep.Spec.Replicas)
+		}
+
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(2))
+		dep, err = r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 2 {
+			t.Fatalf("Spec.Replicas = %v, want 2", dep.Spec.Replicas)
+		}
+	})
+
+	t.Run("does not change webhook deployment replicas", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+		dep, err := r.getDeploymentObject(webhookDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 1 {
+			t.Fatalf("webhook Spec.Replicas = %v, want bindata default 1", dep.Spec.Replicas)
+		}
+	})
+}
+
+func TestGetDeploymentObjectLeaderElectionArgs(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	resourceMetadata := testResourceMetadata(commontest.TestExternalSecretsConfig())
+	r := testReconciler(t)
+
+	t.Run("disables leader election for default replica count", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--enable-leader-election=false") {
+			t.Fatalf("expected --enable-leader-election=false in args, got %#v", args)
+		}
+	})
+
+	t.Run("disables leader election for single replica", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(1))
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--enable-leader-election=false") {
+			t.Fatalf("expected --enable-leader-election=false in args, got %#v", args)
+		}
+	})
+
+	t.Run("enables leader election for multiple replicas", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(2))
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--enable-leader-election=true") {
+			t.Fatalf("expected --enable-leader-election=true in args, got %#v", args)
+		}
+	})
+
+	t.Run("enables leader election for three replicas", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		args := containerArgsByName(dep, OperandCoreControllerContainer)
+		if !slices.Contains(args, "--enable-leader-election=true") {
+			t.Fatalf("expected --enable-leader-election=true in args, got %#v", args)
+		}
+	})
+}
+
 func containerArgsByName(dep *appsv1.Deployment, name string) []string {
 	for i := range dep.Spec.Template.Spec.Containers {
 		if dep.Spec.Template.Spec.Containers[i].Name == name {
@@ -3137,4 +3268,137 @@ func containerArgsByName(dep *appsv1.Deployment, name string) []string {
 		}
 	}
 	return nil
+}
+
+func TestHasObjectChangedControllerReplicaDrift(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	esc := commontest.TestExternalSecretsConfig()
+	esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+	resourceMetadata := testResourceMetadata(esc)
+	r := testReconciler(t)
+
+	desired, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+	if err != nil {
+		t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+	}
+
+	t.Run("detects replica mismatch as change", func(t *testing.T) {
+		t.Parallel()
+		fetched := desired.DeepCopy()
+		fetched.Spec.Replicas = ptr.To(int32(1))
+
+		if !common.HasObjectChanged(desired, fetched, &resourceMetadata) {
+			t.Fatal("expected HasObjectChanged=true when desired replicas=3 and fetched replicas=1")
+		}
+	})
+
+	t.Run("does not report change when replicas match", func(t *testing.T) {
+		t.Parallel()
+		fetched := desired.DeepCopy()
+
+		if common.HasObjectChanged(desired, fetched, &resourceMetadata) {
+			t.Fatal("expected HasObjectChanged=false when desired and fetched replicas match")
+		}
+	})
+}
+
+func TestCreateOrApplyDeploymentFromAssetReplicaCorrection(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	esc := commontest.TestExternalSecretsConfig()
+	esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+	esc.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+	resourceMetadata := testResourceMetadata(esc)
+	r := testReconciler(t)
+
+	var capturedDeployment *appsv1.Deployment
+	mock := &fakes.FakeCtrlClient{}
+	mock.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+		if o, ok := obj.(*appsv1.Deployment); ok {
+			stale := testDeployment(controllerDeploymentAssetName)
+			stale.Spec.Replicas = ptr.To(int32(1))
+			stale.DeepCopyInto(o)
+		}
+		return true, nil
+	})
+	mock.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, _ ...client.UpdateOption) error {
+		if o, ok := obj.(*appsv1.Deployment); ok {
+			capturedDeployment = o.DeepCopy()
+		}
+		return nil
+	})
+	r.CtrlClient = mock
+
+	if err := r.createOrApplyDeploymentFromAsset(esc, controllerDeploymentAssetName, resourceMetadata, false); err != nil {
+		t.Fatalf("createOrApplyDeploymentFromAsset() unexpected error: %v", err)
+	}
+	if capturedDeployment == nil {
+		t.Fatal("expected deployment update when live replicas drift from ESC spec")
+	}
+	if capturedDeployment.Spec.Replicas == nil || *capturedDeployment.Spec.Replicas != 3 {
+		t.Fatalf("updated Spec.Replicas = %v, want 3", capturedDeployment.Spec.Replicas)
+	}
+}
+
+func TestGetDeploymentObjectReplicaPersistence(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+
+	resourceMetadata := testResourceMetadata(commontest.TestExternalSecretsConfig())
+	r := testReconciler(t)
+
+	t.Run("reflects ESC spec change from two to four replicas", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(2))
+
+		dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 2 {
+			t.Fatalf("Spec.Replicas = %v, want 2", dep.Spec.Replicas)
+		}
+
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(4))
+		dep, err = r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 4 {
+			t.Fatalf("Spec.Replicas = %v, want 4", dep.Spec.Replicas)
+		}
+	})
+
+	t.Run("produces identical replicas across repeated reconcile calls", func(t *testing.T) {
+		t.Parallel()
+		esc := commontest.TestExternalSecretsConfig()
+		esc.Spec.ControllerConfig.Replicas = ptr.To(int32(3))
+
+		dep1, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		dep2, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+		dep3, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+		if err != nil {
+			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+		}
+
+		for i, dep := range []*appsv1.Deployment{dep1, dep2, dep3} {
+			if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 3 {
+				t.Fatalf("call %d: Spec.Replicas = %v, want 3", i+1, dep.Spec.Replicas)
+			}
+		}
+		if !reflect.DeepEqual(dep1.Spec.Replicas, dep2.Spec.Replicas) || !reflect.DeepEqual(dep2.Spec.Replicas, dep3.Spec.Replicas) {
+			t.Fatalf("repeated getDeploymentObject calls produced inconsistent replicas: %v, %v, %v",
+				dep1.Spec.Replicas, dep2.Spec.Replicas, dep3.Spec.Replicas)
+		}
+	})
 }
