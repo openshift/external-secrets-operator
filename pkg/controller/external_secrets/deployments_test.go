@@ -2074,6 +2074,410 @@ func TestApplyUserDeploymentConfigsWithOverrideEnv(t *testing.T) {
 	}
 }
 
+func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                     string
+		assetName                string
+		containerName            string
+		componentName            v1alpha1.ComponentName
+		initialReplicas          *int32
+		replicas                 *int32
+		existingArgs             []string
+		revisionHistoryLimit     *int32
+		overrideEnv              []corev1.EnvVar
+		expectedReplicas         *int32
+		expectedRevHistoryLimit  *int32
+		expectedEnv              []corev1.EnvVar
+		expectLeaderElectionArg  bool
+		expectNoLeaderElectionIn bool
+	}{
+		{
+			name:                    "replicas=3 on core controller sets replicas and injects leader election",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(3)),
+			expectedReplicas:        ptr.To(int32(3)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "replicas=1 on core controller sets replicas and does NOT inject leader election",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(1)),
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                    "replicas=nil on core controller leaves replicas unchanged, no leader election",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(1)),
+			replicas:                nil,
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                     "replicas=2 on webhook sets replicas, no leader election",
+			assetName:                webhookDeploymentAssetName,
+			containerName:            OperandWebhookContainer,
+			componentName:            v1alpha1.Webhook,
+			replicas:                 ptr.To(int32(2)),
+			expectedReplicas:         ptr.To(int32(2)),
+			expectLeaderElectionArg:  false,
+			expectNoLeaderElectionIn: true,
+		},
+		{
+			name:                    "replicas=2 on cert-controller sets replicas and injects leader election",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(2)),
+			expectedReplicas:        ptr.To(int32(2)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "replicas=1 on cert-controller sets replicas and does NOT inject leader election",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(1)),
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                    "replicas=1 on cert-controller removes pre-existing leader election arg",
+			assetName:               certControllerDeploymentAssetName,
+			containerName:           OperandCertControllerContainer,
+			componentName:           v1alpha1.CertController,
+			replicas:                ptr.To(int32(1)),
+			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                     "replicas=2 on bitwarden sets replicas, no leader election",
+			assetName:                bitwardenDeploymentAssetName,
+			containerName:            OperandBitwardenContainer,
+			componentName:            v1alpha1.BitwardenSDKServer,
+			replicas:                 ptr.To(int32(2)),
+			expectedReplicas:         ptr.To(int32(2)),
+			expectLeaderElectionArg:  false,
+			expectNoLeaderElectionIn: true,
+		},
+		{
+			name:                    "replicas=1 on core controller removes pre-existing leader election arg",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(1)),
+			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
+			expectedReplicas:        ptr.To(int32(1)),
+			expectLeaderElectionArg: false,
+		},
+		{
+			name:                    "replicas coexists with revisionHistoryLimit and overrideEnv",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(3)),
+			revisionHistoryLimit:    ptr.To(int32(5)),
+			overrideEnv:             []corev1.EnvVar{{Name: "LOG_LEVEL", Value: "debug"}},
+			expectedReplicas:        ptr.To(int32(3)),
+			expectedRevHistoryLimit: ptr.To(int32(5)),
+			expectedEnv:             []corev1.EnvVar{{Name: "LOG_LEVEL", Value: "debug"}},
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=2 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(2)),
+			expectedReplicas:        ptr.To(int32(2)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=5 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(5)),
+			expectedReplicas:        ptr.To(int32(5)),
+			expectLeaderElectionArg: true,
+		},
+		{
+			name:                    "valid replicas=10 does not return error",
+			assetName:               controllerDeploymentAssetName,
+			containerName:           OperandCoreControllerContainer,
+			componentName:           v1alpha1.CoreController,
+			replicas:                ptr.To(int32(10)),
+			expectedReplicas:        ptr.To(int32(10)),
+			expectLeaderElectionArg: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := testReconciler(t)
+			deployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Replicas: tt.initialReplicas,
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: tt.containerName,
+									Args: tt.existingArgs,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			componentConfig := v1alpha1.ComponentConfig{
+				ComponentName: tt.componentName,
+				OverrideEnv:   tt.overrideEnv,
+			}
+			if tt.replicas != nil || tt.revisionHistoryLimit != nil {
+				componentConfig.DeploymentConfigs = &v1alpha1.DeploymentConfig{
+					Replicas:             tt.replicas,
+					RevisionHistoryLimit: tt.revisionHistoryLimit,
+				}
+			}
+
+			esc := &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ControllerConfig: v1alpha1.ControllerConfig{
+						ComponentConfigs: []v1alpha1.ComponentConfig{componentConfig},
+					},
+				},
+			}
+
+			if err := r.applyUserDeploymentConfigs(deployment, esc, tt.assetName); err != nil {
+				t.Fatalf("applyUserDeploymentConfigs() unexpected error: %v", err)
+			}
+
+			if tt.expectedReplicas != nil {
+				if deployment.Spec.Replicas == nil {
+					t.Errorf("expected replicas=%d, got nil", *tt.expectedReplicas)
+				} else if *deployment.Spec.Replicas != *tt.expectedReplicas {
+					t.Errorf("expected replicas=%d, got %d", *tt.expectedReplicas, *deployment.Spec.Replicas)
+				}
+			} else if deployment.Spec.Replicas != nil {
+				t.Errorf("expected replicas=nil, got %d", *deployment.Spec.Replicas)
+			}
+
+			container := &deployment.Spec.Template.Spec.Containers[0]
+			hasLeaderElection := slices.Contains(container.Args, LeaderElectionArg)
+
+			if tt.expectLeaderElectionArg && !hasLeaderElection {
+				t.Errorf("expected %s in container args, got: %v", LeaderElectionArg, container.Args)
+			}
+			if !tt.expectLeaderElectionArg && hasLeaderElection {
+				t.Errorf("did not expect %s in container args, got: %v", LeaderElectionArg, container.Args)
+			}
+			if tt.expectNoLeaderElectionIn {
+				for _, arg := range container.Args {
+					if strings.Contains(arg, "--enable-leader-election") {
+						t.Errorf("component %s must NOT have --enable-leader-election arg, got: %v", tt.componentName, container.Args)
+					}
+				}
+			}
+			if tt.expectedRevHistoryLimit != nil {
+				if deployment.Spec.RevisionHistoryLimit == nil || *deployment.Spec.RevisionHistoryLimit != *tt.expectedRevHistoryLimit {
+					t.Errorf("expected RevisionHistoryLimit=%d, got %v", *tt.expectedRevHistoryLimit, deployment.Spec.RevisionHistoryLimit)
+				}
+			}
+			for _, expected := range tt.expectedEnv {
+				found := false
+				for _, env := range container.Env {
+					if env.Name == expected.Name && env.Value == expected.Value {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected env %s=%s to be applied", expected.Name, expected.Value)
+				}
+			}
+		})
+	}
+}
+
+func TestApplyLeaderElection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		replicas     *int32
+		existingArgs []string
+		expectedArgs []string
+	}{
+		{
+			name:         "injects leader election when replicas > 1",
+			replicas:     ptr.To(int32(3)),
+			existingArgs: []string{"--some-flag=value"},
+			expectedArgs: []string{"--some-flag=value", LeaderElectionArg},
+		},
+		{
+			name:         "removes leader election when replicas = 1",
+			replicas:     ptr.To(int32(1)),
+			existingArgs: []string{"--some-flag=value", LeaderElectionArg},
+			expectedArgs: []string{"--some-flag=value"},
+		},
+		{
+			name:         "removes leader election when replicas = nil",
+			replicas:     nil,
+			existingArgs: []string{LeaderElectionArg, "--other=true"},
+			expectedArgs: []string{"--other=true"},
+		},
+		{
+			name:         "no-op when replicas = 1 and no leader election arg present",
+			replicas:     ptr.To(int32(1)),
+			existingArgs: []string{"--some-flag=value"},
+			expectedArgs: []string{"--some-flag=value"},
+		},
+		{
+			name:         "idempotent injection when already present and replicas > 1",
+			replicas:     ptr.To(int32(2)),
+			existingArgs: []string{LeaderElectionArg, "--other=true"},
+			expectedArgs: []string{LeaderElectionArg, "--other=true"},
+		},
+		{
+			name:         "empty args with replicas > 1",
+			replicas:     ptr.To(int32(5)),
+			existingArgs: nil,
+			expectedArgs: []string{LeaderElectionArg},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			container := &corev1.Container{
+				Args: slices.Clone(tt.existingArgs),
+			}
+			applyLeaderElection(container, tt.replicas)
+			if !slices.Equal(container.Args, tt.expectedArgs) {
+				t.Errorf("applyLeaderElection() args = %v, want %v", container.Args, tt.expectedArgs)
+			}
+		})
+	}
+}
+
+func TestDeploymentSpecModifiedWithReplicas(t *testing.T) {
+	t.Parallel()
+
+	t.Run("drift detection — replicas changed from 3 to 1 triggers modified", func(t *testing.T) {
+		t.Parallel()
+		desired := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(3)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{LeaderElectionArg},
+						}},
+					},
+				},
+			},
+		}
+		fetched := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{LeaderElectionArg},
+						}},
+					},
+				},
+			},
+		}
+		meta := &common.ResourceMetadata{}
+		if !common.HasObjectChanged(desired, fetched, meta) {
+			t.Error("expected HasObjectChanged=true when replicas differ (3 vs 1)")
+		}
+	})
+
+	t.Run("drift detection — leader election arg removed triggers modified", func(t *testing.T) {
+		t.Parallel()
+		desired := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(3)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{"--some-flag=value", LeaderElectionArg},
+						}},
+					},
+				},
+			},
+		}
+		fetched := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(3)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{"--some-flag=value"},
+						}},
+					},
+				},
+			},
+		}
+		meta := &common.ResourceMetadata{}
+		if !common.HasObjectChanged(desired, fetched, meta) {
+			t.Error("expected HasObjectChanged=true when leader election arg is missing from fetched")
+		}
+	})
+
+	t.Run("recovery without CR edit — external actor change detected", func(t *testing.T) {
+		t.Parallel()
+		desired := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(3)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{LeaderElectionArg},
+						}},
+					},
+				},
+			},
+		}
+		fetched := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: OperandCoreControllerContainer,
+							Args: []string{LeaderElectionArg},
+						}},
+					},
+				},
+			},
+		}
+		meta := &common.ResourceMetadata{}
+		if !common.HasObjectChanged(desired, fetched, meta) {
+			t.Error("expected drift detection when external actor modifies replicas")
+		}
+	})
+}
+
 func TestNormalizeDurationArg(t *testing.T) {
 	tests := []struct {
 		in   string

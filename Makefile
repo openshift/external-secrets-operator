@@ -465,6 +465,7 @@ bundle: $(KUSTOMIZE) $(OPERATOR_SDK) manifests ## Generate bundle manifests and 
 	@$(OPERATOR_SDK) generate kustomize manifests -q
 	@cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	@$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
+	@sed -i 's/createdAt: .*/createdAt: "2023-03-03T00:00:00"/' bundle/manifests/openshift-external-secrets-operator.clusterserviceversion.yaml
 	@$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build
