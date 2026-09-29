@@ -130,6 +130,7 @@ _Appears in:_
 | `componentName` _[ComponentName](#componentname)_ | componentName identifies which external-secrets component this configuration applies to.<br />Valid component names: ExternalSecretsCoreController, Webhook, CertController, BitwardenSDKServer. |  | Enum: [ExternalSecretsCoreController Webhook CertController BitwardenSDKServer] <br />Required: \{\} <br /> |
 | `deploymentConfigs` _[DeploymentConfig](#deploymentconfig)_ | deploymentConfigs specifies overrides for the Kubernetes Deployment resource of this component. |  | Optional: \{\} <br /> |
 | `overrideEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | overrideEnv specifies custom environment variables for this component's container. These are merged with operator-managed environment variables, with user-defined values taking precedence.<br />Names starting with 'KUBERNETES_' or 'EXTERNAL_SECRETS_' are reserved prefixes and will be rejected.<br />The exact names 'HOSTNAME', 'SSL_CERT_DIR', and 'SSL_CERT_FILE' are also reserved. |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `advancedOverrides` _[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#rawextension-runtime-pkg)_ | advancedOverrides applies a strategic merge patch on top of the final operator-generated Deployment spec for this component.<br />WARNING: DO NOT USE UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING.<br />Only the following paths are allowed: spec.template.spec.affinity, spec.template.spec.tolerations,<br />spec.template.spec.nodeSelector, spec.template.spec.topologySpreadConstraints,<br />spec.template.spec.containers[*].args, and spec.template.spec.containers[*].resources.<br />Any other path is rejected and sets a Degraded condition. This field can overwrite your own first-class<br />CRD settings. You must NOT use this field to add or modify containers, initContainers, or ports,<br />as doing so breaks the structural integrity of the operand and will fail deployment reconciliation. |  | Optional: \{\} <br />Optional: \{\} <br /> |
 
 
 #### ComponentName
@@ -256,6 +257,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `revisionHistoryLimit` _integer_ | revisionHistoryLimit specifies the number of old ReplicaSets to retain for rollback purposes.<br />This allows rolling back to previous deployment versions using 'kubectl rollout undo'.<br />Must be at least 1 to ensure rollback capability. Maximum value is 50 to limit resource usage.<br />If not specified, defaults to 10. | 10 | Maximum: 50 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | replicas specifies the desired number of pod replicas for this component's Deployment.<br />When set to greater than 1 on the ExternalSecretsCoreController, leader election is<br />automatically enabled to ensure only one replica actively reconciles at a time.<br />Other components (Webhook, CertController, BitwardenSDKServer) do not use leader election<br />regardless of replica count. | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ExternalSecretsConfig
