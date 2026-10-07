@@ -1,0 +1,76 @@
+# Pre-commit hooks for external-secrets-operator.
+#
+# Install once per clone:
+#   pip install pre-commit
+#   pre-commit install                        # pre-commit stage hooks
+#   pre-commit install --hook-type commit-msg  # conventional-commit check
+#
+# Run manually against all files:
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '(?x)^(vendor/|bindata/|.*zz_generated.*|.*\.golden$)'
+      - id: end-of-file-fixer
+        exclude: '(?x)^(vendor/|bindata/|.*zz_generated.*|.*\.golden$)'
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+        # vendor/, bindata/, config/crd/bases/: generated or vendored.
+        # test/e2e/testdata/, api/.../tests/.../*.testsuite.yaml: contain
+        # {{PLACEHOLDER}} template tokens substituted at test-run time, not
+        # valid standalone YAML.
+        exclude: '(?x)^(vendor/|bindata/|config/crd/bases/|test/e2e/testdata/|.*\.testsuite\.yaml$)'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+
+  # Blocks commits containing hardcoded secrets (API keys, tokens, private
+  # keys). Runs against staged changes only, so it won't flag the vendor/
+  # or bindata/ trees unless they're actually part of the commit.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Enforces this project's commit convention from AGENTS.md "Commit
+  # Messages" -- plain-colon segments, no parens (OpenShift CI's
+  # jira-lifecycle-plugin maps PRs to Jira via a literal "<TICKET>:" or
+  # "NO-JIRA:" prefix, which parens would break):
+  #   `<JIRA-ID>: <scope>: description` (e.g. `ESO-142: controller: add proxy egress policy`)
+  #   `NO-JIRA: <scope>: description`   (e.g. `NO-JIRA: docs: fix typo in README`)
+  # conventional-pre-commit's "type" slot matches JIRA keys (ESO-142,
+  # OAPE-481, etc.) or the literal NO-JIRA. No --force-scope here: this
+  # format has no parenthesized scope for conventional-pre-commit to
+  # validate (the scope is just the second colon-delimited segment of the
+  # subject), so that flag would reject every commit. The scope itself is
+  # enforced by the pygrep hook below instead.
+  #
+  # Caveat: conventional-pre-commit always accepts the standard "feat"/"fix"
+  # types in addition to whatever custom types are configured (it has no
+  # flag to disable this), so it alone would also pass "feat: ...". The
+  # pygrep hook below closes that gap by hard-anchoring the full required
+  # prefix -- using pre-commit's own bundled pygrep language, no extra
+  # script or dependency.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          # Jira keys start with a letter but may contain digits after
+          # (e.g. R2D2-142), per Atlassian's project-key format -- not
+          # letters-only.
+          - '[A-Z][A-Z0-9]*-\d+'
+          - NO-JIRA
+
+  - repo: local
+    hooks:
+      - id: commit-msg-jira-prefix
+        name: Enforce JIRA-ID/NO-JIRA commit prefix
+        description: "Rejects commits whose first line doesn't start with <JIRA-ID>: <scope>: or NO-JIRA: <scope>: -- closes conventional-pre-commit's feat/fix loophole above and enforces the scope segment it can't express."
+        language: pygrep
+        entry: '\A(?:[A-Z][A-Z0-9]*-[0-9]+|NO-JIRA): [a-z][a-z0-9_-]*: .+'
+        args: ['--multiline', '--negate']
+        stages: [commit-msg]

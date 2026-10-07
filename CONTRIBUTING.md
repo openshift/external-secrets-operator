@@ -24,6 +24,30 @@ All build tooling (controller-gen, golangci-lint, envtest, etc.) is vendored and
 
 This project uses Go workspaces (`go.work`). Targets that need workspace mode (`fmt`, `vet`, `test`, `test-unit`, `test-e2e`, `run`, `update-vendor`, `update-dep`) automatically unset `GOFLAGS` to avoid conflicts with `-mod=vendor`. Run `make help` for all available targets.
 
+### Deterministic Enforcement (Pre-Commit Hooks)
+
+This repo ships a [`.pre-commit-config.yaml`](.pre-commit-config.yaml) with hooks for trailing whitespace, end-of-file newlines, YAML validity, merge-conflict markers, secret detection ([gitleaks](https://github.com/gitleaks/gitleaks)), and commit message format. Set it up once per clone:
+
+```sh
+pip install pre-commit
+pre-commit install                        # pre-commit stage (file hygiene)
+pre-commit install --hook-type commit-msg # commit message format
+```
+
+Run manually against all files:
+
+```sh
+pre-commit run --all-files
+```
+
+Note: the gitleaks hook always scans staged changes only (`gitleaks git --staged`) regardless of `--all-files` -- it doesn't accept file paths, so this command won't catch secrets outside what's staged. For a full-tree secret scan, run gitleaks directly:
+
+```sh
+gitleaks dir .
+```
+
+Claude Code sessions operating in this repo also get deterministic enforcement via [`.claude/settings.json`](.claude/settings.json): a `PostToolUse` hook runs `gofmt -w` on edited `.go` files, and a `PreToolUse` hook blocks obviously destructive Bash commands (`rm -rf`, `git push --force`, `git reset --hard`, etc.) before they execute. These hooks are specific to Claude Code and don't apply to other AI coding agents or tools. See `hack/claude-hooks/` for the hook scripts.
+
 ## Code Style and Conventions
 
 The project enforces style through `golangci-lint` (configured in `.golangci.yml`) and `go vet`. A few key conventions:
@@ -52,15 +76,21 @@ Use the Jira ticket ID as a prefix (e.g., `eso-142`, `oape-481-fix-predicates`).
 
 ### Commit Messages
 
-Follow the pattern used in the repository:
+Follow the pattern used in the repository -- a scope is always required:
 
 ```text
-<JIRA-ID>: Short imperative description of the change
+<JIRA-ID>: <scope>: Short imperative description of the change
 ```
 
-Example: `ESO-142: add proxy egress network policy`
+Plain colons, no parens: OpenShift CI's jira-lifecycle-plugin maps PRs to their Jira ticket via a
+literal `<TICKET>:`/`NO-JIRA:` prefix, so the ticket must be followed directly by a colon rather
+than a parenthesized scope.
 
-The Jira project can be any valid project (ESO, OAPE, etc.). For changes without a Jira ticket, use a descriptive imperative summary (e.g., `fix make verify`, `update owners list`). Avoid generic messages like "fix bug" or "update code".
+Example: `ESO-142: controller: add proxy egress network policy`
+
+The Jira project can be any valid project (ESO, OAPE, etc.). For changes without a Jira ticket, use `NO-JIRA: <scope>: <imperative description>` (e.g., `NO-JIRA: build: fix make verify`, `NO-JIRA: docs: update owners list`). Avoid generic messages like "fix bug" or "update code".
+
+Commit messages are checked by the `conventional-pre-commit` and `commit-msg-jira-prefix` hooks (see [Deterministic Enforcement](#deterministic-enforcement-pre-commit-hooks) below); the latter hard-enforces the full `<TICKET-or-NO-JIRA>: <scope>: ...` shape, including the required scope segment.
 
 ### Pull Request Process
 
@@ -96,7 +126,7 @@ Significant API or behavioral changes need design review before implementation.
 - For user-visible API changes, new configuration surfaces, or cross-cutting behavior, open (or update) an enhancement proposal under [`openshift/enhancements/enhancements/external-secrets-operator/`](https://github.com/openshift/enhancements/tree/master/enhancements/external-secrets-operator).
 - Discuss the design with maintainers (Jira + enhancement PR) and get agreement before landing CRD/API changes in this repository.
 - Small additive fields that follow an existing, approved pattern may not need a full enhancement — ask maintainers if unsure.
-- Component-local implementation decisions that do not warrant a cross-repo enhancement can be captured as ADRs in [`harness-evals/harness-docs/decisions/`](harness-evals/harness-docs/decisions/). See the catalog in [`harness-evals/harness-docs/references/enhancements.md`](harness-evals/harness-docs/references/enhancements.md).
+- Component-local implementation decisions that do not warrant a cross-repo enhancement can be captured as ADRs in [`docs/decisions/`](docs/decisions/). See the catalog in [`harness-evals/harness-docs/references/enhancements.md`](harness-evals/harness-docs/references/enhancements.md).
 
 ## Adding New Features
 

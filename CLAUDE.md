@@ -52,13 +52,15 @@ make verify-deps        # Verify go.mod dependencies
 
 ### Commit Messages
 
-Always include the Jira ticket number and a clear imperative description. Format:
+Always include the Jira ticket number, a scope, and a clear imperative description. Format:
 
 ```text
-<JIRA-ID>: short description of the change
+<JIRA-ID>: <scope>: short description of the change
 ```
 
-Example: `ESO-142: add proxy egress network policy`. The Jira project can be any valid project (ESO, OAPE, etc.). If no Jira ticket exists, ask the user for context or use a descriptive imperative summary. Never use generic messages like "fix bug", "update code", or "address review comments".
+Plain colons, no parens — OpenShift CI's jira-lifecycle-plugin maps PRs to Jira via a literal `<TICKET>:`/`NO-JIRA:` prefix, which a parenthesized scope would break.
+
+Example: `ESO-142: controller: add proxy egress network policy`. A scope is always required. The Jira project can be any valid project (ESO, OAPE, etc.). If no Jira ticket exists, ask the user for context, or use `NO-JIRA: <scope>: <imperative description>` (e.g., `NO-JIRA: docs: fix typo in README`). Enforced by the `commit-msg-jira-prefix` pygrep hook in `.pre-commit-config.yaml`. Never use generic messages like "fix bug", "update code", or "address review comments".
 
 ### Pre-Commit Workflow
 

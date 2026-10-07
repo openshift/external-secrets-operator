@@ -40,13 +40,33 @@ Detailed rules for each domain are in `harness-evals/harness-docs/`. Read the re
 | [Testing](harness-evals/harness-docs/testing-guidelines.md) | Unit tests, API integration tests (envtest), E2E with Ginkgo labels, make targets |
 | [Integration](harness-evals/harness-docs/integration-guidelines.md) | cert-manager, OLM, proxy, CNO trusted CA, console, metrics, multi-arch, webhooks |
 
+## Single-File Verification
+
+For fast feedback while editing, lint and type-check a single package instead of the whole repo (Go requires full package context, so scope to the package directory of the file you changed):
+
+```bash
+golangci-lint run ./pkg/controller/external_secrets/
+# GOFLAGS= unsets GOFLAGS=-mod=vendor (set by some shells/CI), which conflicts with go.work
+GOFLAGS= go vet ./pkg/controller/external_secrets/
+```
+
+## Pattern References
+
+Common change types, each pointing to a real example already in the repository:
+
+- **New managed resource** (ConfigMap/Secret/Deployment/NetworkPolicy, etc.): see `pkg/controller/external_secrets/networkpolicy.go` for the resource builder + `HasObjectChanged` pattern, and `pkg/controller/external_secrets/controller.go` for registering it in `controllerManagedResources` and the install sequence.
+- **New CRD/API field with CEL validation**: see `api/v1alpha1/external_secrets_config_types.go` for the pattern of adding a field with `+kubebuilder:validation` markers and CEL rules.
+- **New table-driven unit test**: see `pkg/controller/external_secrets/networkpolicy_test.go` for the `t.Run` + `t.Parallel()` pattern used throughout this repo.
+- **Classifying and returning an error**: see `pkg/controller/common/errors.go` for the `IrrecoverableError` / `RetryRequiredError` / `UserConfigurationError` pattern.
+- **New operator RBAC permission**: see `pkg/controller/external_secrets/rbacs.go` for the `+kubebuilder:rbac` marker pattern.
+
 ## Cross-Cutting Conventions
 
 - **Generated files**: Never hand-edit `bindata.go`, `fake_ctrl_client.go`, `zz_generated.deepcopy.go`, or CRD YAML in `config/crd/bases/`. Regenerate with `make manifests generate update-bindata` or `go generate`.
 - **Go style**: stdlib `testing` only (no Ginkgo for unit tests, no testify except E2E utils). Table-driven tests with `t.Run`. Call `t.Parallel()` on outer function and each subtest. Use `t.Setenv()` instead of `os.Setenv`.
 - **Constants**: All string constants (asset names, label keys, env var names) live in `constants.go`. Do not scatter literals across source files.
 - **New managed resources**: Must be added to `controllerManagedResources`, `buildCacheObjectList()`, `HasObjectChanged` type-switch, and the ordered install sequence. See `harness-evals/harness-docs/ESO_DEVELOPMENT.md` section 2.
-- **Commit messages**: Always include the Jira ticket number and a clear imperative description. Format: `<JIRA-ID>: short description` (e.g., `ESO-142: add proxy egress network policy`). The Jira project can be any valid project (ESO, OAPE, etc.). If no Jira ticket exists, use a descriptive imperative summary. Never use generic messages like "fix bug" or "update code".
+- **Commit messages**: Always include the Jira ticket number, a scope, and a clear imperative description. Format: `<JIRA-ID>: <scope>: short description` (e.g., `ESO-142: controller: add proxy egress network policy`) — plain colons, no parens, since OpenShift CI's jira-lifecycle-plugin maps PRs to Jira via a literal `<TICKET>:`/`NO-JIRA:` prefix. The Jira project can be any valid project (ESO, OAPE, etc.). If no Jira ticket exists, use `NO-JIRA: <scope>: <imperative description>` (e.g., `NO-JIRA: docs: fix typo in README`). Scope is always required — enforced by the `commit-msg-jira-prefix` hook in `.pre-commit-config.yaml`. Never use generic messages like "fix bug" or "update code".
 - **PR checklist**: Run `make verify` (vet, fmt, deps, bindata, generated files, govulncheck, markdownlint, git diff), `make test`, and `make lint` before submitting. `make verify` is the single gate that CI enforces.
 
 ## Common Pitfalls
@@ -65,16 +85,17 @@ harness-evals/harness-docs/
 ├── domain/                    # ExternalSecretsConfig, ExternalSecretsManager API docs
 ├── architecture/              # Controller internals, resource management, bindata pipeline
 │   └── components.md
-├── decisions/                 # Component-specific ADRs (bindata, update strategy, NP naming)
 ├── exec-plans/                # Feature planning
 ├── references/
 │   ├── ecosystem.md           # Links to Platform patterns
 │   └── enhancements.md        # Enhancement proposals catalog
 ├── ESO_DEVELOPMENT.md         # Development workflows, build targets, common tasks
 └── ESO_TESTING.md             # Test suites, patterns, E2E labels
+
+docs/decisions/                 # Component-specific ADRs (bindata, update strategy, NP naming)
 ```
 
-**AI Agent Path**: `harness-evals/harness-docs/*-guidelines.md` (as needed) → `domain/` → `architecture/` → `decisions/` → `ESO_DEVELOPMENT.md`
+**AI Agent Path**: `harness-evals/harness-docs/*-guidelines.md` (as needed) → `domain/` → `architecture/` → `docs/decisions/` → `ESO_DEVELOPMENT.md`
 
 ## OpenSpec (planning / evals)
 

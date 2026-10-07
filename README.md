@@ -110,6 +110,32 @@ make build-installer IMG=<registry>/external-secrets-operator:<tag>
 kubectl apply -f dist/install.yaml
 ```
 
+## Usage
+
+Once the operator is running, configure the operand through the two singleton custom resources (both named `cluster`).
+
+### Quickstart Example
+
+```sh
+# Create the default ExternalSecretsConfig (installs the external-secrets operand). The
+# ExternalSecretsManager CR is auto-created by the operator at startup, no action needed.
+# `config/samples/` also contains provider-specific example CRs (ClusterSecretStore, ExternalSecret,
+# etc.) with placeholder values that require editing before use -- apply only the CR below for a
+# working quickstart; see `config/samples/kustomization.yaml` for the full list.
+oc apply -f config/samples/operator_v1alpha1_externalsecretsconfig.yaml
+
+# Check aggregated status from the ExternalSecretsManager CR
+oc get esm cluster -o yaml
+
+# Check the ExternalSecretsConfig CR
+oc get esc cluster -o yaml
+
+# Verify the operand pods are running
+oc get pods -n external-secrets
+```
+
+See `config/samples/` for example CRs and the [domain guidelines](harness-evals/harness-docs/domain/) for the full `ExternalSecretsConfig` and `ExternalSecretsManager` field reference.
+
 ## Testing
 
 | Make Target | Description |
@@ -163,7 +189,7 @@ make update    # generate + manifests + update-operand-manifests + update-bindat
 
 ### Domain Guidelines and Agentic Documentation
 
-Detailed rules, architecture deep-dives, ADRs, and development workflows are in `harness-evals/harness-docs/`:
+Detailed rules, architecture deep-dives, and development workflows are in `harness-evals/harness-docs/`; component-specific ADRs are in `docs/decisions/` (see the list below):
 
 | Guideline | Scope |
 |-----------|-------|
@@ -178,7 +204,7 @@ Detailed rules, architecture deep-dives, ADRs, and development workflows are in 
 - `harness-evals/harness-docs/ESO_TESTING.md` -- Test suites, patterns, E2E labels
 - `harness-evals/harness-docs/architecture/` -- Controller internals, resource management, bindata pipeline
 - `harness-evals/harness-docs/domain/` -- API documentation for ExternalSecretsConfig and ExternalSecretsManager
-- `harness-evals/harness-docs/decisions/` -- Component-specific architectural decision records
+- `docs/decisions/` -- Component-specific architectural decision records
 - `harness-evals/harness-docs/references/` -- Enhancement proposals catalog and ecosystem links
 
 ## For AI Agents
