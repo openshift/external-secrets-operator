@@ -1,38 +1,38 @@
 // Code generated for package assets by go-bindata DO NOT EDIT. (@generated)
 // sources:
-// bindata/external-secrets/certificate_bitwarden-tls-certs.yml
-// bindata/external-secrets/external-secrets-namespace.yaml
-// bindata/external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml
-// bindata/external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml
-// bindata/external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml
-// bindata/external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml
-// bindata/external-secrets/networkpolicy_allow-dns.yaml
-// bindata/external-secrets/networkpolicy_deny-all.yaml
-// bindata/external-secrets/resources/certificate_external-secrets-webhook.yml
-// bindata/external-secrets/resources/clusterrole_external-secrets-cert-controller.yml
-// bindata/external-secrets/resources/clusterrole_external-secrets-controller.yml
-// bindata/external-secrets/resources/clusterrole_external-secrets-edit.yml
-// bindata/external-secrets/resources/clusterrole_external-secrets-servicebindings.yml
-// bindata/external-secrets/resources/clusterrole_external-secrets-view.yml
-// bindata/external-secrets/resources/clusterrolebinding_external-secrets-cert-controller.yml
-// bindata/external-secrets/resources/clusterrolebinding_external-secrets-controller.yml
-// bindata/external-secrets/resources/deployment_bitwarden-sdk-server.yml
-// bindata/external-secrets/resources/deployment_external-secrets-cert-controller.yml
-// bindata/external-secrets/resources/deployment_external-secrets-webhook.yml
-// bindata/external-secrets/resources/deployment_external-secrets.yml
-// bindata/external-secrets/resources/role_external-secrets-leaderelection.yml
-// bindata/external-secrets/resources/rolebinding_external-secrets-leaderelection.yml
-// bindata/external-secrets/resources/secret_external-secrets-webhook.yml
-// bindata/external-secrets/resources/service_bitwarden-sdk-server.yml
-// bindata/external-secrets/resources/service_external-secrets-cert-controller-metrics.yml
-// bindata/external-secrets/resources/service_external-secrets-metrics.yml
-// bindata/external-secrets/resources/service_external-secrets-webhook.yml
-// bindata/external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml
-// bindata/external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml
-// bindata/external-secrets/resources/serviceaccount_external-secrets-webhook.yml
-// bindata/external-secrets/resources/serviceaccount_external-secrets.yml
-// bindata/external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml
-// bindata/external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml
+// bindata/operands/external-secrets/certificate_bitwarden-tls-certs.yml
+// bindata/operands/external-secrets/certificate_external-secrets-webhook.yml
+// bindata/operands/external-secrets/clusterrole_external-secrets-cert-controller.yml
+// bindata/operands/external-secrets/clusterrole_external-secrets-controller.yml
+// bindata/operands/external-secrets/clusterrole_external-secrets-edit.yml
+// bindata/operands/external-secrets/clusterrole_external-secrets-servicebindings.yml
+// bindata/operands/external-secrets/clusterrole_external-secrets-view.yml
+// bindata/operands/external-secrets/clusterrolebinding_external-secrets-cert-controller.yml
+// bindata/operands/external-secrets/clusterrolebinding_external-secrets-controller.yml
+// bindata/operands/external-secrets/deployment_bitwarden-sdk-server.yml
+// bindata/operands/external-secrets/deployment_external-secrets-cert-controller.yml
+// bindata/operands/external-secrets/deployment_external-secrets-webhook.yml
+// bindata/operands/external-secrets/deployment_external-secrets.yml
+// bindata/operands/external-secrets/namespace_external-secrets.yml
+// bindata/operands/external-secrets/role_external-secrets-leaderelection.yml
+// bindata/operands/external-secrets/rolebinding_external-secrets-leaderelection.yml
+// bindata/operands/external-secrets/secret_external-secrets-webhook.yml
+// bindata/operands/external-secrets/service_bitwarden-sdk-server.yml
+// bindata/operands/external-secrets/service_external-secrets-cert-controller-metrics.yml
+// bindata/operands/external-secrets/service_external-secrets-metrics.yml
+// bindata/operands/external-secrets/service_external-secrets-webhook.yml
+// bindata/operands/external-secrets/serviceaccount_bitwarden-sdk-server.yml
+// bindata/operands/external-secrets/serviceaccount_external-secrets-cert-controller.yml
+// bindata/operands/external-secrets/serviceaccount_external-secrets-webhook.yml
+// bindata/operands/external-secrets/serviceaccount_external-secrets.yml
+// bindata/operands/external-secrets/validatingwebhookconfiguration_externalsecret-validate.yml
+// bindata/operands/external-secrets/validatingwebhookconfiguration_secretstore-validate.yml
+// bindata/operator/networkpolicies/allow-api-server-egress-for-bitwarden-sever.yml
+// bindata/operator/networkpolicies/allow-api-server-egress-for-cert-controller-traffic.yml
+// bindata/operator/networkpolicies/allow-api-server-egress-for-main-controller-traffic.yml
+// bindata/operator/networkpolicies/allow-api-server-egress-for-webhook-traffic.yml
+// bindata/operator/networkpolicies/allow-dns.yml
+// bindata/operator/networkpolicies/deny-all.yml
 package assets
 
 import (
@@ -86,7 +86,7 @@ func (fi bindataFileInfo) Sys() interface{} {
 	return nil
 }
 
-var _externalSecretsCertificate_bitwardenTlsCertsYml = []byte(`apiVersion: cert-manager.io/v1
+var _operandsExternalSecretsCertificate_bitwardenTlsCertsYml = []byte(`apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: bitwarden-tls-certs
@@ -115,313 +115,22 @@ spec:
     name: my-issuer
   duration: "8760h"`)
 
-func externalSecretsCertificate_bitwardenTlsCertsYmlBytes() ([]byte, error) {
-	return _externalSecretsCertificate_bitwardenTlsCertsYml, nil
+func operandsExternalSecretsCertificate_bitwardenTlsCertsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsCertificate_bitwardenTlsCertsYml, nil
 }
 
-func externalSecretsCertificate_bitwardenTlsCertsYml() (*asset, error) {
-	bytes, err := externalSecretsCertificate_bitwardenTlsCertsYmlBytes()
+func operandsExternalSecretsCertificate_bitwardenTlsCertsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsCertificate_bitwardenTlsCertsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/certificate_bitwarden-tls-certs.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/certificate_bitwarden-tls-certs.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsExternalSecretsNamespaceYaml = []byte(`apiVersion: v1
-kind: Namespace
-metadata:
-  name: external-secrets
-`)
-
-func externalSecretsExternalSecretsNamespaceYamlBytes() ([]byte, error) {
-	return _externalSecretsExternalSecretsNamespaceYaml, nil
-}
-
-func externalSecretsExternalSecretsNamespaceYaml() (*asset, error) {
-	bytes, err := externalSecretsExternalSecretsNamespaceYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/external-secrets-namespace.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: eso-sys-allow-api-server-egress-for-webhook
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: external-secrets-webhook
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-    external-secrets.io/component: webhook
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: external-secrets-webhook
-  policyTypes:
-    - Egress
-    - Ingress
-  egress:
-    - ports:
-        - protocol: TCP
-          port: 6443
-  ingress:
-    - ports:
-        - protocol: TCP
-          port: 10250
-    # Allow Prometheus/monitoring to scrape metrics
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-user-workload-monitoring
-      ports:
-        - protocol: TCP
-          port: 8080`)
-
-func externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYaml, nil
-}
-
-func externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: eso-sys-allow-api-server-egress-for-bitwarden-server
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: bitwarden-sdk-server
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: bitwarden-sdk-server
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    # Allow External Secrets Controller to communicate with Bitwarden SDK Server
-    - ports:
-        - protocol: TCP
-          port: 9998
-  # Allow access to Kubernetes API server and bitwarden sdk external server
-  egress:
-    - ports:
-        - protocol: TCP
-          port: 6443
-        - protocol: TCP
-          port: 443`)
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml, nil
-}
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: eso-sys-allow-api-server-egress-for-cert-controller
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: external-secrets-cert-controller
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: external-secrets-cert-controller
-  policyTypes:
-    - Egress
-    - Ingress
-  egress:
-    - ports:
-        - protocol: TCP
-          port: 6443
-  ingress:
-    # Allow Prometheus/monitoring to scrape metrics
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-user-workload-monitoring
-      ports:
-        - protocol: TCP
-          port: 8080`)
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml, nil
-}
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: eso-sys-allow-api-server-egress-for-main-controller
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: external-secrets
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: external-secrets
-  policyTypes:
-    - Egress
-    - Ingress
-  egress:
-    - ports:
-        - protocol: TCP
-          port: 6443
-  ingress:
-    # Allow Prometheus/monitoring to scrape metrics
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-user-workload-monitoring
-      ports:
-        - protocol: TCP
-          port: 8080`)
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml, nil
-}
-
-func externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_allowDnsYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  labels:
-    app.kubernetes.io/name: external-secrets
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-  name: eso-sys-allow-to-dns
-spec:
-  podSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/name
-        operator: In
-        values:
-          - external-secrets
-          - bitwarden-sdk-server
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: openshift-dns
-          podSelector:
-            matchLabels:
-              dns.operator.openshift.io/daemonset-dns: default
-      ports:
-        - protocol: TCP
-          port: 5353
-        - protocol: UDP
-          port: 5353
-        - protocol: TCP
-          port: 53
-        - protocol: UDP
-          port: 53
-  policyTypes:
-      - Egress`)
-
-func externalSecretsNetworkpolicy_allowDnsYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_allowDnsYaml, nil
-}
-
-func externalSecretsNetworkpolicy_allowDnsYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_allowDnsYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_allow-dns.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsNetworkpolicy_denyAllYaml = []byte(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: eso-sys-deny-all-traffic
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: external-secrets
-    app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v1.3.0"
-    app.kubernetes.io/managed-by: external-secrets-operator
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress`)
-
-func externalSecretsNetworkpolicy_denyAllYamlBytes() ([]byte, error) {
-	return _externalSecretsNetworkpolicy_denyAllYaml, nil
-}
-
-func externalSecretsNetworkpolicy_denyAllYaml() (*asset, error) {
-	bytes, err := externalSecretsNetworkpolicy_denyAllYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "external-secrets/networkpolicy_deny-all.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _externalSecretsResourcesCertificate_externalSecretsWebhookYml = []byte(`---
+var _operandsExternalSecretsCertificate_externalSecretsWebhookYml = []byte(`---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -447,22 +156,22 @@ spec:
   secretName: external-secrets-webhook
 `)
 
-func externalSecretsResourcesCertificate_externalSecretsWebhookYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesCertificate_externalSecretsWebhookYml, nil
+func operandsExternalSecretsCertificate_externalSecretsWebhookYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsCertificate_externalSecretsWebhookYml, nil
 }
 
-func externalSecretsResourcesCertificate_externalSecretsWebhookYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesCertificate_externalSecretsWebhookYmlBytes()
+func operandsExternalSecretsCertificate_externalSecretsWebhookYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsCertificate_externalSecretsWebhookYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/certificate_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/certificate_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrole_externalSecretsCertControllerYml = []byte(`---
+var _operandsExternalSecretsClusterrole_externalSecretsCertControllerYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -545,22 +254,22 @@ rules:
       - "patch"
 `)
 
-func externalSecretsResourcesClusterrole_externalSecretsCertControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, nil
+func operandsExternalSecretsClusterrole_externalSecretsCertControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrole_externalSecretsCertControllerYml, nil
 }
 
-func externalSecretsResourcesClusterrole_externalSecretsCertControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrole_externalSecretsCertControllerYmlBytes()
+func operandsExternalSecretsClusterrole_externalSecretsCertControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrole_externalSecretsCertControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrole_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrole_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrole_externalSecretsControllerYml = []byte(`---
+var _operandsExternalSecretsClusterrole_externalSecretsControllerYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -712,22 +421,22 @@ rules:
       - "delete"
 `)
 
-func externalSecretsResourcesClusterrole_externalSecretsControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrole_externalSecretsControllerYml, nil
+func operandsExternalSecretsClusterrole_externalSecretsControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrole_externalSecretsControllerYml, nil
 }
 
-func externalSecretsResourcesClusterrole_externalSecretsControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrole_externalSecretsControllerYmlBytes()
+func operandsExternalSecretsClusterrole_externalSecretsControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrole_externalSecretsControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrole_external-secrets-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrole_external-secrets-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrole_externalSecretsEditYml = []byte(`---
+var _operandsExternalSecretsClusterrole_externalSecretsEditYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -781,22 +490,22 @@ rules:
       - "update"
 `)
 
-func externalSecretsResourcesClusterrole_externalSecretsEditYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrole_externalSecretsEditYml, nil
+func operandsExternalSecretsClusterrole_externalSecretsEditYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrole_externalSecretsEditYml, nil
 }
 
-func externalSecretsResourcesClusterrole_externalSecretsEditYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrole_externalSecretsEditYmlBytes()
+func operandsExternalSecretsClusterrole_externalSecretsEditYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrole_externalSecretsEditYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrole_external-secrets-edit.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrole_external-secrets-edit.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrole_externalSecretsServicebindingsYml = []byte(`---
+var _operandsExternalSecretsClusterrole_externalSecretsServicebindingsYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -819,22 +528,22 @@ rules:
       - "watch"
 `)
 
-func externalSecretsResourcesClusterrole_externalSecretsServicebindingsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrole_externalSecretsServicebindingsYml, nil
+func operandsExternalSecretsClusterrole_externalSecretsServicebindingsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrole_externalSecretsServicebindingsYml, nil
 }
 
-func externalSecretsResourcesClusterrole_externalSecretsServicebindingsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrole_externalSecretsServicebindingsYmlBytes()
+func operandsExternalSecretsClusterrole_externalSecretsServicebindingsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrole_externalSecretsServicebindingsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrole_external-secrets-servicebindings.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrole_external-secrets-servicebindings.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrole_externalSecretsViewYml = []byte(`---
+var _operandsExternalSecretsClusterrole_externalSecretsViewYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -885,22 +594,22 @@ rules:
       - "list"
 `)
 
-func externalSecretsResourcesClusterrole_externalSecretsViewYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrole_externalSecretsViewYml, nil
+func operandsExternalSecretsClusterrole_externalSecretsViewYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrole_externalSecretsViewYml, nil
 }
 
-func externalSecretsResourcesClusterrole_externalSecretsViewYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrole_externalSecretsViewYmlBytes()
+func operandsExternalSecretsClusterrole_externalSecretsViewYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrole_externalSecretsViewYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrole_external-secrets-view.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrole_external-secrets-view.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYml = []byte(`---
+var _operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -920,22 +629,22 @@ subjects:
     kind: ServiceAccount
 `)
 
-func externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYml, nil
+func operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYml, nil
 }
 
-func externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYmlBytes()
+func operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrolebinding_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrolebinding_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesClusterrolebinding_externalSecretsControllerYml = []byte(`---
+var _operandsExternalSecretsClusterrolebinding_externalSecretsControllerYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -955,22 +664,22 @@ subjects:
     kind: ServiceAccount
 `)
 
-func externalSecretsResourcesClusterrolebinding_externalSecretsControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesClusterrolebinding_externalSecretsControllerYml, nil
+func operandsExternalSecretsClusterrolebinding_externalSecretsControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsClusterrolebinding_externalSecretsControllerYml, nil
 }
 
-func externalSecretsResourcesClusterrolebinding_externalSecretsControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesClusterrolebinding_externalSecretsControllerYmlBytes()
+func operandsExternalSecretsClusterrolebinding_externalSecretsControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsClusterrolebinding_externalSecretsControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/clusterrolebinding_external-secrets-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/clusterrolebinding_external-secrets-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesDeployment_bitwardenSdkServerYml = []byte(`---
+var _operandsExternalSecretsDeployment_bitwardenSdkServerYml = []byte(`---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1031,22 +740,22 @@ spec:
                 path: ca.pem
 `)
 
-func externalSecretsResourcesDeployment_bitwardenSdkServerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesDeployment_bitwardenSdkServerYml, nil
+func operandsExternalSecretsDeployment_bitwardenSdkServerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsDeployment_bitwardenSdkServerYml, nil
 }
 
-func externalSecretsResourcesDeployment_bitwardenSdkServerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesDeployment_bitwardenSdkServerYmlBytes()
+func operandsExternalSecretsDeployment_bitwardenSdkServerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsDeployment_bitwardenSdkServerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/deployment_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/deployment_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesDeployment_externalSecretsCertControllerYml = []byte(`---
+var _operandsExternalSecretsDeployment_externalSecretsCertControllerYml = []byte(`---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1119,22 +828,22 @@ spec:
             successThreshold: 1
 `)
 
-func externalSecretsResourcesDeployment_externalSecretsCertControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesDeployment_externalSecretsCertControllerYml, nil
+func operandsExternalSecretsDeployment_externalSecretsCertControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsDeployment_externalSecretsCertControllerYml, nil
 }
 
-func externalSecretsResourcesDeployment_externalSecretsCertControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesDeployment_externalSecretsCertControllerYmlBytes()
+func operandsExternalSecretsDeployment_externalSecretsCertControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsDeployment_externalSecretsCertControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/deployment_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/deployment_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesDeployment_externalSecretsWebhookYml = []byte(`---
+var _operandsExternalSecretsDeployment_externalSecretsWebhookYml = []byte(`---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1216,22 +925,22 @@ spec:
             secretName: external-secrets-webhook
 `)
 
-func externalSecretsResourcesDeployment_externalSecretsWebhookYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesDeployment_externalSecretsWebhookYml, nil
+func operandsExternalSecretsDeployment_externalSecretsWebhookYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsDeployment_externalSecretsWebhookYml, nil
 }
 
-func externalSecretsResourcesDeployment_externalSecretsWebhookYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesDeployment_externalSecretsWebhookYmlBytes()
+func operandsExternalSecretsDeployment_externalSecretsWebhookYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsDeployment_externalSecretsWebhookYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/deployment_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/deployment_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesDeployment_externalSecretsYml = []byte(`---
+var _operandsExternalSecretsDeployment_externalSecretsYml = []byte(`---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1290,22 +999,43 @@ spec:
       dnsPolicy: ClusterFirst
 `)
 
-func externalSecretsResourcesDeployment_externalSecretsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesDeployment_externalSecretsYml, nil
+func operandsExternalSecretsDeployment_externalSecretsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsDeployment_externalSecretsYml, nil
 }
 
-func externalSecretsResourcesDeployment_externalSecretsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesDeployment_externalSecretsYmlBytes()
+func operandsExternalSecretsDeployment_externalSecretsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsDeployment_externalSecretsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/deployment_external-secrets.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/deployment_external-secrets.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesRole_externalSecretsLeaderelectionYml = []byte(`---
+var _operandsExternalSecretsNamespace_externalSecretsYml = []byte(`apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+`)
+
+func operandsExternalSecretsNamespace_externalSecretsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsNamespace_externalSecretsYml, nil
+}
+
+func operandsExternalSecretsNamespace_externalSecretsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsNamespace_externalSecretsYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operands/external-secrets/namespace_external-secrets.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operandsExternalSecretsRole_externalSecretsLeaderelectionYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -1344,22 +1074,22 @@ rules:
       - "patch"
 `)
 
-func externalSecretsResourcesRole_externalSecretsLeaderelectionYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesRole_externalSecretsLeaderelectionYml, nil
+func operandsExternalSecretsRole_externalSecretsLeaderelectionYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsRole_externalSecretsLeaderelectionYml, nil
 }
 
-func externalSecretsResourcesRole_externalSecretsLeaderelectionYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesRole_externalSecretsLeaderelectionYmlBytes()
+func operandsExternalSecretsRole_externalSecretsLeaderelectionYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsRole_externalSecretsLeaderelectionYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/role_external-secrets-leaderelection.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/role_external-secrets-leaderelection.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml = []byte(`---
+var _operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYml = []byte(`---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -1380,22 +1110,22 @@ subjects:
     namespace: external-secrets
 `)
 
-func externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml, nil
+func operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYml, nil
 }
 
-func externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYmlBytes()
+func operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/rolebinding_external-secrets-leaderelection.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/rolebinding_external-secrets-leaderelection.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesSecret_externalSecretsWebhookYml = []byte(`---
+var _operandsExternalSecretsSecret_externalSecretsWebhookYml = []byte(`---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -1409,22 +1139,22 @@ metadata:
     external-secrets.io/component: webhook
 `)
 
-func externalSecretsResourcesSecret_externalSecretsWebhookYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesSecret_externalSecretsWebhookYml, nil
+func operandsExternalSecretsSecret_externalSecretsWebhookYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsSecret_externalSecretsWebhookYml, nil
 }
 
-func externalSecretsResourcesSecret_externalSecretsWebhookYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesSecret_externalSecretsWebhookYmlBytes()
+func operandsExternalSecretsSecret_externalSecretsWebhookYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsSecret_externalSecretsWebhookYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/secret_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/secret_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesService_bitwardenSdkServerYml = []byte(`---
+var _operandsExternalSecretsService_bitwardenSdkServerYml = []byte(`---
 apiVersion: v1
 kind: Service
 metadata:
@@ -1446,22 +1176,22 @@ spec:
     app.kubernetes.io/instance: external-secrets
 `)
 
-func externalSecretsResourcesService_bitwardenSdkServerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesService_bitwardenSdkServerYml, nil
+func operandsExternalSecretsService_bitwardenSdkServerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsService_bitwardenSdkServerYml, nil
 }
 
-func externalSecretsResourcesService_bitwardenSdkServerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesService_bitwardenSdkServerYmlBytes()
+func operandsExternalSecretsService_bitwardenSdkServerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsService_bitwardenSdkServerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/service_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/service_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesService_externalSecretsCertControllerMetricsYml = []byte(`---
+var _operandsExternalSecretsService_externalSecretsCertControllerMetricsYml = []byte(`---
 apiVersion: v1
 kind: Service
 metadata:
@@ -1484,22 +1214,22 @@ spec:
     app.kubernetes.io/instance: external-secrets
 `)
 
-func externalSecretsResourcesService_externalSecretsCertControllerMetricsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesService_externalSecretsCertControllerMetricsYml, nil
+func operandsExternalSecretsService_externalSecretsCertControllerMetricsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsService_externalSecretsCertControllerMetricsYml, nil
 }
 
-func externalSecretsResourcesService_externalSecretsCertControllerMetricsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesService_externalSecretsCertControllerMetricsYmlBytes()
+func operandsExternalSecretsService_externalSecretsCertControllerMetricsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsService_externalSecretsCertControllerMetricsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/service_external-secrets-cert-controller-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/service_external-secrets-cert-controller-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesService_externalSecretsMetricsYml = []byte(`---
+var _operandsExternalSecretsService_externalSecretsMetricsYml = []byte(`---
 apiVersion: v1
 kind: Service
 metadata:
@@ -1522,22 +1252,22 @@ spec:
     app.kubernetes.io/instance: external-secrets
 `)
 
-func externalSecretsResourcesService_externalSecretsMetricsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesService_externalSecretsMetricsYml, nil
+func operandsExternalSecretsService_externalSecretsMetricsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsService_externalSecretsMetricsYml, nil
 }
 
-func externalSecretsResourcesService_externalSecretsMetricsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesService_externalSecretsMetricsYmlBytes()
+func operandsExternalSecretsService_externalSecretsMetricsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsService_externalSecretsMetricsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/service_external-secrets-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/service_external-secrets-metrics.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesService_externalSecretsWebhookYml = []byte(`---
+var _operandsExternalSecretsService_externalSecretsWebhookYml = []byte(`---
 apiVersion: v1
 kind: Service
 metadata:
@@ -1565,22 +1295,22 @@ spec:
     app.kubernetes.io/instance: external-secrets
 `)
 
-func externalSecretsResourcesService_externalSecretsWebhookYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesService_externalSecretsWebhookYml, nil
+func operandsExternalSecretsService_externalSecretsWebhookYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsService_externalSecretsWebhookYml, nil
 }
 
-func externalSecretsResourcesService_externalSecretsWebhookYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesService_externalSecretsWebhookYmlBytes()
+func operandsExternalSecretsService_externalSecretsWebhookYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsService_externalSecretsWebhookYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/service_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/service_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesServiceaccount_bitwardenSdkServerYml = []byte(`---
+var _operandsExternalSecretsServiceaccount_bitwardenSdkServerYml = []byte(`---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1593,22 +1323,22 @@ metadata:
     app.kubernetes.io/managed-by: external-secrets-operator
 `)
 
-func externalSecretsResourcesServiceaccount_bitwardenSdkServerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesServiceaccount_bitwardenSdkServerYml, nil
+func operandsExternalSecretsServiceaccount_bitwardenSdkServerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsServiceaccount_bitwardenSdkServerYml, nil
 }
 
-func externalSecretsResourcesServiceaccount_bitwardenSdkServerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesServiceaccount_bitwardenSdkServerYmlBytes()
+func operandsExternalSecretsServiceaccount_bitwardenSdkServerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsServiceaccount_bitwardenSdkServerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/serviceaccount_bitwarden-sdk-server.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml = []byte(`---
+var _operandsExternalSecretsServiceaccount_externalSecretsCertControllerYml = []byte(`---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1621,22 +1351,22 @@ metadata:
     app.kubernetes.io/managed-by: external-secrets-operator
 `)
 
-func externalSecretsResourcesServiceaccount_externalSecretsCertControllerYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml, nil
+func operandsExternalSecretsServiceaccount_externalSecretsCertControllerYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsServiceaccount_externalSecretsCertControllerYml, nil
 }
 
-func externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesServiceaccount_externalSecretsCertControllerYmlBytes()
+func operandsExternalSecretsServiceaccount_externalSecretsCertControllerYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsServiceaccount_externalSecretsCertControllerYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/serviceaccount_external-secrets-cert-controller.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesServiceaccount_externalSecretsWebhookYml = []byte(`---
+var _operandsExternalSecretsServiceaccount_externalSecretsWebhookYml = []byte(`---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1649,22 +1379,22 @@ metadata:
     app.kubernetes.io/managed-by: external-secrets-operator
 `)
 
-func externalSecretsResourcesServiceaccount_externalSecretsWebhookYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesServiceaccount_externalSecretsWebhookYml, nil
+func operandsExternalSecretsServiceaccount_externalSecretsWebhookYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsServiceaccount_externalSecretsWebhookYml, nil
 }
 
-func externalSecretsResourcesServiceaccount_externalSecretsWebhookYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesServiceaccount_externalSecretsWebhookYmlBytes()
+func operandsExternalSecretsServiceaccount_externalSecretsWebhookYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsServiceaccount_externalSecretsWebhookYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/serviceaccount_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/serviceaccount_external-secrets-webhook.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesServiceaccount_externalSecretsYml = []byte(`---
+var _operandsExternalSecretsServiceaccount_externalSecretsYml = []byte(`---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1677,22 +1407,22 @@ metadata:
     app.kubernetes.io/managed-by: external-secrets-operator
 `)
 
-func externalSecretsResourcesServiceaccount_externalSecretsYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesServiceaccount_externalSecretsYml, nil
+func operandsExternalSecretsServiceaccount_externalSecretsYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsServiceaccount_externalSecretsYml, nil
 }
 
-func externalSecretsResourcesServiceaccount_externalSecretsYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesServiceaccount_externalSecretsYmlBytes()
+func operandsExternalSecretsServiceaccount_externalSecretsYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsServiceaccount_externalSecretsYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/serviceaccount_external-secrets.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/serviceaccount_external-secrets.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYml = []byte(`---
+var _operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYml = []byte(`---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -1722,22 +1452,22 @@ webhooks:
     failurePolicy: Fail
 `)
 
-func externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYml, nil
+func operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYml, nil
 }
 
-func externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYmlBytes()
+func operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/validatingwebhookconfiguration_externalsecret-validate.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYml = []byte(`---
+var _operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYml = []byte(`---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -1783,17 +1513,287 @@ webhooks:
     failurePolicy: Fail
 `)
 
-func externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYmlBytes() ([]byte, error) {
-	return _externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYml, nil
+func operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYmlBytes() ([]byte, error) {
+	return _operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYml, nil
 }
 
-func externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYml() (*asset, error) {
-	bytes, err := externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYmlBytes()
+func operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYml() (*asset, error) {
+	bytes, err := operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYmlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	info := bindataFileInfo{name: "operands/external-secrets/validatingwebhookconfiguration_secretstore-validate.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-sys-allow-api-server-egress-for-bitwarden-server
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: bitwarden-sdk-server
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitwarden-sdk-server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow External Secrets Controller to communicate with Bitwarden SDK Server
+    - ports:
+        - protocol: TCP
+          port: 9998
+  # Allow access to Kubernetes API server and bitwarden sdk external server
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443`)
+
+func operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml, nil
+}
+
+func operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/allow-api-server-egress-for-bitwarden-sever.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-sys-allow-api-server-egress-for-cert-controller
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets-cert-controller
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-cert-controller
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+  ingress:
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080`)
+
+func operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml, nil
+}
+
+func operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/allow-api-server-egress-for-cert-controller-traffic.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-sys-allow-api-server-egress-for-main-controller
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+  ingress:
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080`)
+
+func operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml, nil
+}
+
+func operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/allow-api-server-egress-for-main-controller-traffic.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-sys-allow-api-server-egress-for-webhook
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets-webhook
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+    external-secrets.io/component: webhook
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-webhook
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 10250
+    # Allow Prometheus/monitoring to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080`)
+
+func operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml, nil
+}
+
+func operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/allow-api-server-egress-for-webhook-traffic.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesAllowDnsYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+  name: eso-sys-allow-to-dns
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - external-secrets
+          - bitwarden-sdk-server
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+          podSelector:
+            matchLabels:
+              dns.operator.openshift.io/daemonset-dns: default
+      ports:
+        - protocol: TCP
+          port: 5353
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+  policyTypes:
+      - Egress`)
+
+func operatorNetworkpoliciesAllowDnsYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesAllowDnsYml, nil
+}
+
+func operatorNetworkpoliciesAllowDnsYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesAllowDnsYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/allow-dns.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _operatorNetworkpoliciesDenyAllYml = []byte(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-sys-deny-all-traffic
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/instance: external-secrets
+    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/managed-by: external-secrets-operator
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress`)
+
+func operatorNetworkpoliciesDenyAllYmlBytes() ([]byte, error) {
+	return _operatorNetworkpoliciesDenyAllYml, nil
+}
+
+func operatorNetworkpoliciesDenyAllYml() (*asset, error) {
+	bytes, err := operatorNetworkpoliciesDenyAllYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "operator/networkpolicies/deny-all.yml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -1850,39 +1850,39 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
-	"external-secrets/certificate_bitwarden-tls-certs.yml":                                    externalSecretsCertificate_bitwardenTlsCertsYml,
-	"external-secrets/external-secrets-namespace.yaml":                                        externalSecretsExternalSecretsNamespaceYaml,
-	"external-secrets/networkpolicy_allow-api-server-and-webhook-traffic.yaml":                externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYaml,
-	"external-secrets/networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml":         externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml,
-	"external-secrets/networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml": externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml,
-	"external-secrets/networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml": externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml,
-	"external-secrets/networkpolicy_allow-dns.yaml":                                           externalSecretsNetworkpolicy_allowDnsYaml,
-	"external-secrets/networkpolicy_deny-all.yaml":                                            externalSecretsNetworkpolicy_denyAllYaml,
-	"external-secrets/resources/certificate_external-secrets-webhook.yml":                     externalSecretsResourcesCertificate_externalSecretsWebhookYml,
-	"external-secrets/resources/clusterrole_external-secrets-cert-controller.yml":             externalSecretsResourcesClusterrole_externalSecretsCertControllerYml,
-	"external-secrets/resources/clusterrole_external-secrets-controller.yml":                  externalSecretsResourcesClusterrole_externalSecretsControllerYml,
-	"external-secrets/resources/clusterrole_external-secrets-edit.yml":                        externalSecretsResourcesClusterrole_externalSecretsEditYml,
-	"external-secrets/resources/clusterrole_external-secrets-servicebindings.yml":             externalSecretsResourcesClusterrole_externalSecretsServicebindingsYml,
-	"external-secrets/resources/clusterrole_external-secrets-view.yml":                        externalSecretsResourcesClusterrole_externalSecretsViewYml,
-	"external-secrets/resources/clusterrolebinding_external-secrets-cert-controller.yml":      externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYml,
-	"external-secrets/resources/clusterrolebinding_external-secrets-controller.yml":           externalSecretsResourcesClusterrolebinding_externalSecretsControllerYml,
-	"external-secrets/resources/deployment_bitwarden-sdk-server.yml":                          externalSecretsResourcesDeployment_bitwardenSdkServerYml,
-	"external-secrets/resources/deployment_external-secrets-cert-controller.yml":              externalSecretsResourcesDeployment_externalSecretsCertControllerYml,
-	"external-secrets/resources/deployment_external-secrets-webhook.yml":                      externalSecretsResourcesDeployment_externalSecretsWebhookYml,
-	"external-secrets/resources/deployment_external-secrets.yml":                              externalSecretsResourcesDeployment_externalSecretsYml,
-	"external-secrets/resources/role_external-secrets-leaderelection.yml":                     externalSecretsResourcesRole_externalSecretsLeaderelectionYml,
-	"external-secrets/resources/rolebinding_external-secrets-leaderelection.yml":              externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml,
-	"external-secrets/resources/secret_external-secrets-webhook.yml":                          externalSecretsResourcesSecret_externalSecretsWebhookYml,
-	"external-secrets/resources/service_bitwarden-sdk-server.yml":                             externalSecretsResourcesService_bitwardenSdkServerYml,
-	"external-secrets/resources/service_external-secrets-cert-controller-metrics.yml":         externalSecretsResourcesService_externalSecretsCertControllerMetricsYml,
-	"external-secrets/resources/service_external-secrets-metrics.yml":                         externalSecretsResourcesService_externalSecretsMetricsYml,
-	"external-secrets/resources/service_external-secrets-webhook.yml":                         externalSecretsResourcesService_externalSecretsWebhookYml,
-	"external-secrets/resources/serviceaccount_bitwarden-sdk-server.yml":                      externalSecretsResourcesServiceaccount_bitwardenSdkServerYml,
-	"external-secrets/resources/serviceaccount_external-secrets-cert-controller.yml":          externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml,
-	"external-secrets/resources/serviceaccount_external-secrets-webhook.yml":                  externalSecretsResourcesServiceaccount_externalSecretsWebhookYml,
-	"external-secrets/resources/serviceaccount_external-secrets.yml":                          externalSecretsResourcesServiceaccount_externalSecretsYml,
-	"external-secrets/resources/validatingwebhookconfiguration_externalsecret-validate.yml":   externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYml,
-	"external-secrets/resources/validatingwebhookconfiguration_secretstore-validate.yml":      externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYml,
+	"operands/external-secrets/certificate_bitwarden-tls-certs.yml":                        operandsExternalSecretsCertificate_bitwardenTlsCertsYml,
+	"operands/external-secrets/certificate_external-secrets-webhook.yml":                   operandsExternalSecretsCertificate_externalSecretsWebhookYml,
+	"operands/external-secrets/clusterrole_external-secrets-cert-controller.yml":           operandsExternalSecretsClusterrole_externalSecretsCertControllerYml,
+	"operands/external-secrets/clusterrole_external-secrets-controller.yml":                operandsExternalSecretsClusterrole_externalSecretsControllerYml,
+	"operands/external-secrets/clusterrole_external-secrets-edit.yml":                      operandsExternalSecretsClusterrole_externalSecretsEditYml,
+	"operands/external-secrets/clusterrole_external-secrets-servicebindings.yml":           operandsExternalSecretsClusterrole_externalSecretsServicebindingsYml,
+	"operands/external-secrets/clusterrole_external-secrets-view.yml":                      operandsExternalSecretsClusterrole_externalSecretsViewYml,
+	"operands/external-secrets/clusterrolebinding_external-secrets-cert-controller.yml":    operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYml,
+	"operands/external-secrets/clusterrolebinding_external-secrets-controller.yml":         operandsExternalSecretsClusterrolebinding_externalSecretsControllerYml,
+	"operands/external-secrets/deployment_bitwarden-sdk-server.yml":                        operandsExternalSecretsDeployment_bitwardenSdkServerYml,
+	"operands/external-secrets/deployment_external-secrets-cert-controller.yml":            operandsExternalSecretsDeployment_externalSecretsCertControllerYml,
+	"operands/external-secrets/deployment_external-secrets-webhook.yml":                    operandsExternalSecretsDeployment_externalSecretsWebhookYml,
+	"operands/external-secrets/deployment_external-secrets.yml":                            operandsExternalSecretsDeployment_externalSecretsYml,
+	"operands/external-secrets/namespace_external-secrets.yml":                             operandsExternalSecretsNamespace_externalSecretsYml,
+	"operands/external-secrets/role_external-secrets-leaderelection.yml":                   operandsExternalSecretsRole_externalSecretsLeaderelectionYml,
+	"operands/external-secrets/rolebinding_external-secrets-leaderelection.yml":            operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYml,
+	"operands/external-secrets/secret_external-secrets-webhook.yml":                        operandsExternalSecretsSecret_externalSecretsWebhookYml,
+	"operands/external-secrets/service_bitwarden-sdk-server.yml":                           operandsExternalSecretsService_bitwardenSdkServerYml,
+	"operands/external-secrets/service_external-secrets-cert-controller-metrics.yml":       operandsExternalSecretsService_externalSecretsCertControllerMetricsYml,
+	"operands/external-secrets/service_external-secrets-metrics.yml":                       operandsExternalSecretsService_externalSecretsMetricsYml,
+	"operands/external-secrets/service_external-secrets-webhook.yml":                       operandsExternalSecretsService_externalSecretsWebhookYml,
+	"operands/external-secrets/serviceaccount_bitwarden-sdk-server.yml":                    operandsExternalSecretsServiceaccount_bitwardenSdkServerYml,
+	"operands/external-secrets/serviceaccount_external-secrets-cert-controller.yml":        operandsExternalSecretsServiceaccount_externalSecretsCertControllerYml,
+	"operands/external-secrets/serviceaccount_external-secrets-webhook.yml":                operandsExternalSecretsServiceaccount_externalSecretsWebhookYml,
+	"operands/external-secrets/serviceaccount_external-secrets.yml":                        operandsExternalSecretsServiceaccount_externalSecretsYml,
+	"operands/external-secrets/validatingwebhookconfiguration_externalsecret-validate.yml": operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYml,
+	"operands/external-secrets/validatingwebhookconfiguration_secretstore-validate.yml":    operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYml,
+	"operator/networkpolicies/allow-api-server-egress-for-bitwarden-sever.yml":             operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml,
+	"operator/networkpolicies/allow-api-server-egress-for-cert-controller-traffic.yml":     operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml,
+	"operator/networkpolicies/allow-api-server-egress-for-main-controller-traffic.yml":     operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml,
+	"operator/networkpolicies/allow-api-server-egress-for-webhook-traffic.yml":             operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml,
+	"operator/networkpolicies/allow-dns.yml":                                               operatorNetworkpoliciesAllowDnsYml,
+	"operator/networkpolicies/deny-all.yml":                                                operatorNetworkpoliciesDenyAllYml,
 }
 
 // AssetDir returns the file names below a certain
@@ -1928,41 +1928,45 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"external-secrets": {nil, map[string]*bintree{
-		"certificate_bitwarden-tls-certs.yml":                                    {externalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
-		"external-secrets-namespace.yaml":                                        {externalSecretsExternalSecretsNamespaceYaml, map[string]*bintree{}},
-		"networkpolicy_allow-api-server-and-webhook-traffic.yaml":                {externalSecretsNetworkpolicy_allowApiServerAndWebhookTrafficYaml, map[string]*bintree{}},
-		"networkpolicy_allow-api-server-egress-for-bitwarden-sever.yaml":         {externalSecretsNetworkpolicy_allowApiServerEgressForBitwardenSeverYaml, map[string]*bintree{}},
-		"networkpolicy_allow-api-server-egress-for-cert-controller-traffic.yaml": {externalSecretsNetworkpolicy_allowApiServerEgressForCertControllerTrafficYaml, map[string]*bintree{}},
-		"networkpolicy_allow-api-server-egress-for-main-controller-traffic.yaml": {externalSecretsNetworkpolicy_allowApiServerEgressForMainControllerTrafficYaml, map[string]*bintree{}},
-		"networkpolicy_allow-dns.yaml":                                           {externalSecretsNetworkpolicy_allowDnsYaml, map[string]*bintree{}},
-		"networkpolicy_deny-all.yaml":                                            {externalSecretsNetworkpolicy_denyAllYaml, map[string]*bintree{}},
-		"resources": {nil, map[string]*bintree{
-			"certificate_external-secrets-webhook.yml":                   {externalSecretsResourcesCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
-			"clusterrole_external-secrets-cert-controller.yml":           {externalSecretsResourcesClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},
-			"clusterrole_external-secrets-controller.yml":                {externalSecretsResourcesClusterrole_externalSecretsControllerYml, map[string]*bintree{}},
-			"clusterrole_external-secrets-edit.yml":                      {externalSecretsResourcesClusterrole_externalSecretsEditYml, map[string]*bintree{}},
-			"clusterrole_external-secrets-servicebindings.yml":           {externalSecretsResourcesClusterrole_externalSecretsServicebindingsYml, map[string]*bintree{}},
-			"clusterrole_external-secrets-view.yml":                      {externalSecretsResourcesClusterrole_externalSecretsViewYml, map[string]*bintree{}},
-			"clusterrolebinding_external-secrets-cert-controller.yml":    {externalSecretsResourcesClusterrolebinding_externalSecretsCertControllerYml, map[string]*bintree{}},
-			"clusterrolebinding_external-secrets-controller.yml":         {externalSecretsResourcesClusterrolebinding_externalSecretsControllerYml, map[string]*bintree{}},
-			"deployment_bitwarden-sdk-server.yml":                        {externalSecretsResourcesDeployment_bitwardenSdkServerYml, map[string]*bintree{}},
-			"deployment_external-secrets-cert-controller.yml":            {externalSecretsResourcesDeployment_externalSecretsCertControllerYml, map[string]*bintree{}},
-			"deployment_external-secrets-webhook.yml":                    {externalSecretsResourcesDeployment_externalSecretsWebhookYml, map[string]*bintree{}},
-			"deployment_external-secrets.yml":                            {externalSecretsResourcesDeployment_externalSecretsYml, map[string]*bintree{}},
-			"role_external-secrets-leaderelection.yml":                   {externalSecretsResourcesRole_externalSecretsLeaderelectionYml, map[string]*bintree{}},
-			"rolebinding_external-secrets-leaderelection.yml":            {externalSecretsResourcesRolebinding_externalSecretsLeaderelectionYml, map[string]*bintree{}},
-			"secret_external-secrets-webhook.yml":                        {externalSecretsResourcesSecret_externalSecretsWebhookYml, map[string]*bintree{}},
-			"service_bitwarden-sdk-server.yml":                           {externalSecretsResourcesService_bitwardenSdkServerYml, map[string]*bintree{}},
-			"service_external-secrets-cert-controller-metrics.yml":       {externalSecretsResourcesService_externalSecretsCertControllerMetricsYml, map[string]*bintree{}},
-			"service_external-secrets-metrics.yml":                       {externalSecretsResourcesService_externalSecretsMetricsYml, map[string]*bintree{}},
-			"service_external-secrets-webhook.yml":                       {externalSecretsResourcesService_externalSecretsWebhookYml, map[string]*bintree{}},
-			"serviceaccount_bitwarden-sdk-server.yml":                    {externalSecretsResourcesServiceaccount_bitwardenSdkServerYml, map[string]*bintree{}},
-			"serviceaccount_external-secrets-cert-controller.yml":        {externalSecretsResourcesServiceaccount_externalSecretsCertControllerYml, map[string]*bintree{}},
-			"serviceaccount_external-secrets-webhook.yml":                {externalSecretsResourcesServiceaccount_externalSecretsWebhookYml, map[string]*bintree{}},
-			"serviceaccount_external-secrets.yml":                        {externalSecretsResourcesServiceaccount_externalSecretsYml, map[string]*bintree{}},
-			"validatingwebhookconfiguration_externalsecret-validate.yml": {externalSecretsResourcesValidatingwebhookconfiguration_externalsecretValidateYml, map[string]*bintree{}},
-			"validatingwebhookconfiguration_secretstore-validate.yml":    {externalSecretsResourcesValidatingwebhookconfiguration_secretstoreValidateYml, map[string]*bintree{}},
+	"operands": {nil, map[string]*bintree{
+		"external-secrets": {nil, map[string]*bintree{
+			"certificate_bitwarden-tls-certs.yml":                        {operandsExternalSecretsCertificate_bitwardenTlsCertsYml, map[string]*bintree{}},
+			"certificate_external-secrets-webhook.yml":                   {operandsExternalSecretsCertificate_externalSecretsWebhookYml, map[string]*bintree{}},
+			"clusterrole_external-secrets-cert-controller.yml":           {operandsExternalSecretsClusterrole_externalSecretsCertControllerYml, map[string]*bintree{}},
+			"clusterrole_external-secrets-controller.yml":                {operandsExternalSecretsClusterrole_externalSecretsControllerYml, map[string]*bintree{}},
+			"clusterrole_external-secrets-edit.yml":                      {operandsExternalSecretsClusterrole_externalSecretsEditYml, map[string]*bintree{}},
+			"clusterrole_external-secrets-servicebindings.yml":           {operandsExternalSecretsClusterrole_externalSecretsServicebindingsYml, map[string]*bintree{}},
+			"clusterrole_external-secrets-view.yml":                      {operandsExternalSecretsClusterrole_externalSecretsViewYml, map[string]*bintree{}},
+			"clusterrolebinding_external-secrets-cert-controller.yml":    {operandsExternalSecretsClusterrolebinding_externalSecretsCertControllerYml, map[string]*bintree{}},
+			"clusterrolebinding_external-secrets-controller.yml":         {operandsExternalSecretsClusterrolebinding_externalSecretsControllerYml, map[string]*bintree{}},
+			"deployment_bitwarden-sdk-server.yml":                        {operandsExternalSecretsDeployment_bitwardenSdkServerYml, map[string]*bintree{}},
+			"deployment_external-secrets-cert-controller.yml":            {operandsExternalSecretsDeployment_externalSecretsCertControllerYml, map[string]*bintree{}},
+			"deployment_external-secrets-webhook.yml":                    {operandsExternalSecretsDeployment_externalSecretsWebhookYml, map[string]*bintree{}},
+			"deployment_external-secrets.yml":                            {operandsExternalSecretsDeployment_externalSecretsYml, map[string]*bintree{}},
+			"namespace_external-secrets.yml":                             {operandsExternalSecretsNamespace_externalSecretsYml, map[string]*bintree{}},
+			"role_external-secrets-leaderelection.yml":                   {operandsExternalSecretsRole_externalSecretsLeaderelectionYml, map[string]*bintree{}},
+			"rolebinding_external-secrets-leaderelection.yml":            {operandsExternalSecretsRolebinding_externalSecretsLeaderelectionYml, map[string]*bintree{}},
+			"secret_external-secrets-webhook.yml":                        {operandsExternalSecretsSecret_externalSecretsWebhookYml, map[string]*bintree{}},
+			"service_bitwarden-sdk-server.yml":                           {operandsExternalSecretsService_bitwardenSdkServerYml, map[string]*bintree{}},
+			"service_external-secrets-cert-controller-metrics.yml":       {operandsExternalSecretsService_externalSecretsCertControllerMetricsYml, map[string]*bintree{}},
+			"service_external-secrets-metrics.yml":                       {operandsExternalSecretsService_externalSecretsMetricsYml, map[string]*bintree{}},
+			"service_external-secrets-webhook.yml":                       {operandsExternalSecretsService_externalSecretsWebhookYml, map[string]*bintree{}},
+			"serviceaccount_bitwarden-sdk-server.yml":                    {operandsExternalSecretsServiceaccount_bitwardenSdkServerYml, map[string]*bintree{}},
+			"serviceaccount_external-secrets-cert-controller.yml":        {operandsExternalSecretsServiceaccount_externalSecretsCertControllerYml, map[string]*bintree{}},
+			"serviceaccount_external-secrets-webhook.yml":                {operandsExternalSecretsServiceaccount_externalSecretsWebhookYml, map[string]*bintree{}},
+			"serviceaccount_external-secrets.yml":                        {operandsExternalSecretsServiceaccount_externalSecretsYml, map[string]*bintree{}},
+			"validatingwebhookconfiguration_externalsecret-validate.yml": {operandsExternalSecretsValidatingwebhookconfiguration_externalsecretValidateYml, map[string]*bintree{}},
+			"validatingwebhookconfiguration_secretstore-validate.yml":    {operandsExternalSecretsValidatingwebhookconfiguration_secretstoreValidateYml, map[string]*bintree{}},
+		}},
+	}},
+	"operator": {nil, map[string]*bintree{
+		"networkpolicies": {nil, map[string]*bintree{
+			"allow-api-server-egress-for-bitwarden-sever.yml":         {operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml, map[string]*bintree{}},
+			"allow-api-server-egress-for-cert-controller-traffic.yml": {operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml, map[string]*bintree{}},
+			"allow-api-server-egress-for-main-controller-traffic.yml": {operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml, map[string]*bintree{}},
+			"allow-api-server-egress-for-webhook-traffic.yml":         {operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml, map[string]*bintree{}},
+			"allow-dns.yml": {operatorNetworkpoliciesAllowDnsYml, map[string]*bintree{}},
+			"deny-all.yml":  {operatorNetworkpoliciesDenyAllYml, map[string]*bintree{}},
 		}},
 	}},
 }}

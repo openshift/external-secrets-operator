@@ -113,7 +113,7 @@ Auto-created at startup by `CreateDefaultESMResource` with standard labels and e
 
 ## 10. Bindata / Asset Management
 
-Static manifests in `bindata/external-secrets/`, compiled into `pkg/operator/assets/bindata.go`.
+Static manifests in `bindata/operands/external-secrets/` and `bindata/operator/networkpolicies/`, compiled into `pkg/operator/assets/bindata.go`.
 
 Rules:
 - Decode with typed helpers (`DecodeDeploymentObjBytes`, etc.)
