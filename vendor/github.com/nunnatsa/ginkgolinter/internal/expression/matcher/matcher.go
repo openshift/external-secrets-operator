@@ -34,19 +34,19 @@ type Matcher struct {
 	Clone         *ast.CallExpr
 	info          Info
 	reverseLogic  bool
-	handler       *gomegahandler.Handler
+	handler       gomegahandler.Handler
 	hasNotMatcher bool // true if the matcher is wrapped with a "Not" matcher
 }
 
-func New(origMatcher, matcherClone *ast.CallExpr, pass *analysis.Pass, handler *gomegahandler.Handler) *Matcher {
+func New(origMatcher, matcherClone *ast.CallExpr, pass *analysis.Pass, handler gomegahandler.Handler) (*Matcher, bool) {
 	reverse := false
 	hasNotMatcher := false
 
 	var assertFuncName string
 	for {
-		info := handler.GetGomegaBasicInfo(origMatcher)
-		if info == nil {
-			return nil
+		info, ok := handler.GetGomegaBasicInfo(origMatcher)
+		if !ok {
+			return nil, false
 		}
 
 		if info.MethodName != "Not" {
@@ -56,10 +56,9 @@ func New(origMatcher, matcherClone *ast.CallExpr, pass *analysis.Pass, handler *
 
 		hasNotMatcher = true
 		reverse = !reverse
-		var ok bool
 		origMatcher, ok = origMatcher.Args[0].(*ast.CallExpr)
 		if !ok {
-			return nil
+			return nil, false
 		}
 		matcherClone = matcherClone.Args[0].(*ast.CallExpr)
 	}
@@ -72,7 +71,7 @@ func New(origMatcher, matcherClone *ast.CallExpr, pass *analysis.Pass, handler *
 		reverseLogic:  reverse,
 		hasNotMatcher: hasNotMatcher,
 		handler:       handler,
-	}
+	}, true
 }
 
 func (m *Matcher) ShouldReverseLogic() bool {

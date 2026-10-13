@@ -8,6 +8,6 @@ import (
 
 func New() *goanalysis.Linter {
 	return goanalysis.
-		NewLinterFromAnalyzer(analyzer.NewDeferOnlyAnalyzer()).
+		NewLinterFromAnalyzer(analyzer.NewAnalyzer()).
 		WithLoadMode(goanalysis.LoadModeTypesInfo)
 }

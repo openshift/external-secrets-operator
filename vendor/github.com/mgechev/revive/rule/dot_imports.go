@@ -8,7 +8,7 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// DotImportsRule forbids dot imports.
+// DotImportsRule forbids . imports.
 type DotImportsRule struct {
 	allowedPackages allowPackages
 }

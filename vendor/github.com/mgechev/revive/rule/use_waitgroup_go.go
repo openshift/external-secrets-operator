@@ -7,7 +7,7 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// UseWaitGroupGoRule spots Go idioms that might be rewritten using [sync.WaitGroup.Go].
+// UseWaitGroupGoRule spots Go idioms that might be rewritten using WaitGroup.Go.
 type UseWaitGroupGoRule struct{}
 
 // Apply applies the rule to given file.
@@ -150,7 +150,7 @@ func (*lintUseWaitGroupGo) isCallToWgAdd(stmt ast.Stmt) bool {
 	return ok && astutils.IsPkgDotName(call.Fun, "wg", "Add")
 }
 
-// wgDonePicker is used when calling astutils.SeekNode that search for calls to wg.Done.
+// function used when calling astutils.SeekNode that search for calls to wg.Done.
 func wgDonePicker(n ast.Node) bool {
 	call, ok := n.(*ast.CallExpr)
 	result := ok && astutils.IsPkgDotName(call.Fun, "wg", "Done")

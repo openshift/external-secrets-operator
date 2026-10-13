@@ -32,7 +32,7 @@ var Analyzer = SCAnalyzer.Analyzer
 
 var demorganQ = pattern.MustParse(`(UnaryExpr "!" expr@(BinaryExpr _ _ _))`)
 
-func CheckDeMorgan(pass *analysis.Pass) (any, error) {
+func CheckDeMorgan(pass *analysis.Pass) (interface{}, error) {
 	// TODO(dh): support going in the other direction, e.g. turning `!a && !b && !c` into `!(a || b || c)`
 
 	// hasFloats reports whether any subexpression is of type float.
@@ -54,35 +54,34 @@ func CheckDeMorgan(pass *analysis.Pass) (any, error) {
 		return found
 	}
 
-	for c := range code.Cursor(pass).Preorder((*ast.UnaryExpr)(nil)) {
-		node := c.Node()
+	fn := func(node ast.Node, stack []ast.Node) {
 		matcher, ok := code.Match(pass, demorganQ, node)
 		if !ok {
-			continue
+			return
 		}
 
 		expr := matcher.State["expr"].(ast.Expr)
 
 		// be extremely conservative when it comes to floats
 		if hasFloats(expr) {
-			continue
+			return
 		}
 
 		n := astutil.NegateDeMorgan(expr, false)
 		nr := astutil.NegateDeMorgan(expr, true)
 		nc, ok := astutil.CopyExpr(n)
 		if !ok {
-			continue
+			return
 		}
 		ns := astutil.SimplifyParentheses(nc)
 		nrc, ok := astutil.CopyExpr(nr)
 		if !ok {
-			continue
+			return
 		}
 		nrs := astutil.SimplifyParentheses(nrc)
 
 		var bn, bnr, bns, bnrs string
-		switch c.Parent().Node().(type) {
+		switch parent := stack[len(stack)-2]; parent.(type) {
 		case *ast.BinaryExpr, *ast.IfStmt, *ast.ForStmt, *ast.SwitchStmt:
 			// Always add parentheses for if, for and switch. If
 			// they're unnecessary, go/printer will strip them when
@@ -118,6 +117,8 @@ func CheckDeMorgan(pass *analysis.Pass) (any, error) {
 
 		report.Report(pass, node, "could apply De Morgan's law", report.Fixes(fixes...))
 	}
+
+	code.PreorderStack(pass, fn, (*ast.UnaryExpr)(nil))
 
 	return nil, nil
 }

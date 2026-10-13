@@ -80,7 +80,7 @@ func checkInterval(gexp *expression.GomegaExpression, durVal intervals.DurationV
 		switch to := durVal.(type) {
 		case *intervals.RealDurationValue, *intervals.UnknownDurationTypeValue:
 
-		case *intervals.NumericDurationValue, *intervals.StringDurationValue:
+		case *intervals.NumericDurationValue:
 			if checkNumericInterval(gexp.GetActualClone(), to) {
 				reportBuilder.AddIssue(true, onlyUseTimeDurationForInterval)
 			}

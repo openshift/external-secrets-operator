@@ -25,8 +25,8 @@ import (
 // parseTag splits a struct field's json tag into its name and
 // comma-separated options.
 func parseTag(tag string) string {
-	if before, _, ok := strings.Cut(tag, ","); ok {
-		return before
+	if idx := strings.Index(tag, ","); idx != -1 {
+		return tag[:idx]
 	}
 	return tag
 }
@@ -160,15 +160,15 @@ func typeByIndex(t fakereflect.TypeAndCanAddr, index []int) fakereflect.TypeAndC
 }
 
 func pathByIndex(t fakereflect.TypeAndCanAddr, index []int) string {
-	var path strings.Builder
+	path := ""
 	for _, i := range index {
 		if t.IsPtr() {
 			t = t.Elem()
 		}
-		path.WriteString("." + t.Field(i).Name)
+		path += "." + t.Field(i).Name
 		t = t.Field(i).Type
 	}
-	return path.String()
+	return path
 }
 
 // A field represents a single field found in a struct.

@@ -90,12 +90,6 @@ func TryResolve(n ast.Node, c *Context) bool {
 		return resolveCallExpr(node, c)
 	case *ast.BinaryExpr:
 		return resolveBinExpr(node, c)
-	case *ast.KeyValueExpr:
-		return TryResolve(node.Key, c) && TryResolve(node.Value, c)
-	case *ast.IndexExpr:
-		return TryResolve(node.X, c)
-	case *ast.SliceExpr:
-		return TryResolve(node.X, c)
 	}
 	return false
 }

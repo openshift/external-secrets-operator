@@ -31,7 +31,7 @@ infinite loop, defers will never execute.`,
 
 var Analyzer = SCAnalyzer.Analyzer
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
 		mightExit := false
 		var defers []ast.Stmt

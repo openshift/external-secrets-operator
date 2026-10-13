@@ -26,7 +26,7 @@ limitations under the License.
 // # Configuration
 //
 // The linter is configured with a list of rules. Each rule specifies an identifier marker and a list of
-// dependent markers. The `type` field is required and specifies how to interpret the dependsOn list:
+// dependent markers. The `type` field is required and specifies how to interpret the dependents list:
 // - `All`: all dependent markers are required.
 // - `Any`: at least one of the dependent markers is required.
 //
@@ -37,15 +37,15 @@ limitations under the License.
 //	    rules:
 //	    - identifier: "k8s:unionMember"
 //	      type: "All"
-//	      dependsOn:
+//	      dependents:
 //	      - "k8s:optional"
 //	    - identifier: "listType"
 //	      type: "All"
-//	      dependsOn:
+//	      dependents:
 //	      - "k8s:listType"
 //	    - identifier: "example:any"
 //	      type: "Any"
-//	      dependsOn:
+//	      dependents:
 //	      - "dep1"
 //	      - "dep2"
 package dependenttags

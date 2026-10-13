@@ -2,6 +2,7 @@ package sa4030
 
 import (
 	"fmt"
+	"go/ast"
 
 	"honnef.co/go/tools/analysis/code"
 	"honnef.co/go/tools/analysis/lint"
@@ -9,13 +10,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA4030",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: "Ineffective attempt at generating random number",
@@ -42,29 +44,21 @@ var ineffectiveRandIntQ = pattern.MustParse(`
 				"math/rand.Intn"
 				"(*math/rand.Rand).Int31n"
 				"(*math/rand.Rand).Int63n"
-				"(*math/rand.Rand).Intn"
-
-				"math/rand/v2.Int32N"
-				"math/rand/v2.Int64N"
-				"math/rand/v2.IntN"
-				"math/rand/v2.N"
-				"math/rand/v2.Uint32N"
-				"math/rand/v2.Uint64N"
-				"math/rand/v2.UintN"
-
-				"(*math/rand/v2.Rand).Int32N"
-				"(*math/rand/v2.Rand).Int64N"
-				"(*math/rand/v2.Rand).IntN"
-				"(*math/rand/v2.Rand).Uint32N"
-				"(*math/rand/v2.Rand).Uint64N"
-				"(*math/rand/v2.Rand).UintN"))
+				"(*math/rand.Rand).Intn"))
 		[(IntegerLiteral "1")])`)
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, ineffectiveRandIntQ) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, ineffectiveRandIntQ, node)
+		if !ok {
+			return
+		}
+
 		report.Report(pass, node,
 			fmt.Sprintf("%s(n) generates a random value 0 <= x < n; that is, the generated values don't include n; %s therefore always returns 0",
 				m.State["name"], report.Render(pass, node)))
 	}
+
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

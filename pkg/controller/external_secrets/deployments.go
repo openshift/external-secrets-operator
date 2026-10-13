@@ -32,6 +32,13 @@ var operandArgsEnvSeparator = regexp.MustCompile(`,+\s*--`)
 
 // createOrApplyDeployments ensures required Deployment resources exist and are correctly configured.
 func (r *Reconciler) createOrApplyDeployments(esc *operatorv1alpha1.ExternalSecretsConfig, resourceMetadata common.ResourceMetadata, externalSecretsConfigCreateRecon bool) error {
+	// Resolve cluster TLS profile for operand deployments. The resolved spec is
+	// not consumed yet (see resolveOperandTLSProfile's TODO), but resolution must
+	// still succeed so configuration errors surface during reconciliation.
+	if _, err := r.resolveOperandTLSProfile(); err != nil {
+		return err
+	}
+
 	// Define all Deployment assets to apply based on conditions.
 	deployments := []struct {
 		assetName string

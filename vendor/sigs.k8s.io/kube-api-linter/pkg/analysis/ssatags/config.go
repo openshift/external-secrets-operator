@@ -17,9 +17,13 @@ package ssatags
 
 // SSATagsConfig contains configuration for the ssatags linter.
 type SSATagsConfig struct {
-	// listTypeSetUsage is the policy for listType=set on slices of structs,
-	// slices, and maps. Valid values are "Warn" and "Ignore".
-	// Defaults to "Warn". Scalar element lists are never flagged.
+	// listTypeSetUsage is the policy for the listType=set usage.
+	// Valid values are "Warn" and "Ignore".
+	// When set to "Warn", the linter will emit a warning if a listType=set is used on object arrays.
+	// When set to "Ignore", the linter will not emit a warning if a listType=set is used on object arrays.
+	// Note: listType=set is only flagged on object arrays, not primitive arrays, due to
+	// Server-Side Apply compatibility issues specific to object arrays.
+	// When otherwise not specified, the default value is "Warn".
 	ListTypeSetUsage SSATagsListTypeSetUsage `json:"listTypeSetUsage"`
 }
 
@@ -27,9 +31,9 @@ type SSATagsConfig struct {
 type SSATagsListTypeSetUsage string
 
 const (
-	// SSATagsListTypeSetUsageWarn warns when listType=set is used on slices of structs, slices, and maps.
+	// SSATagsListTypeSetUsageWarn indicates that the linter will emit a warning if a listType=set is used on object arrays.
 	SSATagsListTypeSetUsageWarn SSATagsListTypeSetUsage = "Warn"
 
-	// SSATagsListTypeSetUsageIgnore disables the check for listType=set used on slices of structs, slices, and maps.
+	// SSATagsListTypeSetUsageIgnore indicates that the linter will not emit a warning if a listType=set is used on object arrays.
 	SSATagsListTypeSetUsageIgnore SSATagsListTypeSetUsage = "Ignore"
 )

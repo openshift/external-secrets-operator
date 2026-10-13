@@ -11,10 +11,10 @@ type StatusReport interface {
 	StatusReport() int
 }
 
-// ANSIStatusReport represents an ANSI terminal status report.
+// ANSIReport represents an ANSI terminal status report.
 type ANSIStatusReport int //nolint:revive
 
-// StatusReport returns the status report identifier.
+// Report returns the status report identifier.
 func (s ANSIStatusReport) StatusReport() int {
 	return int(s)
 }
@@ -22,7 +22,7 @@ func (s ANSIStatusReport) StatusReport() int {
 // DECStatusReport represents a DEC terminal status report.
 type DECStatusReport int
 
-// StatusReport returns the status report identifier.
+// Status returns the status report identifier.
 func (s DECStatusReport) StatusReport() int {
 	return int(s)
 }
@@ -89,16 +89,6 @@ const RequestCursorPositionReport = "\x1b[6n"
 // See: https://vt100.net/docs/vt510-rm/DECXCPR.html
 const RequestExtendedCursorPositionReport = "\x1b[?6n"
 
-// RequestLightDarkReport is a control sequence that requests the terminal to
-// report its operating system light/dark color preference. Supported terminals
-// should respond with a [LightDarkReport] sequence as follows:
-//
-//	CSI ? 997 ; 1 n   for dark mode
-//	CSI ? 997 ; 2 n   for light mode
-//
-// See: https://contour-terminal.org/vt-extensions/color-palette-update-notifications/
-const RequestLightDarkReport = "\x1b[?996n"
-
 // CursorPositionReport (CPR) is a control sequence that reports the cursor's
 // position.
 //
@@ -151,18 +141,4 @@ func ExtendedCursorPositionReport(line, column, page int) string {
 // DECXCPR is an alias for [ExtendedCursorPositionReport].
 func DECXCPR(line, column, page int) string {
 	return ExtendedCursorPositionReport(line, column, page)
-}
-
-// LightDarkReport is a control sequence that reports the terminal's operating
-// system light/dark color preference.
-//
-//	CSI ? 997 ; 1 n   for dark mode
-//	CSI ? 997 ; 2 n   for light mode
-//
-// See: https://contour-terminal.org/vt-extensions/color-palette-update-notifications/
-func LightDarkReport(dark bool) string {
-	if dark {
-		return "\x1b[?997;1n"
-	}
-	return "\x1b[?997;2n"
 }

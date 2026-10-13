@@ -359,8 +359,8 @@ func sanityCheckDomTree(f *Function) {
 
 	// Check the entire relation.  O(n^2).
 	ok := true
-	for i := range n {
-		for j := range n {
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
 			b, c := f.Blocks[i], f.Blocks[j]
 			actual := b.Dominates(c)
 			expected := D[j].Bit(i) == 1

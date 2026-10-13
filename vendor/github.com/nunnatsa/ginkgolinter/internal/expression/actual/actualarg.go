@@ -29,7 +29,6 @@ const (
 	FuncSigArgType
 	ErrFuncActualArgType
 	GomegaParamArgType
-	TBParamArgType
 	MultiRetsArgType
 	ErrorMethodArgType
 
@@ -43,8 +42,8 @@ func (a ArgType) Is(val ArgType) bool {
 	return a&val != 0
 }
 
-func getActualArgPayload(actualExprClone *ast.CallExpr, pass *analysis.Pass, info *gomegahandler.GomegaBasicInfo) (ArgPayload, int) {
-	origArgExpr, argExprClone, actualOffset, isGomegaExpr := getActualArg(actualExprClone, info, pass)
+func getActualArgPayload(origActualExpr, actualExprClone *ast.CallExpr, pass *analysis.Pass, info *gomegahandler.GomegaBasicInfo) (ArgPayload, int) {
+	origArgExpr, argExprClone, actualOffset, isGomegaExpr := getActualArg(origActualExpr, actualExprClone, info.MethodName, pass)
 	if !isGomegaExpr {
 		return nil, 0
 	}
@@ -80,14 +79,13 @@ func getActualArgPayload(actualExprClone *ast.CallExpr, pass *analysis.Pass, inf
 	return newRegularArgPayload(origArgExpr, argExprClone, pass), actualOffset
 }
 
-func getActualArg(actualExprClone *ast.CallExpr, info *gomegahandler.GomegaBasicInfo, pass *analysis.Pass) (ast.Expr, ast.Expr, int, bool) {
+func getActualArg(origActualExpr *ast.CallExpr, actualExprClone *ast.CallExpr, actualMethodName string, pass *analysis.Pass) (ast.Expr, ast.Expr, int, bool) {
 	var (
-		origArgExpr    ast.Expr
-		argExprClone   ast.Expr
-		origActualExpr = info.RootCall
+		origArgExpr  ast.Expr
+		argExprClone ast.Expr
 	)
 
-	funcOffset := gomegainfo.ActualArgOffset(info.MethodName)
+	funcOffset := gomegainfo.ActualArgOffset(actualMethodName)
 	if funcOffset < 0 {
 		return nil, nil, 0, false
 	}
@@ -99,7 +97,7 @@ func getActualArg(actualExprClone *ast.CallExpr, info *gomegahandler.GomegaBasic
 	origArgExpr = origActualExpr.Args[funcOffset]
 	argExprClone = actualExprClone.Args[funcOffset]
 
-	if info.RootCallType == gomegahandler.AsyncAssertionCall {
+	if gomegainfo.IsAsyncActualMethod(actualMethodName) {
 		if ginkgoinfo.IsGinkgoContext(pass.TypesInfo.TypeOf(origArgExpr)) {
 			funcOffset++
 			if len(origActualExpr.Args) <= funcOffset {

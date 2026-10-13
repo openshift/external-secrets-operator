@@ -21,7 +21,6 @@ type Run struct {
 
 	BuildTags           []string `mapstructure:"build-tags"`
 	ModulesDownloadMode string   `mapstructure:"modules-download-mode"`
-	EnableBuildVCS      bool     `mapstructure:"enable-build-vcs"`
 
 	ExitCodeIfIssuesFound int  `mapstructure:"issues-exit-code"`
 	AnalyzeTests          bool `mapstructure:"tests"`

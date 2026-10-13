@@ -5,7 +5,6 @@ package stdlib_doclink
 import (
 	"fmt"
 	gdc "go/doc/comment"
-	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -191,7 +190,7 @@ type potentialDoclink struct {
 
 var potentialDoclinkRE = regexp.MustCompile(`(?m)(?:^|\s)(\*?)([a-zA-Z_][a-zA-Z0-9_]*(?:/[a-zA-Z_][a-zA-Z0-9_]*)*)\.([a-zA-Z0-9_]+)(?:\.([a-zA-Z0-9_]+))?\b`)
 
-func findPotentialDoclinks(pi *packageImports, text string) []*potentialDoclink {
+func findPotentialDoclinks(pi *packageImports, text string) []potentialDoclink {
 	stdlib := stdlib()
 
 	m := make(map[string]*potentialDoclink, 5)
@@ -231,7 +230,7 @@ func findPotentialDoclinks(pi *packageImports, text string) []*potentialDoclink 
 					kind:           kind,
 				}
 			}
-			m[originalNoStar].count++
+			m[originalNoStar].count = m[originalNoStar].count + 1
 		} else if pkg != "" && name1 != "" && name2 == "" {
 			// pkg.name (= pkg.name1)
 
@@ -260,7 +259,7 @@ func findPotentialDoclinks(pi *packageImports, text string) []*potentialDoclink 
 					kind:           kind,
 				}
 			}
-			m[originalNoStar].count++
+			m[originalNoStar].count = m[originalNoStar].count + 1
 		}
 	}
 
@@ -268,9 +267,14 @@ func findPotentialDoclinks(pi *packageImports, text string) []*potentialDoclink 
 		return nil
 	}
 
-	return slices.SortedFunc(maps.Values(m), func(a, b *potentialDoclink) int {
+	result := make([]potentialDoclink, 0, len(m))
+	for _, v := range m {
+		result = append(result, *v)
+	}
+	slices.SortFunc(result, func(a, b potentialDoclink) int {
 		return strings.Compare(a.originalNoStar, b.originalNoStar)
 	})
+	return result
 }
 
 // tryResolveImportPath tries to resolve the given package alias/name to its

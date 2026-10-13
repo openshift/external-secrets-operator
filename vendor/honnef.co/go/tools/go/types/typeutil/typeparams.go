@@ -3,7 +3,6 @@ package typeutil
 import (
 	"errors"
 	"go/types"
-	"slices"
 
 	"golang.org/x/exp/typeparams"
 )
@@ -87,7 +86,12 @@ func (ts TypeSet) All(fn func(*types.Term) bool) bool {
 // Any calls fn for each term in the type set and reports whether any invocation returned true.
 // It stops after the first call that returned true.
 func (ts TypeSet) Any(fn func(*types.Term) bool) bool {
-	return slices.ContainsFunc(ts.Terms, fn)
+	for _, term := range ts.Terms {
+		if fn(term) {
+			return true
+		}
+	}
+	return false
 }
 
 // All is a wrapper for NewTypeSet(typ).All(fn).

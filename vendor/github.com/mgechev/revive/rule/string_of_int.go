@@ -7,7 +7,7 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// StringOfIntRule warns when an integer is converted to a string using a string cast.
+// StringOfIntRule warns when logic expressions contains Boolean literals.
 type StringOfIntRule struct{}
 
 // Apply applies the rule to given file.

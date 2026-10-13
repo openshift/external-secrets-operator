@@ -12,13 +12,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "QF1010",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:    "Convert slice of bytes to string when printing it",
@@ -56,8 +57,12 @@ var byteSlicePrintingQ = pattern.MustParse(`
 
 var byteSlicePrintingR = pattern.MustParse(`(CallExpr (Ident "string") [arg])`)
 
-func run(pass *analysis.Pass) (any, error) {
-	for _, m := range code.Matches(pass, byteSlicePrintingQ) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, byteSlicePrintingQ, node)
+		if !ok {
+			return
+		}
 		args := m.State["args"].([]ast.Expr)
 		for _, arg := range args {
 			if !code.IsOfStringConvertibleByteSlice(pass, arg) {
@@ -71,5 +76,6 @@ func run(pass *analysis.Pass) (any, error) {
 			report.Report(pass, arg, "could convert argument to string", report.Fixes(fix))
 		}
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

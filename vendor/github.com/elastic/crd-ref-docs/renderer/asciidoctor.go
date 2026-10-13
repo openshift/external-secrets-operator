@@ -23,7 +23,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/Masterminds/sprig"
 	"github.com/elastic/crd-ref-docs/config"
 	"github.com/elastic/crd-ref-docs/templates"
 	"github.com/elastic/crd-ref-docs/types"
@@ -82,7 +82,6 @@ func (adr *AsciidoctorRenderer) ToFuncMap() template.FuncMap {
 		"TypeID":             adr.TypeID,
 		"RenderFieldDoc":     adr.RenderFieldDoc,
 		"RenderValidation":   adr.RenderValidation,
-		"TemplateValue":      adr.TemplateValue,
 	}
 }
 
@@ -141,17 +140,10 @@ func (adr *AsciidoctorRenderer) RenderAnchorID(id string) string {
 	return fmt.Sprintf("%s%s", asciidocAnchorPrefix, adr.SafeID(id))
 }
 
-func (adr *AsciidoctorRenderer) TemplateValue(key string) string {
-	if adr == nil || adr.conf == nil {
-		return ""
-	}
-	return adr.conf.TemplateKeyValues.AsMap()[key]
-}
-
 func (adr *AsciidoctorRenderer) RenderFieldDoc(text string) string {
 	// Escape the pipe character, which has special meaning for asciidoc as a way to format tables,
 	// so that including | in a comment does not result in wonky tables.
-	out := escapePipe(text)
+	out := strings.ReplaceAll(text, "|", "\\|")
 
 	// Trim any leading and trailing whitespace from each line.
 	lines := strings.Split(out, "\n")
@@ -168,9 +160,7 @@ func (adr *AsciidoctorRenderer) RenderFieldDoc(text string) string {
 }
 
 func (adr *AsciidoctorRenderer) RenderValidation(text string) string {
-	renderedText := escapeFirstAsterixInEachPair(text)
-	renderedText = escapePipe(renderedText)
-	return escapeCurlyBraces(renderedText)
+	return escapeFirstAsterixInEachPair(text)
 }
 
 // escapeFirstAsterixInEachPair escapes the first asterix in each pair of
@@ -189,17 +179,4 @@ func escapeFirstAsterixInEachPair(text string) string {
 		}
 	}
 	return text
-}
-
-// escapePipe ensures sufficient escapes are added to pipe characters, so they are not mistaken
-// for asciidoctor table formatting.
-func escapePipe(text string) string {
-	return strings.ReplaceAll(text, "|", "\\|")
-}
-
-// escapeCurlyBraces ensures sufficient escapes are added to curly braces, so they are not mistaken
-// for asciidoctor id attributes.
-func escapeCurlyBraces(text string) string {
-	// Per asciidoctor docs, only the leading curly brace needs to be escaped.
-	return strings.ReplaceAll(text, "{", "\\{")
 }

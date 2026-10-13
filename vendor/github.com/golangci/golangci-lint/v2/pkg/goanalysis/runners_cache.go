@@ -25,15 +25,17 @@ func saveIssuesToCache(allPkgs []*packages.Package, pkgsFromCache map[*packages.
 		perPkgIssues[issue.Pkg] = append(perPkgIssues[issue.Pkg], issue)
 	}
 
-	var savedIssuesCount int64
+	var savedIssuesCount int64 = 0
 	lintResKey := getIssuesCacheKey(analyzers)
 
 	workerCount := runtime.GOMAXPROCS(-1)
 	var wg sync.WaitGroup
+	wg.Add(workerCount)
 
 	pkgCh := make(chan *packages.Package, len(allPkgs))
 	for range workerCount {
-		wg.Go(func() {
+		go func() {
+			defer wg.Done()
 			for pkg := range pkgCh {
 				pkgIssues := perPkgIssues[pkg]
 				encodedIssues := make([]EncodingIssue, 0, len(pkgIssues))
@@ -57,7 +59,7 @@ func saveIssuesToCache(allPkgs []*packages.Package, pkgsFromCache map[*packages.
 					issuesCacheDebugf("Saved package %s issues (%d) to cache", pkg, len(pkgIssues))
 				}
 			}
-		})
+		}()
 	}
 
 	for _, pkg := range allPkgs {
@@ -92,10 +94,12 @@ func loadIssuesFromCache(pkgs []*packages.Package, lintCtx *linter.Context,
 
 	workerCount := runtime.GOMAXPROCS(-1)
 	var wg sync.WaitGroup
+	wg.Add(workerCount)
 
 	pkgCh := make(chan *packages.Package, len(pkgs))
 	for range workerCount {
-		wg.Go(func() {
+		go func() {
+			defer wg.Done()
 			for pkg := range pkgCh {
 				var pkgIssues []*EncodingIssue
 				err := lintCtx.PkgCache.Get(pkg, cache.HashModeNeedAllDeps, lintResKey, &pkgIssues)
@@ -124,7 +128,7 @@ func loadIssuesFromCache(pkgs []*packages.Package, lintCtx *linter.Context,
 				}
 				cacheRes.issues = issues
 			}
-		})
+		}()
 	}
 
 	for _, pkg := range pkgs {

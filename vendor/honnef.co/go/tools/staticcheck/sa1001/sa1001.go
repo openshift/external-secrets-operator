@@ -10,16 +10,16 @@ import (
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
 	"honnef.co/go/tools/knowledge"
-	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA1001",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:    `Invalid template`,
@@ -31,38 +31,30 @@ var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 
 var Analyzer = SCAnalyzer.Analyzer
 
-var query = pattern.MustParse(`
-	(CallExpr
-		(Symbol
-		name@(Or
-			"(*text/template.Template).Parse"
-			"(*html/template.Template).Parse"))
-		[s])`)
-
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, query) {
-		name := m.State["name"].(string)
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		call := node.(*ast.CallExpr)
+		// OPT(dh): use integer for kind
 		var kind string
-		switch name {
+		switch code.CallName(pass, call) {
 		case "(*text/template.Template).Parse":
 			kind = "text"
 		case "(*html/template.Template).Parse":
 			kind = "html"
+		default:
+			return
 		}
-
-		call := node.(*ast.CallExpr)
 		sel := call.Fun.(*ast.SelectorExpr)
 		if !code.IsCallToAny(pass, sel.X, "text/template.New", "html/template.New") {
 			// TODO(dh): this is a cheap workaround for templates with
 			// different delims. A better solution with less false
 			// negatives would use data flow analysis to see where the
 			// template comes from and where it has been
-			continue
+			return
 		}
-
-		s, ok := code.ExprToString(pass, m.State["s"].(ast.Expr))
+		s, ok := code.ExprToString(pass, call.Args[knowledge.Arg("(*text/template.Template).Parse.text")])
 		if !ok {
-			continue
+			return
 		}
 		var err error
 		switch kind {
@@ -79,5 +71,6 @@ func run(pass *analysis.Pass) (any, error) {
 			}
 		}
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

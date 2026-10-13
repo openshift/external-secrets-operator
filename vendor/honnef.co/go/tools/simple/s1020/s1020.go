@@ -12,13 +12,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "S1020",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:   `Omit redundant nil check in type assertion`,
@@ -54,15 +55,23 @@ var (
 			nil)`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, checkAssertNotNilFn1Q) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn1 := func(node ast.Node) {
+		m, ok := code.Match(pass, checkAssertNotNilFn1Q, node)
+		if !ok {
+			return
+		}
 		assert := m.State["assert"].(types.Object)
 		assign := m.State["ok"].(types.Object)
 		report.Report(pass, node, fmt.Sprintf("when %s is true, %s can't be nil", assign.Name(), assert.Name()),
 			report.ShortRange(),
 			report.FilterGenerated())
 	}
-	for _, m := range code.Matches(pass, checkAssertNotNilFn2Q) {
+	fn2 := func(node ast.Node) {
+		m, ok := code.Match(pass, checkAssertNotNilFn2Q, node)
+		if !ok {
+			return
+		}
 		ifstmt := m.State["ifstmt"].(*ast.IfStmt)
 		lhs := m.State["lhs"].(types.Object)
 		assignIdent := m.State["ok"].(types.Object)
@@ -70,5 +79,8 @@ func run(pass *analysis.Pass) (any, error) {
 			report.ShortRange(),
 			report.FilterGenerated())
 	}
+	// OPT(dh): merge fn1 and fn2
+	code.Preorder(pass, fn1, (*ast.IfStmt)(nil))
+	code.Preorder(pass, fn2, (*ast.IfStmt)(nil))
 	return nil, nil
 }

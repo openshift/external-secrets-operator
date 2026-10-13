@@ -2,14 +2,15 @@ package ansi
 
 import (
 	"bytes"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi/parser"
+	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 )
 
-// nbsp is a non-breaking space.
+// nbsp is a non-breaking space
 const nbsp = 0xA0
 
 // Hardwrap wraps a string or a block of text to a given line length, breaking
@@ -56,7 +57,10 @@ func hardwrap(m Method, s string, limit int, preserveSpace bool) string {
 		state, action := parser.Table.Transition(pstate, b[i])
 		if state == parser.Utf8State {
 			var width int
-			cluster, width = FirstGraphemeCluster(b[i:], m)
+			cluster, _, width, _ = uniseg.FirstGraphemeCluster(b[i:], -1)
+			if m == WcWidth {
+				width = runewidth.StringWidth(string(cluster))
+			}
 			i += len(cluster)
 
 			if curWidth+width > limit {
@@ -186,9 +190,12 @@ func wordwrap(m Method, s string, limit int, breakpoints string) string {
 	i := 0
 	for i < len(b) {
 		state, action := parser.Table.Transition(pstate, b[i])
-		if state == parser.Utf8State { //nolint:nestif
+		if state == parser.Utf8State {
 			var width int
-			cluster, width = FirstGraphemeCluster(b[i:], m)
+			cluster, _, width, _ = uniseg.FirstGraphemeCluster(b[i:], -1)
+			if m == WcWidth {
+				width = runewidth.StringWidth(string(cluster))
+			}
 			i += len(cluster)
 
 			r, _ := utf8.DecodeRune(cluster)
@@ -296,24 +303,20 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 	}
 
 	var (
-		cluster    string
-		buf        bytes.Buffer
-		word       bytes.Buffer
-		space      bytes.Buffer
-		spaceWidth int                  // width of the space buffer
-		curWidth   int                  // written width of the line
-		wordLen    int                  // word buffer len without ANSI escape codes
-		pstate     = parser.GroundState // initial state
+		cluster  []byte
+		buf      bytes.Buffer
+		word     bytes.Buffer
+		space    bytes.Buffer
+		curWidth int                  // written width of the line
+		wordLen  int                  // word buffer len without ANSI escape codes
+		pstate   = parser.GroundState // initial state
+		b        = []byte(s)
 	)
 
 	addSpace := func() {
-		if spaceWidth == 0 && space.Len() == 0 {
-			return
-		}
-		curWidth += spaceWidth
+		curWidth += space.Len()
 		buf.Write(space.Bytes())
 		space.Reset()
-		spaceWidth = 0
 	}
 
 	addWord := func() {
@@ -332,31 +335,32 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 		buf.WriteByte('\n')
 		curWidth = 0
 		space.Reset()
-		spaceWidth = 0
 	}
 
 	i := 0
-	for i < len(s) {
-		state, action := parser.Table.Transition(pstate, s[i])
-		if state == parser.Utf8State { //nolint:nestif
+	for i < len(b) {
+		state, action := parser.Table.Transition(pstate, b[i])
+		if state == parser.Utf8State {
 			var width int
-			cluster, width = FirstGraphemeCluster(s[i:], m)
+			cluster, _, width, _ = uniseg.FirstGraphemeCluster(b[i:], -1)
+			if m == WcWidth {
+				width = runewidth.StringWidth(string(cluster))
+			}
 			i += len(cluster)
 
-			r, _ := utf8.DecodeRuneInString(cluster)
+			r, _ := utf8.DecodeRune(cluster)
 			switch {
 			case r != utf8.RuneError && unicode.IsSpace(r) && r != nbsp: // nbsp is a non-breaking space
 				addWord()
 				space.WriteRune(r)
-				spaceWidth += width
-			case strings.ContainsAny(cluster, breakpoints):
+			case bytes.ContainsAny(cluster, breakpoints):
 				addSpace()
 				if curWidth+wordLen+width > limit {
-					word.WriteString(cluster)
+					word.Write(cluster)
 					wordLen += width
 				} else {
 					addWord()
-					buf.WriteString(cluster)
+					buf.Write(cluster)
 					curWidth += width
 				}
 			default:
@@ -365,16 +369,11 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 					addWord()
 				}
 
-				word.WriteString(cluster)
+				word.Write(cluster)
 				wordLen += width
 
-				if curWidth+wordLen+spaceWidth > limit {
+				if curWidth+wordLen+space.Len() > limit {
 					addNewline()
-				}
-
-				if wordLen == limit {
-					// Hardwrap the word if it's too long
-					addWord()
 				}
 			}
 
@@ -384,17 +383,16 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 
 		switch action {
 		case parser.PrintAction, parser.ExecuteAction:
-			switch r := rune(s[i]); {
+			switch r := rune(b[i]); {
 			case r == '\n':
 				if wordLen == 0 {
-					if curWidth+spaceWidth > limit {
+					if curWidth+space.Len() > limit {
 						curWidth = 0
 					} else {
 						// preserve whitespaces
 						buf.Write(space.Bytes())
 					}
 					space.Reset()
-					spaceWidth = 0
 				}
 
 				addWord()
@@ -402,7 +400,6 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 			case unicode.IsSpace(r):
 				addWord()
 				space.WriteRune(r)
-				spaceWidth++
 			case r == '-':
 				fallthrough
 			case runeContainsAny(r, breakpoints):
@@ -421,7 +418,6 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 				if curWidth == limit {
 					addNewline()
 				}
-
 				word.WriteRune(r)
 				wordLen++
 
@@ -430,13 +426,13 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 					addWord()
 				}
 
-				if curWidth+wordLen+spaceWidth > limit {
+				if curWidth+wordLen+space.Len() > limit {
 					addNewline()
 				}
 			}
 
 		default:
-			word.WriteByte(s[i])
+			word.WriteByte(b[i])
 		}
 
 		// We manage the UTF8 state separately manually above.
@@ -447,14 +443,13 @@ func wrap(m Method, s string, limit int, breakpoints string) string {
 	}
 
 	if wordLen == 0 {
-		if curWidth+spaceWidth > limit {
+		if curWidth+space.Len() > limit {
 			curWidth = 0
 		} else {
 			// preserve whitespaces
 			buf.Write(space.Bytes())
 		}
 		space.Reset()
-		spaceWidth = 0
 	}
 
 	addWord()

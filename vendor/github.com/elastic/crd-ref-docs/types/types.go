@@ -330,10 +330,9 @@ func Identifier(t *Type) string {
 // GroupVersionDetails encapsulates details about a discovered API group.
 type GroupVersionDetails struct {
 	schema.GroupVersion
-	Doc     string
-	Kinds   []string
-	Types   TypeMap
-	Markers markers.MarkerValues
+	Doc   string
+	Kinds []string
+	Types TypeMap
 }
 
 func (gvd GroupVersionDetails) GroupVersionString() string {

@@ -93,7 +93,10 @@ func fprintFunc(p funcPrinter, f *Function) {
 		// p.startBlock(b, reachable[b.Index])
 		p.startBlock(b, true)
 
-		end := max(len(b.Instrs)-1, 0)
+		end := len(b.Instrs) - 1
+		if end < 0 {
+			end = 0
+		}
 		for _, v := range b.Instrs[:end] {
 			if _, ok := v.(*DebugRef); !ok {
 				p.value(v, l[v.ID()])
@@ -781,7 +784,7 @@ func (w *HTMLWriter) WriteColumn(phase, title, class, html string) {
 	w.WriteString("</td>")
 }
 
-func (w *HTMLWriter) Printf(msg string, v ...any) {
+func (w *HTMLWriter) Printf(msg string, v ...interface{}) {
 	if _, err := fmt.Fprintf(w.w, msg, v...); err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -819,8 +822,7 @@ func valueLongHTML(v Node) string {
 	// but a little bit might be valuable.
 	// We already have visual noise in the form of punctuation
 	// maybe we could replace some of that with formatting.
-	var s strings.Builder
-	s.WriteString(fmt.Sprintf("<span class=\"t%d ssa-long-value\">", v.ID()))
+	s := fmt.Sprintf("<span class=\"t%d ssa-long-value\">", v.ID())
 
 	linenumber := "<span class=\"no-line-number\">(?)</span>"
 	if v.Pos().IsValid() {
@@ -828,22 +830,22 @@ func valueLongHTML(v Node) string {
 		linenumber = fmt.Sprintf("<span class=\"l%v line-number\">(%d)</span>", line, line)
 	}
 
-	s.WriteString(fmt.Sprintf("%s %s = %s", valueHTML(v), linenumber, opName(v)))
+	s += fmt.Sprintf("%s %s = %s", valueHTML(v), linenumber, opName(v))
 
 	if v, ok := v.(Value); ok {
-		s.WriteString(" &lt;" + html.EscapeString(v.Type().String()) + "&gt;")
+		s += " &lt;" + html.EscapeString(v.Type().String()) + "&gt;"
 	}
 
 	switch v := v.(type) {
 	case *Parameter:
-		s.WriteString(fmt.Sprintf(" {%s}", html.EscapeString(v.name)))
+		s += fmt.Sprintf(" {%s}", html.EscapeString(v.name))
 	case *BinOp:
-		s.WriteString(fmt.Sprintf(" {%s}", html.EscapeString(v.Op.String())))
+		s += fmt.Sprintf(" {%s}", html.EscapeString(v.Op.String()))
 	case *UnOp:
-		s.WriteString(fmt.Sprintf(" {%s}", html.EscapeString(v.Op.String())))
+		s += fmt.Sprintf(" {%s}", html.EscapeString(v.Op.String()))
 	case *Extract:
 		name := v.Tuple.Type().(*types.Tuple).At(v.Index).Name()
-		s.WriteString(fmt.Sprintf(" [%d] (%s)", v.Index, name))
+		s += fmt.Sprintf(" [%d] (%s)", v.Index, name)
 	case *Field:
 		st := v.X.Type().Underlying().(*types.Struct)
 		// Be robust against a bad index.
@@ -851,7 +853,7 @@ func valueLongHTML(v Node) string {
 		if 0 <= v.Field && v.Field < st.NumFields() {
 			name = st.Field(v.Field).Name()
 		}
-		s.WriteString(fmt.Sprintf(" [%d] (%s)", v.Field, name))
+		s += fmt.Sprintf(" [%d] (%s)", v.Field, name)
 	case *FieldAddr:
 		st := deref(v.X.Type()).Underlying().(*types.Struct)
 		// Be robust against a bad index.
@@ -860,27 +862,27 @@ func valueLongHTML(v Node) string {
 			name = st.Field(v.Field).Name()
 		}
 
-		s.WriteString(fmt.Sprintf(" [%d] (%s)", v.Field, name))
+		s += fmt.Sprintf(" [%d] (%s)", v.Field, name)
 	case *Recv:
-		s.WriteString(fmt.Sprintf(" {%t}", v.CommaOk))
+		s += fmt.Sprintf(" {%t}", v.CommaOk)
 	case *Call:
 		if v.Common().IsInvoke() {
-			s.WriteString(fmt.Sprintf(" {%s}", html.EscapeString(v.Common().Method.FullName())))
+			s += fmt.Sprintf(" {%s}", html.EscapeString(v.Common().Method.FullName()))
 		}
 	case *Const:
 		if v.Value == nil {
-			s.WriteString(" {&lt;nil&gt;}")
+			s += " {&lt;nil&gt;}"
 		} else {
-			s.WriteString(fmt.Sprintf(" {%s}", html.EscapeString(v.Value.String())))
+			s += fmt.Sprintf(" {%s}", html.EscapeString(v.Value.String()))
 		}
 	case *Sigma:
-		s.WriteString(fmt.Sprintf(" [#%s]", v.From))
+		s += fmt.Sprintf(" [#%s]", v.From)
 	}
 	for _, a := range v.Operands(nil) {
-		s.WriteString(fmt.Sprintf(" %s", valueHTML(*a)))
+		s += fmt.Sprintf(" %s", valueHTML(*a))
 	}
 	if v, ok := v.(Instruction); ok {
-		s.WriteString(fmt.Sprintf(" (%s)", v.Comment()))
+		s += fmt.Sprintf(" (%s)", v.Comment())
 	}
 
 	// OPT(dh): we're calling namedValues many times on the same function.
@@ -895,11 +897,11 @@ func valueLongHTML(v Node) string {
 		}
 	}
 	if len(names) != 0 {
-		s.WriteString(" (" + strings.Join(names, ", ") + ")")
+		s += " (" + strings.Join(names, ", ") + ")"
 	}
 
-	s.WriteString("</span>")
-	return s.String()
+	s += "</span>"
+	return s
 }
 
 func blockHTML(b *BasicBlock) string {
@@ -918,8 +920,7 @@ func blockLongHTML(b *BasicBlock) string {
 		kind = opName(term)
 	}
 	// TODO: improve this for HTML?
-	var s strings.Builder
-	s.WriteString(fmt.Sprintf("<span class=\"b%d ssa-block\">%s</span>", b.Index, kind))
+	s := fmt.Sprintf("<span class=\"b%d ssa-block\">%s</span>", b.Index, kind)
 
 	if term != nil {
 		ops := term.Operands(nil)
@@ -928,16 +929,16 @@ func blockLongHTML(b *BasicBlock) string {
 			for _, op := range ops {
 				ss = append(ss, valueHTML(*op))
 			}
-			s.WriteString(" " + strings.Join(ss, ", "))
+			s += " " + strings.Join(ss, ", ")
 		}
 	}
 	if len(b.Succs) > 0 {
-		s.WriteString(" &#8594;") // right arrow
+		s += " &#8594;" // right arrow
 		for _, c := range b.Succs {
-			s.WriteString(" " + blockHTML(c))
+			s += " " + blockHTML(c)
 		}
 	}
-	return s.String()
+	return s
 }
 
 func funcHTML(f *Function, phase string, dot *dotWriter) string {

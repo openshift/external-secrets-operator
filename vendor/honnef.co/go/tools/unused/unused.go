@@ -8,7 +8,6 @@ import (
 	"go/types"
 	"io"
 	"reflect"
-	"slices"
 	"strings"
 
 	"honnef.co/go/tools/analysis/facts/directives"
@@ -178,7 +177,7 @@ var Analyzer = &lint.Analyzer{
 		Doc:        "Unused code",
 		Run:        run,
 		Requires:   []*analysis.Analyzer{generated.Analyzer, directives.Analyzer},
-		ResultType: reflect.TypeFor[Result](),
+		ResultType: reflect.TypeOf(Result{}),
 	},
 }
 
@@ -207,7 +206,7 @@ func newGraph(
 	return &g
 }
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	g := newGraph(
 		pass.Fset,
 		pass.Files,
@@ -551,7 +550,8 @@ func (g *graph) entry() {
 	}
 	processMethodSet := func(named *types.TypeName, ms *types.MethodSet) {
 		if g.opts.ExportedIsUsed {
-			for m := range ms.Methods() {
+			for i := 0; i < ms.Len(); i++ {
+				m := ms.At(i)
 				if token.IsExported(m.Obj().Name()) {
 					// (2.1) named types use exported methods
 					// (6.4) structs use embedded fields that have exported methods
@@ -597,23 +597,26 @@ func (g *graph) entry() {
 		if len(dir.Arguments) == 0 {
 			continue
 		}
-		if slices.Contains(strings.Split(dir.Arguments[0], ","), "U1000") {
-			pos := g.fset.PositionFor(dir.Node.Pos(), false)
-			var key ignoredKey
-			switch dir.Command {
-			case "ignore":
-				key = ignoredKey{
-					pos.Filename,
-					pos.Line,
+		for _, check := range strings.Split(dir.Arguments[0], ",") {
+			if check == "U1000" {
+				pos := g.fset.PositionFor(dir.Node.Pos(), false)
+				var key ignoredKey
+				switch dir.Command {
+				case "ignore":
+					key = ignoredKey{
+						pos.Filename,
+						pos.Line,
+					}
+				case "file-ignore":
+					key = ignoredKey{
+						pos.Filename,
+						-1,
+					}
 				}
-			case "file-ignore":
-				key = ignoredKey{
-					pos.Filename,
-					-1,
-				}
-			}
 
-			ignores[key] = struct{}{}
+				ignores[key] = struct{}{}
+				break
+			}
 		}
 	}
 
@@ -649,13 +652,13 @@ func (g *graph) entry() {
 						}
 					}
 					if typ, ok := types.Unalias(obj.Type()).(*types.Named); ok {
-						for method := range typ.Methods() {
-							g.use(method, nil)
+						for i := 0; i < typ.NumMethods(); i++ {
+							g.use(typ.Method(i), nil)
 						}
 					}
 					if typ, ok := obj.Type().Underlying().(*types.Struct); ok {
-						for field := range typ.Fields() {
-							g.use(field, nil)
+						for i := 0; i < typ.NumFields(); i++ {
+							g.use(typ.Field(i), nil)
 						}
 					}
 				}
@@ -733,8 +736,8 @@ func (g *graph) read(node ast.Node, by types.Object) {
 			if g.opts.FieldWritesAreUses && unkeyed {
 				// Untagged struct literal that specifies all fields. We have to manually use the fields in the type,
 				// because the unkeyd literal doesn't contain any nodes referring to the fields.
-				for field := range typ.Fields() {
-					g.use(field, by)
+				for i := 0; i < typ.NumFields(); i++ {
+					g.use(typ.Field(i), by)
 				}
 			}
 			if g.opts.FieldWritesAreUses || unkeyed {
@@ -931,7 +934,8 @@ func (g *graph) read(node ast.Node, by types.Object) {
 func (g *graph) useAllFieldsRecursively(typ types.Type, by types.Object) {
 	switch typ := typ.Underlying().(type) {
 	case *types.Struct:
-		for field := range typ.Fields() {
+		for i := 0; i < typ.NumFields(); i++ {
+			field := typ.Field(i)
 			g.use(field, by)
 			g.useAllFieldsRecursively(field.Type(), by)
 		}
@@ -1473,7 +1477,7 @@ func isNoCopyType(typ types.Type) bool {
 	}
 	switch num := named.NumMethods(); num {
 	case 1, 2:
-		for i := range num {
+		for i := 0; i < num; i++ {
 			meth := named.Method(i)
 			if meth.Name() != "Lock" && meth.Name() != "Unlock" {
 				return false
@@ -1512,7 +1516,8 @@ func (g *graph) namedType(typ *types.TypeName, spec ast.Expr) {
 					return false
 				}
 				seen[t] = struct{}{}
-				for field := range t.Fields() {
+				for i := 0; i < t.NumFields(); i++ {
+					field := t.Field(i)
 					if field.Exported() {
 						return true
 					}

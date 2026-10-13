@@ -15,7 +15,6 @@ package fakexml
 import (
 	"fmt"
 	"go/types"
-	"strings"
 
 	"honnef.co/go/tools/go/types/typeutil"
 	"honnef.co/go/tools/knowledge"
@@ -310,15 +309,15 @@ func indirect(vf fakereflect.TypeAndCanAddr) fakereflect.TypeAndCanAddr {
 }
 
 func pathByIndex(t fakereflect.TypeAndCanAddr, index []int) string {
-	var path strings.Builder
+	path := ""
 	for _, i := range index {
 		if t.IsPtr() {
 			t = t.Elem()
 		}
-		path.WriteString("." + t.Field(i).Name)
+		path += "." + t.Field(i).Name
 		t = t.Field(i).Type
 	}
-	return path.String()
+	return path
 }
 
 func (e *Encoder) marshalStruct(tinfo *typeInfo, val fakereflect.TypeAndCanAddr, stack string) error {

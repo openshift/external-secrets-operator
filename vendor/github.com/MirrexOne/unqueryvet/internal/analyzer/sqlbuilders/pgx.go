@@ -4,11 +4,8 @@ package sqlbuilders
 import (
 	"go/ast"
 	"go/token"
-	"go/types"
 	"strings"
 )
-
-const pgxPkgPath = "github.com/jackc/pgx"
 
 // PGXChecker checks github.com/jackc/pgx for SELECT * patterns.
 type PGXChecker struct{}
@@ -23,15 +20,27 @@ func (c *PGXChecker) Name() string {
 	return "pgx"
 }
 
-// IsApplicable checks if the call is from pgx using type information.
-func (c *PGXChecker) IsApplicable(info *types.Info, call *ast.CallExpr) bool {
+// IsApplicable checks if the call might be from pgx.
+func (c *PGXChecker) IsApplicable(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 
-	// Check if the receiver type is from pgx package
-	return IsTypeFromPackage(info, sel.X, pgxPkgPath)
+	// pgx methods that take SQL queries
+	pgxMethods := []string{
+		"Query", "QueryRow", "QueryFunc",
+		"Exec", "SendBatch",
+		"Prepare", "CopyFrom",
+	}
+
+	for _, method := range pgxMethods {
+		if sel.Sel.Name == method {
+			return true
+		}
+	}
+
+	return false
 }
 
 // CheckSelectStar checks for SELECT * in pgx calls.
@@ -44,15 +53,18 @@ func (c *PGXChecker) CheckSelectStar(call *ast.CallExpr) *SelectStarViolation {
 	methodName := sel.Sel.Name
 
 	// pgx methods where the SQL query is typically the second argument (after context)
-	// conn.Query(ctx, sql, args...), conn.QueryFunc(ctx, sql, args, func...)
+	queryArgIndex := 1
 	switch methodName {
-	case "Query", "QueryRow", "Exec", "Prepare", "QueryFunc":
-		// supported methods
+	case "Query", "QueryRow", "Exec", "Prepare":
+		// conn.Query(ctx, sql, args...)
+		queryArgIndex = 1
+	case "QueryFunc":
+		// conn.QueryFunc(ctx, sql, args, func...)
+		queryArgIndex = 1
 	default:
 		return nil
 	}
 
-	const queryArgIndex = 1
 	if queryArgIndex >= len(call.Args) {
 		return nil
 	}

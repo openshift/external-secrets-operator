@@ -52,7 +52,7 @@ var (
 	checkSingleCaseSelectQ2 = pattern.MustParse(`(SelectStmt (CommClause _ _))`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	seen := map[ast.Node]struct{}{}
 	fn := func(node ast.Node) {
 		if m, ok := code.Match(pass, checkSingleCaseSelectQ1, node); ok {

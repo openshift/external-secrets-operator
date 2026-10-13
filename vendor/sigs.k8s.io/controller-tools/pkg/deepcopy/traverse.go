@@ -49,7 +49,7 @@ func (c *codeWriter) Line(line string) {
 }
 
 // Linef writes a single line with formatting (as per fmt.Sprintf).
-func (c *codeWriter) Linef(line string, args ...any) {
+func (c *codeWriter) Linef(line string, args ...interface{}) {
 	fmt.Fprintf(c.out, line+"\n", args...)
 }
 
@@ -61,7 +61,7 @@ func (c *codeWriter) If(setup string, block func()) {
 	c.Line("}")
 }
 
-// IfElse writes if and else statements with the given setup/condition clause, executing
+// If writes if and else statements with the given setup/condition clause, executing
 // the given functions to write the contents of the blocks.
 func (c *codeWriter) IfElse(setup string, ifBlock func(), elseBlock func()) {
 	c.Linef("if %s {", setup)
@@ -447,7 +447,9 @@ func (c *copyMethodMaker) genSliceDeepCopy(actualName *namingInfo, sliceType *ty
 func (c *copyMethodMaker) genStructDeepCopy(_ *namingInfo, structType *types.Struct) {
 	c.Line("*out = *in")
 
-	for field := range structType.Fields() {
+	for i := 0; i < structType.NumFields(); i++ {
+		field := structType.Field(i)
+
 		// if we have a manual deepcopy, use that
 		hasDeepCopy, copyOnPtr := hasDeepCopyMethod(c.pkg, field.Type())
 		hasDeepCopyInto := hasDeepCopyIntoMethod(c.pkg, field.Type())
@@ -543,13 +545,10 @@ func (c *copyMethodMaker) genPointerDeepCopy(_ *namingInfo, pointerType *types.P
 
 	// pass-by-reference types get delegated to the main switch
 	if passesByReference(underlyingElem) {
-		// Use the declared element type (pointerType.Elem()) when allocating and
-		// when generating the inner DeepCopyInto, so that type aliases are preserved
-		// (e.g. `MapAlias`, `Bars`) instead of using their underlying types.
-		c.Linef("*out = new(%s)", (&namingInfo{typeInfo: pointerType.Elem()}).Syntax(c.pkg, c.importsList))
+		c.Linef("*out = new(%s)", (&namingInfo{typeInfo: underlyingElem}).Syntax(c.pkg, c.importsList))
 		c.If("**in != nil", func() {
 			c.Line("in, out := *in, *out")
-			c.genDeepCopyIntoBlock(&namingInfo{typeInfo: pointerType.Elem()}, pointerType.Elem())
+			c.genDeepCopyIntoBlock(&namingInfo{typeInfo: underlyingElem}, eventualUnderlyingType(underlyingElem))
 		})
 		return
 	}
@@ -770,7 +769,8 @@ func fineToShallowCopy(typeInfo types.Type) bool {
 		return fineToShallowCopy(typeInfo.Underlying())
 	case *types.Struct:
 		// structs are fine to shallow-copy if they have all shallow-copyable fields
-		for field := range typeInfo.Fields() {
+		for i := 0; i < typeInfo.NumFields(); i++ {
+			field := typeInfo.Field(i)
 			if !fineToShallowCopy(field.Type()) {
 				return false
 			}
@@ -785,7 +785,11 @@ func fineToShallowCopy(typeInfo types.Type) bool {
 // (except for interfaces, which are handled separately).
 func passesByReference(typeInfo types.Type) bool {
 	switch typeInfo.(type) {
-	case *types.Slice, *types.Map, *types.Pointer:
+	case *types.Slice:
+		return true
+	case *types.Map:
+		return true
+	case *types.Pointer:
 		return true
 	default:
 		return false

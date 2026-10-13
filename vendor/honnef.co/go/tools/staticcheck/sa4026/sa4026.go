@@ -2,6 +2,7 @@ package sa4026
 
 import (
 	"fmt"
+	"go/ast"
 	"go/types"
 
 	"honnef.co/go/tools/analysis/code"
@@ -11,13 +12,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA4026",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: "Go constants cannot express negative zero",
@@ -52,8 +54,13 @@ var negativeZeroFloatQ = pattern.MustParse(`
 			conv@(Object (Or "float32" "float64"))
 			(UnaryExpr "-" lit@(BasicLit "INT" "0"))))`)
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, negativeZeroFloatQ) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, negativeZeroFloatQ, node)
+		if !ok {
+			return
+		}
+
 		if conv, ok := m.State["conv"].(*types.TypeName); ok {
 			var replacement string
 			// TODO(dh): how does this handle type aliases?
@@ -67,13 +74,14 @@ func run(pass *analysis.Pass) (any, error) {
 					report.Render(pass, node),
 					conv.Name(),
 					report.Render(pass, m.State["lit"])),
-				report.Fixes(edit.Fix("Use math.Copysign to create negative zero", edit.ReplaceWithString(node, replacement))))
+				report.Fixes(edit.Fix("use math.Copysign to create negative zero", edit.ReplaceWithString(node, replacement))))
 		} else {
 			const replacement = `math.Copysign(0, -1)`
 			report.Report(pass, node,
 				"in Go, the floating-point literal '-0.0' is the same as '0.0', it does not produce a negative zero",
-				report.Fixes(edit.Fix("Use math.Copysign to create negative zero", edit.ReplaceWithString(node, replacement))))
+				report.Fixes(edit.Fix("use math.Copysign to create negative zero", edit.ReplaceWithString(node, replacement))))
 		}
 	}
+	code.Preorder(pass, fn, (*ast.UnaryExpr)(nil), (*ast.CallExpr)(nil))
 	return nil, nil
 }

@@ -17,13 +17,8 @@ func getAsyncFuncArg(sig *gotypes.Signature) ArgPayload {
 
 	if sig.Params().Len() > 0 {
 		arg := sig.Params().At(0).Type()
-		if sig.Results().Len() == 0 {
-			if gomegainfo.IsGomegaType(arg) {
-				argType |= FuncSigArgType | GomegaParamArgType
-			}
-			if typecheck.ImplementsTB(arg) {
-				argType |= FuncSigArgType | TBParamArgType
-			}
+		if gomegainfo.IsGomegaType(arg) && sig.Results().Len() == 0 {
+			argType |= FuncSigArgType | GomegaParamArgType
 		}
 	}
 

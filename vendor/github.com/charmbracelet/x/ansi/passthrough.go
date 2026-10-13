@@ -21,7 +21,10 @@ func ScreenPassthrough(seq string, limit int) string {
 	b.WriteString("\x1bP")
 	if limit > 0 {
 		for i := 0; i < len(seq); i += limit {
-			end := min(i+limit, len(seq))
+			end := i + limit
+			if end > len(seq) {
+				end = len(seq)
+			}
 			b.WriteString(seq[i:end])
 			if end < len(seq) {
 				b.WriteString("\x1b\\\x1bP")
@@ -49,7 +52,7 @@ func ScreenPassthrough(seq string, limit int) string {
 func TmuxPassthrough(seq string) string {
 	var b bytes.Buffer
 	b.WriteString("\x1bPtmux;")
-	for i := range len(seq) {
+	for i := 0; i < len(seq); i++ {
 		if seq[i] == ESC {
 			b.WriteByte(ESC)
 		}

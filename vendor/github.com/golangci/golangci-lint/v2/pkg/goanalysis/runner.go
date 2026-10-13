@@ -270,9 +270,13 @@ func (r *runner) analyze(pkgs []*packages.Package, analyzers []*analysis.Analyze
 
 	for _, lp := range loadingPackages {
 		if lp.isInitial {
-			wg.Go(func() {
+			wg.Add(1)
+
+			go func(lp *loadingPackage) {
 				lp.analyzeRecursive(ctx, cancel, r.loadMode, loadSem)
-			})
+
+				wg.Done()
+			}(lp)
 		}
 	}
 

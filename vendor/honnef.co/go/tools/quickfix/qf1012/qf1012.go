@@ -3,7 +3,6 @@ package qf1012
 import (
 	"fmt"
 	"go/ast"
-	"go/token"
 	"go/types"
 	"strings"
 
@@ -15,13 +14,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "QF1012",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:    `Use \'fmt.Fprintf(x, ...)\' instead of \'x.Write(fmt.Sprintf(...))\'`,
@@ -56,27 +56,11 @@ var (
 			args))`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
-		getRecv := func(m *pattern.Matcher) (ast.Expr, types.Type) {
+		if m, ok := code.Match(pass, checkWriteBytesSprintfQ, node); ok {
 			recv := m.State["recv"].(ast.Expr)
 			recvT := pass.TypesInfo.TypeOf(recv)
-
-			// Use *N, not N, for the interface check if N
-			// is a named non-interface type, since the pointer
-			// has a larger method set (https://staticcheck.dev/issues/1097).
-			// We assume the receiver expression is addressable
-			// since otherwise the code wouldn't compile.
-			if _, ok := types.Unalias(recvT).(*types.Named); ok && !types.IsInterface(recvT) {
-				recvT = types.NewPointer(recvT)
-				recv = &ast.UnaryExpr{Op: token.AND, X: recv}
-
-			}
-			return recv, recvT
-		}
-
-		if m, ok := code.Match(pass, checkWriteBytesSprintfQ, node); ok {
-			recv, recvT := getRecv(m)
 			if !types.Implements(recvT, knowledge.Interfaces["io.Writer"]) {
 				return
 			}
@@ -95,7 +79,8 @@ func run(pass *analysis.Pass) (any, error) {
 			}))
 			report.Report(pass, node, msg, report.Fixes(fix))
 		} else if m, ok := code.Match(pass, checkWriteStringSprintfQ, node); ok {
-			recv, recvT := getRecv(m)
+			recv := m.State["recv"].(ast.Expr)
+			recvT := pass.TypesInfo.TypeOf(recv)
 			if !types.Implements(recvT, knowledge.Interfaces["io.StringWriter"]) {
 				return
 			}
@@ -119,9 +104,6 @@ func run(pass *analysis.Pass) (any, error) {
 			}))
 			report.Report(pass, node, msg, report.Fixes(fix))
 		}
-	}
-	if !code.CouldMatchAny(pass, checkWriteBytesSprintfQ, checkWriteStringSprintfQ) {
-		return nil, nil
 	}
 	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil

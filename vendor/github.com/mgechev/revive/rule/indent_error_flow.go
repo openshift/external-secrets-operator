@@ -11,8 +11,6 @@ type IndentErrorFlowRule struct {
 	preserveScope bool
 }
 
-var _ lint.ConfigurableRule = (*IndentErrorFlowRule)(nil)
-
 // Configure validates the rule configuration, and configures the rule accordingly.
 //
 // Configuration implements the [lint.ConfigurableRule] interface.

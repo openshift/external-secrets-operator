@@ -14,13 +14,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "QF1005",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:    `Expand call to \'math.Pow\'`,
@@ -36,15 +37,20 @@ var Analyzer = SCAnalyzer.Analyzer
 
 var mathPowQ = pattern.MustParse(`(CallExpr (Symbol "math.Pow") [x (IntegerLiteral n)])`)
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, matcher := range code.Matches(pass, mathPowQ) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		matcher, ok := code.Match(pass, mathPowQ, node)
+		if !ok {
+			return
+		}
+
 		x := matcher.State["x"].(ast.Expr)
 		if code.MayHaveSideEffects(pass, x, nil) {
-			continue
+			return
 		}
 		n, ok := constant.Int64Val(constant.ToInt(matcher.State["n"].(types.TypeAndValue).Value))
 		if !ok {
-			continue
+			return
 		}
 
 		needConversion := false
@@ -56,7 +62,7 @@ func run(pass *analysis.Pass) (any, error) {
 			// determine if the constant expression would have type float64 if used on its own
 			if err := types.CheckExpr(pass.Fset, pass.Pkg, x.Pos(), x, &info); err != nil {
 				// This should not happen
-				continue
+				return
 			}
 			if T, ok := info.Types[x].Type.(*types.Basic); ok {
 				if T.Kind() != types.UntypedFloat && T.Kind() != types.Float64 {
@@ -92,11 +98,11 @@ func run(pass *analysis.Pass) (any, error) {
 
 			rc, ok := astutil.CopyExpr(r)
 			if !ok {
-				continue
+				return
 			}
 			replacement = astutil.SimplifyParentheses(rc)
 		default:
-			continue
+			return
 		}
 		if needConversion && n != 0 {
 			replacement = &ast.CallExpr{
@@ -107,5 +113,6 @@ func run(pass *analysis.Pass) (any, error) {
 		report.Report(pass, node, "could expand call to math.Pow",
 			report.Fixes(edit.Fix("Expand call to math.Pow", edit.ReplaceWithNode(pass.Fset, node, replacement))))
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

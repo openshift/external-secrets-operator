@@ -10,7 +10,6 @@ import (
 	"go/types"
 	"go/version"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"honnef.co/go/tools/analysis/facts/generated"
@@ -223,7 +222,12 @@ func IsCallToAny(pass *analysis.Pass, node ast.Node, names ...string) bool {
 		return false
 	}
 	q := CallName(pass, call)
-	return slices.Contains(names, q)
+	for _, name := range names {
+		if q == name {
+			return true
+		}
+	}
+	return false
 }
 
 func File(pass *analysis.Pass, node Positioner) *ast.File {

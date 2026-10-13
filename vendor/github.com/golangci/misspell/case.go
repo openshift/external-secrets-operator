@@ -39,7 +39,6 @@ func CaseStyle(word string) WordCase {
 	case upperCount == 1 && lowerCount > 0 && word[0] >= 'A' && word[0] <= 'Z':
 		return CaseTitle
 	}
-
 	return CaseUnknown
 }
 

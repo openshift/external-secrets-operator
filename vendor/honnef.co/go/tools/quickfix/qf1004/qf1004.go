@@ -3,22 +3,24 @@ package qf1004
 import (
 	"fmt"
 	"go/ast"
-	"go/token"
+	"go/types"
 
+	"honnef.co/go/tools/analysis/code"
 	"honnef.co/go/tools/analysis/edit"
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
-	typeindexanalyzer "honnef.co/go/tools/internal/analysisinternal/typeindex"
-	"honnef.co/go/tools/internal/typesinternal/typeindex"
+	"honnef.co/go/tools/go/types/typeutil"
+	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "QF1004",
 		Run:      run,
-		Requires: []*analysis.Analyzer{typeindexanalyzer.Analyzer},
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:    `Use \'strings.ReplaceAll\' instead of \'strings.Replace\' with \'n == -1\'`,
@@ -29,37 +31,49 @@ var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 
 var Analyzer = SCAnalyzer.Analyzer
 
-var fns = []struct {
-	path        string
-	name        string
-	replacement string
-}{
-	{"strings", "Replace", "strings.ReplaceAll"},
-	{"strings", "SplitN", "strings.Split"},
-	{"strings", "SplitAfterN", "strings.SplitAfter"},
-	{"bytes", "Replace", "bytes.ReplaceAll"},
-	{"bytes", "SplitN", "bytes.Split"},
-	{"bytes", "SplitAfterN", "bytes.SplitAfter"},
-}
+var stringsReplaceAllQ = pattern.MustParse(`(Or
+	(CallExpr fn@(Symbol "strings.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "strings.SplitN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "strings.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.SplitN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")]))`)
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	// XXX respect minimum Go version
 
 	// FIXME(dh): create proper suggested fix for renamed import
 
-	index := pass.ResultOf[typeindexanalyzer.Analyzer].(*typeindex.Index)
-	for _, fn := range fns {
-		for c := range index.Calls(index.Object(fn.path, fn.name)) {
-			call := c.Node().(*ast.CallExpr)
-			if op, ok := call.Args[len(call.Args)-1].(*ast.UnaryExpr); ok && op.Op == token.SUB {
-				if lit, ok := op.X.(*ast.BasicLit); ok && lit.Value == "1" {
-					report.Report(pass, call.Fun, fmt.Sprintf("could use %s instead", fn.replacement),
-						report.Fixes(edit.Fix(fmt.Sprintf("Use %s instead", fn.replacement),
-							edit.ReplaceWithString(call.Fun, fn.replacement),
-							edit.Delete(op))))
-				}
-			}
+	fn := func(node ast.Node) {
+		matcher, ok := code.Match(pass, stringsReplaceAllQ, node)
+		if !ok {
+			return
 		}
+
+		var replacement string
+		switch typeutil.FuncName(matcher.State["fn"].(*types.Func)) {
+		case "strings.Replace":
+			replacement = "strings.ReplaceAll"
+		case "strings.SplitN":
+			replacement = "strings.Split"
+		case "strings.SplitAfterN":
+			replacement = "strings.SplitAfter"
+		case "bytes.Replace":
+			replacement = "bytes.ReplaceAll"
+		case "bytes.SplitN":
+			replacement = "bytes.Split"
+		case "bytes.SplitAfterN":
+			replacement = "bytes.SplitAfter"
+		default:
+			panic("unreachable")
+		}
+
+		call := node.(*ast.CallExpr)
+		report.Report(pass, call.Fun, fmt.Sprintf("could use %s instead", replacement),
+			report.Fixes(edit.Fix(fmt.Sprintf("Use %s instead", replacement),
+				edit.ReplaceWithString(call.Fun, replacement),
+				edit.Delete(matcher.State["lit"].(ast.Node)))))
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

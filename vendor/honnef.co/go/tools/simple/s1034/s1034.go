@@ -13,13 +13,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "S1034",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:   `Use result of type assertion to simplify cases`,
@@ -39,8 +40,12 @@ var (
 	checkSimplifyTypeSwitchR = pattern.MustParse(`(AssignStmt ident ":=" expr)`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, checkSimplifyTypeSwitchQ) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, checkSimplifyTypeSwitchQ, node)
+		if !ok {
+			return
+		}
 		stmt := node.(*ast.TypeSwitchStmt)
 		expr := m.State["expr"].(ast.Node)
 		ident := m.State["ident"].(*ast.Ident)
@@ -102,12 +107,13 @@ func run(pass *analysis.Pass) (any, error) {
 				for _, offender := range allOffenders {
 					edits = append(edits, edit.ReplaceWithNode(pass.Fset, offender, offender.X))
 				}
-				opts = append(opts, report.Fixes(edit.Fix("Simplify type switch", edits...)))
+				opts = append(opts, report.Fixes(edit.Fix("simplify type switch", edits...)))
 				report.Report(pass, expr, msg, opts...)
 			} else {
 				report.Report(pass, expr, msg, opts...)
 			}
 		}
 	}
+	code.Preorder(pass, fn, (*ast.TypeSwitchStmt)(nil))
 	return nil, nil
 }

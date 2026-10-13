@@ -7,7 +7,7 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// NDJSON is an implementation of the [lint.Formatter] interface
+// NDJSON is an implementation of the Formatter interface
 // which formats the errors to NDJSON stream.
 type NDJSON struct {
 	Metadata lint.FormatterMetadata

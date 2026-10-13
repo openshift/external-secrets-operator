@@ -9,7 +9,13 @@ import (
 )
 
 type ssrf struct {
-	callListRule
+	issue.MetaData
+	gosec.CallList
+}
+
+// ID returns the identifier for this rule
+func (r *ssrf) ID() string {
+	return r.MetaData.ID
 }
 
 // ResolveVar tries to resolve the first argument of a call expression
@@ -37,7 +43,7 @@ func (r *ssrf) ResolveVar(n *ast.CallExpr, c *gosec.Context) bool {
 // Match inspects AST nodes to determine if certain net/http methods are called with variable input
 func (r *ssrf) Match(n ast.Node, c *gosec.Context) (*issue.Issue, error) {
 	// Call expression is using http package directly
-	if node := r.calls.ContainsPkgCallExpr(n, c, false); node != nil {
+	if node := r.ContainsPkgCallExpr(n, c, false); node != nil {
 		if r.ResolveVar(node, c) {
 			return c.NewIssue(n, r.ID(), r.What, r.Severity, r.Confidence), nil
 		}
@@ -47,7 +53,15 @@ func (r *ssrf) Match(n ast.Node, c *gosec.Context) (*issue.Issue, error) {
 
 // NewSSRFCheck detects cases where HTTP requests are sent
 func NewSSRFCheck(id string, _ gosec.Config) (gosec.Rule, []ast.Node) {
-	rule := &ssrf{newCallListRule(id, "Potential HTTP request made with variable url", issue.Medium, issue.Medium)}
+	rule := &ssrf{
+		CallList: gosec.NewCallList(),
+		MetaData: issue.MetaData{
+			ID:         id,
+			What:       "Potential HTTP request made with variable url",
+			Severity:   issue.Medium,
+			Confidence: issue.Medium,
+		},
+	}
 	rule.AddAll("net/http", "Do", "Get", "Head", "Post", "PostForm", "RoundTrip")
 	return rule, []ast.Node{(*ast.CallExpr)(nil)}
 }

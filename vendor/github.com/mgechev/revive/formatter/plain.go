@@ -7,8 +7,8 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// Plain is an implementation of the [lint.Formatter] interface
-// which formats the errors to plain text.
+// Plain is an implementation of the Formatter interface
+// which formats the errors to JSON.
 type Plain struct {
 	Metadata lint.FormatterMetadata
 }
@@ -22,10 +22,7 @@ func (*Plain) Name() string {
 func (*Plain) Format(failures <-chan lint.Failure, _ lint.Config) (string, error) {
 	var sb strings.Builder
 	for failure := range failures {
-		_, err := fmt.Fprintf(&sb, "%v: %s %s\n", failure.Position.Start, failure.Failure, ruleDescriptionURL(failure.RuleName))
-		if err != nil {
-			return "", err
-		}
+		sb.WriteString(fmt.Sprintf("%v: %s %s\n", failure.Position.Start, failure.Failure, ruleDescriptionURL(failure.RuleName)))
 	}
 	return sb.String(), nil
 }

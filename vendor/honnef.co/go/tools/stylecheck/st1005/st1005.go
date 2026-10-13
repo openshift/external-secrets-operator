@@ -42,7 +42,7 @@ Quoting Go Code Review Comments:
 
 var Analyzer = SCAnalyzer.Analyzer
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	objNames := map[*ir.Package]map[string]bool{}
 	irpkg := pass.ResultOf[buildir.Analyzer].(*buildir.IR).Pkg
 	objNames[irpkg] = map[string]bool{}
@@ -86,14 +86,14 @@ func run(pass *analysis.Pass) (any, error) {
 				case '.', ':', '!', '\n':
 					report.Report(pass, call, "error strings should not end with punctuation or newlines")
 				}
-				before, _, ok0 := strings.Cut(s, " ")
-				if !ok0 {
+				idx := strings.IndexByte(s, ' ')
+				if idx == -1 {
 					// single word error message, probably not a real
 					// error but something used in tests or during
 					// debugging
 					continue
 				}
-				word := before
+				word := s[:idx]
 				first, n := utf8.DecodeRuneInString(word)
 				if !unicode.IsUpper(first) {
 					continue

@@ -7,7 +7,7 @@ import (
 	"honnef.co/go/tools/analysis/lint"
 )
 
-func directives(pass *analysis.Pass) (any, error) {
+func directives(pass *analysis.Pass) (interface{}, error) {
 	return lint.ParseDirectives(pass.Files, pass.Fset), nil
 }
 
@@ -16,5 +16,5 @@ var Analyzer = &analysis.Analyzer{
 	Doc:              "extracts linter directives",
 	Run:              directives,
 	RunDespiteErrors: true,
-	ResultType:       reflect.TypeFor[[]lint.Directive](),
+	ResultType:       reflect.TypeOf([]lint.Directive{}),
 }

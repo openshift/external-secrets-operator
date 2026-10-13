@@ -41,7 +41,7 @@ information on how to write good documentation.`,
 
 var Analyzer = SCAnalyzer.Analyzer
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
 		if code.IsInTest(pass, node) {
 			return

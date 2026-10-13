@@ -12,13 +12,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "S1018",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Use \"copy\" for sliding elements`,
@@ -55,24 +56,29 @@ var (
 				(SliceExpr slice offset nil nil)])`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	// TODO(dh): detect bs[i+offset] in addition to bs[offset+i]
 	// TODO(dh): consider merging this function with LintLoopCopy
 	// TODO(dh): detect length that is an expression, not a variable name
 	// TODO(dh): support sliding to a different offset than the beginning of the slice
 
-	for node, m := range code.Matches(pass, checkLoopSlideQ) {
+	fn := func(node ast.Node) {
+		loop := node.(*ast.ForStmt)
+		m, edits, ok := code.MatchAndEdit(pass, checkLoopSlideQ, checkLoopSlideR, loop)
+		if !ok {
+			return
+		}
 		typ := pass.TypesInfo.TypeOf(m.State["slice"].(*ast.Ident))
 		// The pattern probably needs a core type, but All is fine, too. Either way we only accept slices.
 		if !typeutil.All(typ, typeutil.IsSlice) {
-			continue
+			return
 		}
 
-		edits := code.EditMatch(pass, node, m, checkLoopSlideR)
-		report.Report(pass, node, "should use copy() instead of loop for sliding slice elements",
+		report.Report(pass, loop, "should use copy() instead of loop for sliding slice elements",
 			report.ShortRange(),
 			report.FilterGenerated(),
-			report.Fixes(edit.Fix("Use copy() instead of loop", edits...)))
+			report.Fixes(edit.Fix("use copy() instead of loop", edits...)))
 	}
+	code.Preorder(pass, fn, (*ast.ForStmt)(nil))
 	return nil, nil
 }

@@ -3,7 +3,6 @@ package sa5010
 import (
 	"fmt"
 	"go/types"
-	"strings"
 
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
@@ -49,7 +48,7 @@ either.`,
 
 var Analyzer = SCAnalyzer.Analyzer
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	type entry struct {
 		l, r *types.Func
 	}
@@ -57,7 +56,6 @@ func run(pass *analysis.Pass) (any, error) {
 	msc := &pass.ResultOf[buildir.Analyzer].(*buildir.IR).Pkg.Prog.MethodSets
 	for _, fn := range pass.ResultOf[buildir.Analyzer].(*buildir.IR).SrcFuncs {
 		for _, b := range fn.Blocks {
-		instrLoop:
 			for _, instr := range b.Instrs {
 				assert, ok := instr.(*ir.TypeAssert)
 				if !ok {
@@ -76,19 +74,13 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 
 				ms := msc.MethodSet(left)
-				for mr := range righti.Methods() {
+				for i := 0; i < righti.NumMethods(); i++ {
+					mr := righti.Method(i).Origin()
 					sel := ms.Lookup(mr.Pkg(), mr.Name())
 					if sel == nil {
 						continue
 					}
-					ml := sel.Obj().(*types.Func)
-					if ml.Origin() != ml || mr.Origin() != mr {
-						// Give up when we see generics.
-						//
-						// TODO(dh): support generics once go/types gets an
-						// exported API for type unification.
-						continue instrLoop
-					}
+					ml := sel.Obj().(*types.Func).Origin()
 					if types.AssignableTo(ml.Type(), mr.Type()) {
 						continue
 					}
@@ -97,16 +89,15 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 
 				if len(wrong) != 0 {
-					var s strings.Builder
-					s.WriteString(fmt.Sprintf("impossible type assertion; %s and %s contradict each other:",
+					s := fmt.Sprintf("impossible type assertion; %s and %s contradict each other:",
 						types.TypeString(left, types.RelativeTo(pass.Pkg)),
-						types.TypeString(right, types.RelativeTo(pass.Pkg))))
+						types.TypeString(right, types.RelativeTo(pass.Pkg)))
 					for _, e := range wrong {
-						s.WriteString(fmt.Sprintf("\n\twrong type for %s method", e.l.Name()))
-						s.WriteString(fmt.Sprintf("\n\t\thave %s", e.l.Type()))
-						s.WriteString(fmt.Sprintf("\n\t\twant %s", e.r.Type()))
+						s += fmt.Sprintf("\n\twrong type for %s method", e.l.Name())
+						s += fmt.Sprintf("\n\t\thave %s", e.l.Type())
+						s += fmt.Sprintf("\n\t\twant %s", e.r.Type())
 					}
-					report.Report(pass, assert, s.String())
+					report.Report(pass, assert, s)
 				}
 			}
 		}

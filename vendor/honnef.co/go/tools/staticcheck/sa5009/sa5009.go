@@ -127,8 +127,8 @@ func checkImpl(carg *callcheck.Argument, f ir.Value, args []ir.Value) {
 			return []types.Type{key, val}, true
 		case *types.Struct:
 			out := make([]types.Type, 0, T.NumFields())
-			for field := range T.Fields() {
-				out = append(out, field.Type())
+			for i := 0; i < T.NumFields(); i++ {
+				out = append(out, T.Field(i).Type())
 			}
 			return out, true
 		case *types.Array:

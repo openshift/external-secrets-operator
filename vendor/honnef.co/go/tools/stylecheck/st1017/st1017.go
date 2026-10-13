@@ -1,6 +1,8 @@
 package st1017
 
 import (
+	"go/ast"
+
 	"honnef.co/go/tools/analysis/code"
 	"honnef.co/go/tools/analysis/edit"
 	"honnef.co/go/tools/analysis/facts/generated"
@@ -9,13 +11,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "ST1017",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Don't use Yoda conditions`,
@@ -36,12 +39,14 @@ var (
 	checkYodaConditionsR = pattern.MustParse(`(BinaryExpr right tok left)`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, checkYodaConditionsQ) {
-		edits := code.EditMatch(pass, node, m, checkYodaConditionsR)
-		report.Report(pass, node, "don't use Yoda conditions",
-			report.FilterGenerated(),
-			report.Fixes(edit.Fix("Un-Yoda-fy", edits...)))
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		if _, edits, ok := code.MatchAndEdit(pass, checkYodaConditionsQ, checkYodaConditionsR, node); ok {
+			report.Report(pass, node, "don't use Yoda conditions",
+				report.FilterGenerated(),
+				report.Fixes(edit.Fix("un-Yoda-fy", edits...)))
+		}
 	}
+	code.Preorder(pass, fn, (*ast.BinaryExpr)(nil))
 	return nil, nil
 }

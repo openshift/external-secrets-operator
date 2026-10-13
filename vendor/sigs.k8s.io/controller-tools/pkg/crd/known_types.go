@@ -13,13 +13,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 package crd
 
 import (
-	"maps"
-
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-tools/pkg/loader"
 )
 
@@ -27,35 +25,35 @@ import (
 // but don't have validation markers on them (since they're from core Kubernetes).
 var KnownPackages = map[string]PackageOverride{
 	"k8s.io/apimachinery/pkg/apis/meta/v1": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "ObjectMeta", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "ObjectMeta", Package: pkg}] = apiext.JSONSchemaProps{
 			Type: "object",
 		}
-		p.Schemata[TypeIdent{Name: "Time", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "Time", Package: pkg}] = apiext.JSONSchemaProps{
 			Type:   "string",
 			Format: "date-time",
 		}
-		p.Schemata[TypeIdent{Name: "MicroTime", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "MicroTime", Package: pkg}] = apiext.JSONSchemaProps{
 			Type:   "string",
 			Format: "date-time",
 		}
-		p.Schemata[TypeIdent{Name: "Duration", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "Duration", Package: pkg}] = apiext.JSONSchemaProps{
 			// TODO(directxman12): regexp validation for this (or get kube to support it as a format value)
 			Type: "string",
 		}
-		p.Schemata[TypeIdent{Name: "Fields", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "Fields", Package: pkg}] = apiext.JSONSchemaProps{
 			// this is a recursive structure that can't be flattened or, for that matter, properly generated.
 			// so just treat it as an arbitrary map
 			Type:                 "object",
-			AdditionalProperties: &apiextensionsv1.JSONSchemaPropsOrBool{Allows: true},
+			AdditionalProperties: &apiext.JSONSchemaPropsOrBool{Allows: true},
 		}
 		p.AddPackage(pkg) // get the rest of the types
 	},
 
 	"k8s.io/apimachinery/pkg/api/resource": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "Quantity", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "Quantity", Package: pkg}] = apiext.JSONSchemaProps{
 			// TODO(directxman12): regexp validation for this (or get kube to support it as a format value)
 			XIntOrString: true,
-			AnyOf: []apiextensionsv1.JSONSchemaProps{
+			AnyOf: []apiext.JSONSchemaProps{
 				{Type: "integer"},
 				{Type: "string"},
 			},
@@ -65,25 +63,25 @@ var KnownPackages = map[string]PackageOverride{
 	},
 
 	"k8s.io/apimachinery/pkg/runtime": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "RawExtension", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "RawExtension", Package: pkg}] = apiext.JSONSchemaProps{
 			// TODO(directxman12): regexp validation for this (or get kube to support it as a format value)
 			Type:                   "object",
-			XPreserveUnknownFields: new(true),
+			XPreserveUnknownFields: ptr.To(true),
 		}
 		p.AddPackage(pkg) // get the rest of the types
 	},
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "Unstructured", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "Unstructured", Package: pkg}] = apiext.JSONSchemaProps{
 			Type: "object",
 		}
 		p.AddPackage(pkg) // get the rest of the types
 	},
 
 	"k8s.io/apimachinery/pkg/util/intstr": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "IntOrString", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "IntOrString", Package: pkg}] = apiext.JSONSchemaProps{
 			XIntOrString: true,
-			AnyOf: []apiextensionsv1.JSONSchemaProps{
+			AnyOf: []apiext.JSONSchemaProps{
 				{Type: "integer"},
 				{Type: "string"},
 			},
@@ -92,14 +90,14 @@ var KnownPackages = map[string]PackageOverride{
 	},
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "JSON", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
-			XPreserveUnknownFields: new(true),
+		p.Schemata[TypeIdent{Name: "JSON", Package: pkg}] = apiext.JSONSchemaProps{
+			XPreserveUnknownFields: ptr.To(true),
 		}
 		p.AddPackage(pkg) // get the rest of the types
 	},
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1": func(p *Parser, pkg *loader.Package) {
-		p.Schemata[TypeIdent{Name: "JSON", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
-			XPreserveUnknownFields: new(true),
+		p.Schemata[TypeIdent{Name: "JSON", Package: pkg}] = apiext.JSONSchemaProps{
+			XPreserveUnknownFields: ptr.To(true),
 		}
 		p.AddPackage(pkg) // get the rest of the types
 	},
@@ -114,9 +112,9 @@ var ObjectMetaPackages = map[string]PackageOverride{
 		}
 		// This is an allow-listed set of properties of ObjectMeta, other runtime properties are not part of this list
 		// See more discussion: https://github.com/kubernetes-sigs/controller-tools/pull/395#issuecomment-691919433
-		p.Schemata[TypeIdent{Name: "ObjectMeta", Package: pkg}] = apiextensionsv1.JSONSchemaProps{
+		p.Schemata[TypeIdent{Name: "ObjectMeta", Package: pkg}] = apiext.JSONSchemaProps{
 			Type: "object",
-			Properties: map[string]apiextensionsv1.JSONSchemaProps{
+			Properties: map[string]apiext.JSONSchemaProps{
 				"name": {
 					Type: "string",
 				},
@@ -125,24 +123,24 @@ var ObjectMetaPackages = map[string]PackageOverride{
 				},
 				"annotations": {
 					Type: "object",
-					AdditionalProperties: &apiextensionsv1.JSONSchemaPropsOrBool{
-						Schema: &apiextensionsv1.JSONSchemaProps{
+					AdditionalProperties: &apiext.JSONSchemaPropsOrBool{
+						Schema: &apiext.JSONSchemaProps{
 							Type: "string",
 						},
 					},
 				},
 				"labels": {
 					Type: "object",
-					AdditionalProperties: &apiextensionsv1.JSONSchemaPropsOrBool{
-						Schema: &apiextensionsv1.JSONSchemaProps{
+					AdditionalProperties: &apiext.JSONSchemaPropsOrBool{
+						Schema: &apiext.JSONSchemaProps{
 							Type: "string",
 						},
 					},
 				},
 				"finalizers": {
 					Type: "array",
-					Items: &apiextensionsv1.JSONSchemaPropsOrArray{
-						Schema: &apiextensionsv1.JSONSchemaProps{
+					Items: &apiext.JSONSchemaPropsOrArray{
+						Schema: &apiext.JSONSchemaProps{
 							Type: "string",
 						},
 					},
@@ -157,9 +155,13 @@ func AddKnownTypes(parser *Parser) {
 	// ensure everything is there before adding to PackageOverrides
 	// TODO(directxman12): this is a bit of a hack, maybe just use constructors?
 	parser.init()
-	maps.Copy(parser.PackageOverrides, KnownPackages)
+	for pkgName, override := range KnownPackages {
+		parser.PackageOverrides[pkgName] = override
+	}
 	// if we want to generate the embedded ObjectMeta in the CRD we need to add the ObjectMetaPackages
 	if parser.GenerateEmbeddedObjectMeta {
-		maps.Copy(parser.PackageOverrides, ObjectMetaPackages)
+		for pkgName, override := range ObjectMetaPackages {
+			parser.PackageOverrides[pkgName] = override
+		}
 	}
 }

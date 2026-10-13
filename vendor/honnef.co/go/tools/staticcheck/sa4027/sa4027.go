@@ -9,13 +9,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA4027",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `\'(*net/url.URL).Query\' returns a copy, modifying it doesn't change the URL`,
@@ -36,22 +37,28 @@ var Analyzer = SCAnalyzer.Analyzer
 
 var ineffectiveURLQueryAddQ = pattern.MustParse(`(CallExpr (SelectorExpr (CallExpr (SelectorExpr recv (Ident "Query")) []) (Ident meth)) _)`)
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	// TODO(dh): We could make this check more complex and detect
 	// pointless modifications of net/url.Values in general, but that
 	// requires us to get the state machine correct, else we'll cause
 	// false positives.
 
-	for node, m := range code.Matches(pass, ineffectiveURLQueryAddQ) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, ineffectiveURLQueryAddQ, node)
+		if !ok {
+			return
+		}
 		if !code.IsOfPointerToTypeWithName(pass, m.State["recv"].(ast.Expr), "net/url.URL") {
-			continue
+			return
 		}
 		switch m.State["meth"].(string) {
 		case "Add", "Del", "Set":
 		default:
-			continue
+			return
 		}
 		report.Report(pass, node, "(*net/url.URL).Query returns a copy, modifying it doesn't change the URL")
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
+
 	return nil, nil
 }

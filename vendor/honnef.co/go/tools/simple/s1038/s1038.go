@@ -13,13 +13,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "S1038",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title:   "Unnecessarily complex way of printing formatted string",
@@ -103,7 +104,7 @@ var (
 	}
 )
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	fmtPrintf := func(node ast.Node) {
 		m, ok := code.Match(pass, checkPrintSprintQ, node)
 		if !ok {
@@ -181,9 +182,6 @@ func run(pass *analysis.Pass) (any, error) {
 		// TODO(dh): add suggested fixes
 		methSprintf(node)
 		pkgSprintf(node)
-	}
-	if !code.CouldMatchAny(pass, checkLogSprintfQ, checkPrintSprintQ, checkTestingErrorSprintfQ) {
-		return nil, nil
 	}
 	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil

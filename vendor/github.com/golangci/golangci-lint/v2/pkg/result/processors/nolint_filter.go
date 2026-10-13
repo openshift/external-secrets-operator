@@ -37,8 +37,11 @@ func (i *ignoredRange) doesMatch(issue *result.Issue) bool {
 	// only allow selective nolinting of nolintlint
 	nolintFoundForLinter := len(i.linters) == 0 && issue.FromLinter != nolintlint.LinterName
 
-	if slices.Contains(i.linters, issue.FromLinter) {
-		nolintFoundForLinter = true
+	for _, linterName := range i.linters {
+		if linterName == issue.FromLinter {
+			nolintFoundForLinter = true
+			break
+		}
 	}
 
 	if nolintFoundForLinter {

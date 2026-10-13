@@ -9,13 +9,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA6006",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Using io.WriteString to write \'[]byte\'`,
@@ -35,12 +36,18 @@ var Analyzer = SCAnalyzer.Analyzer
 
 var ioWriteStringConversion = pattern.MustParse(`(CallExpr (Symbol "io.WriteString") [_ (CallExpr (Builtin "string") [arg])])`)
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, ioWriteStringConversion) {
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		m, ok := code.Match(pass, ioWriteStringConversion, node)
+		if !ok {
+			return
+		}
 		if !code.IsOfStringConvertibleByteSlice(pass, m.State["arg"].(ast.Expr)) {
-			continue
+			return
 		}
 		report.Report(pass, node, "use io.Writer.Write instead of converting from []byte to string to use io.WriteString")
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
+
 	return nil, nil
 }

@@ -15,9 +15,9 @@ type RuleConfig struct {
 	Arguments Arguments
 	Severity  Severity
 	Disabled  bool
-	// Exclude is rule-level file excludes, TOML related (strings).
+	// Exclude - rule-level file excludes, TOML related (strings)
 	Exclude []string
-	// excludeFilters is regex-based file filters, initialized from Exclude.
+	// excludeFilters - regex-based file filters, initialized from Exclude
 	excludeFilters []*FileFilter
 }
 

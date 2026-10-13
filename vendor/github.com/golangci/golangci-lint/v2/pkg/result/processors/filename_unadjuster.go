@@ -3,7 +3,6 @@ package processors
 import (
 	"go/parser"
 	"go/token"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -42,14 +41,14 @@ func NewFilenameUnadjuster(pkgs []*packages.Package, log logutils.Log) *Filename
 	startedAt := time.Now()
 
 	var wg sync.WaitGroup
+	wg.Add(len(pkgs))
 
-	for chunk := range slices.Chunk(pkgs, len(pkgs)/2000+1) {
-		wg.Go(func() {
-			for _, pkg := range chunk {
-				// It's important to call func here to run GC
-				processUnadjusterPkg(&m, pkg, log)
-			}
-		})
+	for _, pkg := range pkgs {
+		go func(pkg *packages.Package) {
+			// It's important to call func here to run GC
+			processUnadjusterPkg(&m, pkg, log)
+			wg.Done()
+		}(pkg)
 	}
 
 	wg.Wait()

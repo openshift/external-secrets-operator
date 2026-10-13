@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -24,20 +23,11 @@ func main() {
 	if err == nil {
 		err = cmd.Wait()
 	}
-	if err != nil {
-		var e interface{ ExitCode() int }
-		if errors.As(err, &e) {
-			printErrorToStderr := true
-			if _, ok := err.(interface{ ExitCode() int }); ok {
-				// Avoid printing the error to stderr if the exit code error wasn't
-				// wrapped with another error providing context.
-				printErrorToStderr = false
-			}
-			if printErrorToStderr {
-				fmt.Fprintln(os.Stderr, err)
-			}
-			os.Exit(e.ExitCode())
-		}
+	switch err := err.(type) {
+	case nil:
+	case interface{ ExitCode() int }:
+		os.Exit(err.ExitCode())
+	default:
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

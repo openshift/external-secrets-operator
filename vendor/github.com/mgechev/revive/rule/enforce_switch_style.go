@@ -45,20 +45,12 @@ func (r *EnforceSwitchStyleRule) Apply(file *lint.File, _ lint.Arguments) []lint
 	var failures []lint.Failure
 	astFile := file.AST
 	ast.Inspect(astFile, func(n ast.Node) bool {
-		var body *ast.BlockStmt
-		var node ast.Node
-		switch s := n.(type) {
-		case *ast.SwitchStmt:
-			body = s.Body
-			node = s
-		case *ast.TypeSwitchStmt:
-			body = s.Body
-			node = s
-		default:
+		switchNode, ok := n.(*ast.SwitchStmt)
+		if !ok {
 			return true // not a switch statement
 		}
 
-		defaultClause, isLast := r.seekDefaultCase(body)
+		defaultClause, isLast := r.seekDefaultCase(switchNode.Body)
 		hasDefault := defaultClause != nil
 
 		if !hasDefault && r.allowNoDefault {
@@ -67,10 +59,10 @@ func (r *EnforceSwitchStyleRule) Apply(file *lint.File, _ lint.Arguments) []lint
 
 		if !hasDefault && !r.allowNoDefault {
 			// switch without default
-			if !r.allBranchesEndWithJumpStmt(body) {
+			if !r.allBranchesEndWithJumpStmt(switchNode) {
 				failures = append(failures, lint.Failure{
 					Confidence: 1,
-					Node:       node,
+					Node:       switchNode,
 					Category:   lint.FailureCategoryStyle,
 					Failure:    "switch must have a default case clause",
 				})
@@ -111,8 +103,8 @@ func (*EnforceSwitchStyleRule) seekDefaultCase(body *ast.BlockStmt) (defaultClau
 	return defaultClause, defaultClause == last
 }
 
-func (*EnforceSwitchStyleRule) allBranchesEndWithJumpStmt(body *ast.BlockStmt) bool {
-	for _, stmt := range body.List {
+func (*EnforceSwitchStyleRule) allBranchesEndWithJumpStmt(switchStmt *ast.SwitchStmt) bool {
+	for _, stmt := range switchStmt.Body.List {
 		caseClause := stmt.(*ast.CaseClause) // safe to assume stmt is a case clause
 
 		caseBody := caseClause.Body

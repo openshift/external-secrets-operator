@@ -33,18 +33,21 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/textlogger"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	configv1 "github.com/openshift/api/config/v1"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
 	"github.com/openshift/external-secrets-operator/pkg/operator"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 	"github.com/openshift/external-secrets-operator/pkg/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -98,6 +101,111 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// disableHTTP2 disables HTTP/2 on a TLS listener, since HTTP/2 is prone to
+// known vulnerabilities (e.g. Rapid Reset) that are not worth the risk for the
+// operator's own serving endpoints.
+func disableHTTP2(c *tls.Config) {
+	setupLog.Info("disabling http/2 for the metrics server")
+	c.NextProtos = []string{"http/1.1"}
+}
+
+// configureMetricsServerOptions assembles the metrics server options, wiring up
+// secure serving, the OpenShift service CA for client verification, optional
+// HTTP/2 disabling, and the cluster TLS profile. All TLS options are collected
+// before TLSOpts is assigned so that every option (including the cluster TLS
+// profile) is actually honored by the metrics server.
+func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr, metricsCerts string, restConfig *rest.Config) (metricsserver.Options, error) {
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	opts := metricsserver.Options{
+		BindAddress: metricsAddr,
+
+		// FilterProvider is used to protect the metrics endpoint with authn/authz.
+		// These configurations ensure that only authorized users and service accounts
+		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
+		// https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/filters#WithAuthenticationAndAuthorization
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+
+	var tlsOpts []func(*tls.Config)
+	if !enableHTTP2 {
+		// if the enable-http2 flag is false (the default), http/2 should be disabled
+		// due to its vulnerabilities.
+		tlsOpts = append(tlsOpts, disableHTTP2)
+	}
+
+	if secureMetrics {
+		setupLog.Info("setting up secure metrics server")
+		opts.SecureServing = secureMetrics
+
+		if metricsCerts != "" {
+			if err := validateMetricsCertDir(metricsCerts); err != nil {
+				return opts, fmt.Errorf("metrics certificate validation failed: %w", err)
+			}
+			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
+			opts.CertDir = metricsCerts
+			opts.CertName = metricsCertFileName
+			opts.KeyName = metricsKeyFileName
+		}
+
+		certPool, err := loadOpenShiftCACertPool()
+		if err != nil {
+			return opts, fmt.Errorf("failed to load OpenShift CA certificate: %w", err)
+		}
+		setupLog.Info("using openshift service CA for metrics client verification")
+		tlsOpts = append(tlsOpts, func(c *tls.Config) {
+			c.ClientCAs = certPool
+		})
+	}
+
+	clusterTLSOpt, err := resolveClusterTLSOpt(restConfig)
+	if err != nil {
+		return opts, err
+	}
+	if clusterTLSOpt != nil {
+		tlsOpts = append(tlsOpts, clusterTLSOpt)
+	}
+
+	opts.TLSOpts = tlsOpts
+	return opts, nil
+}
+
+// resolveClusterTLSOpt resolves the cluster TLS profile for the operator's own
+// serving endpoints and returns a tls.Config mutator that applies it, or nil
+// when no profile is configured. It uses an uncached client because the manager
+// cache is not started yet.
+func resolveClusterTLSOpt(restConfig *rest.Config) (func(*tls.Config), error) {
+	uncachedClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uncached client for TLS profile resolution: %w", err)
+	}
+	tlsSpec, err := tlsprofile.ResolveHonoredTLSProfile(
+		ctx,
+		tlsprofile.NewClientReaderAPIServerFetch(tlsprofile.NewClientReaderObjectGetter(uncachedClient)),
+		"external-secrets-operator",
+		tlsprofile.FetchErrorPropagateExceptNotFound,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
+	}
+	if tlsSpec == nil {
+		return nil, nil
+	}
+	tlsCfg, err := tlsprofile.ClientTLSConfig(tlsSpec, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config from cluster profile: %w", err)
+	}
+	setupLog.Info("applying cluster TLS profile to operator serving endpoints",
+		"minTLSVersion", tlsSpec.MinTLSVersion)
+	return func(c *tls.Config) {
+		c.MinVersion = tlsCfg.MinVersion
+		c.CipherSuites = tlsCfg.CipherSuites
+		c.CurvePreferences = tlsCfg.CurvePreferences
+	}, nil
+}
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
@@ -106,6 +214,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(crdv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.AddToScheme(scheme))
 
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -120,8 +229,6 @@ func main() {
 		secureMetrics        bool
 		metricsAddr          string
 		metricsCerts         string
-		metricsTLSOpts       []func(*tls.Config)
-		webhookTLSOpts       []func(*tls.Config)
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
@@ -133,7 +240,7 @@ func main() {
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
-		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.IntVar(&logLevel, "v", 1, "operator log verbosity")
 	flag.StringVar(&metricsCerts, "metrics-cert-dir", "",
 		"Secret name containing the certificates for the metrics server which should be present in operator namespace. "+
@@ -145,70 +252,20 @@ func main() {
 
 	setupLog.Info("starting external-secrets-operator", "version", version.String())
 
-	if !enableHTTP2 {
-		// if the enable-http2 flag is false (the default), http/2 should be disabled
-		// due to its vulnerabilities.
-		disableHTTP2 := func(c *tls.Config) {
-			setupLog.Info("disabling http/2 for both metrics and webhook servers")
-			c.NextProtos = []string{"http/1.1"}
-		}
-		metricsTLSOpts = append(metricsTLSOpts, disableHTTP2)
-		webhookTLSOpts = append(webhookTLSOpts, disableHTTP2)
-	}
-
-	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	})
-
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
-	metricsServerOptions := metricsserver.Options{
-		BindAddress: metricsAddr,
-
-		// FilterProvider is used to protect the metrics endpoint with authn/authz.
-		// These configurations ensure that only authorized users and service accounts
-		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-		// https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/filters#WithAuthenticationAndAuthorization
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
-	}
-
-	if secureMetrics {
-		setupLog.Info("setting up secure metrics server")
-		metricsServerOptions.SecureServing = secureMetrics
-
-		if metricsCerts != "" {
-			if err := validateMetricsCertDir(metricsCerts); err != nil {
-				setupLog.Error(err, "metrics certificate validation failed")
-				os.Exit(1)
-			}
-			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
-			metricsServerOptions.CertDir = metricsCerts
-			metricsServerOptions.CertName = metricsCertFileName
-			metricsServerOptions.KeyName = metricsKeyFileName
-		}
-
-		certPool, err := loadOpenShiftCACertPool()
-		if err != nil {
-			setupLog.Error(err, "failed to load OpenShift CA certificate")
-			os.Exit(1)
-		}
-		setupLog.Info("using openshift service CA for metrics client verification")
-		metricsTLSOpts = append(metricsTLSOpts, func(c *tls.Config) {
-			c.ClientCAs = certPool
-		})
-		metricsServerOptions.TLSOpts = metricsTLSOpts
-	}
-
 	// Create the cache builder with CRD checks
 	restConfig := ctrl.GetConfigOrDie()
+
+	metricsServerOptions, err := configureMetricsServerOptions(secureMetrics, enableHTTP2, metricsAddr, metricsCerts, restConfig)
+	if err != nil {
+		setupLog.Error(err, "failed to configure metrics server")
+		os.Exit(1)
+	}
+
 	cacheBuilder := escontroller.NewCacheBuilder(restConfig)
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "de6a4747.externalsecretsoperator.operator.openshift.io",

@@ -27,26 +27,19 @@ type GomegaExpression struct {
 	origAssertionFuncName string
 	actualFuncName        string
 
-	isAsync bool
+	isAsync          bool
+	isUsingGomegaVar bool
 
 	actual  *actual.Actual
 	matcher *matcher.Matcher
 
-	handler *gomegahandler.Handler
+	handler gomegahandler.Handler
 }
 
-func New(origExpr *ast.CallExpr, pass *analysis.Pass, handler *gomegahandler.Handler, timePkg string) (gexp *GomegaExpression) {
-	info := handler.GetGomegaBasicInfo(origExpr)
-	if info == nil {
-		return nil
-	}
-
-	switch info.RootCallType {
-	case gomegahandler.AsyncAssertionCall, gomegahandler.SyncAssertionCall:
-		// Okay, that's what we want here.
-	default:
-		// Cannot handle anything else.
-		return nil
+func New(origExpr *ast.CallExpr, pass *analysis.Pass, handler gomegahandler.Handler, timePkg string) (*GomegaExpression, bool) {
+	info, ok := handler.GetGomegaBasicInfo(origExpr)
+	if !ok || !gomegainfo.IsActualMethod(info.MethodName) {
+		return nil, false
 	}
 
 	origSel, ok := origExpr.Fun.(*ast.SelectorExpr)
@@ -54,42 +47,42 @@ func New(origExpr *ast.CallExpr, pass *analysis.Pass, handler *gomegahandler.Han
 		return &GomegaExpression{
 			orig:           origExpr,
 			actualFuncName: info.MethodName,
-		}
+		}, true
 	}
 
 	exprClone := astcopy.CallExpr(origExpr)
 	selClone := exprClone.Fun.(*ast.SelectorExpr)
 
-	origActual := info.RootCall
+	origActual := handler.GetActualExpr(origSel)
 	if origActual == nil {
-		return nil
+		return nil, false
 	}
 
-	actualClone := handler.GetActualExprClone(origActual, origSel, selClone)
+	actualClone := handler.GetActualExprClone(origSel, selClone)
 	if actualClone == nil {
-		return nil
+		return nil, false
 	}
 
-	actl, ok := actual.New(origExpr, exprClone, actualClone, pass, timePkg, info)
+	actl, ok := actual.New(origExpr, exprClone, origActual, actualClone, pass, timePkg, info)
 	if !ok {
-		return nil
+		return nil, false
 	}
 
 	origMatcher, ok := origExpr.Args[0].(*ast.CallExpr)
 	if !ok {
-		return nil
+		return nil, false
 	}
 
 	matcherClone := exprClone.Args[0].(*ast.CallExpr)
 
-	mtchr := matcher.New(origMatcher, matcherClone, pass, handler)
-	if mtchr == nil {
-		return nil
+	mtchr, ok := matcher.New(origMatcher, matcherClone, pass, handler)
+	if !ok {
+		return nil, false
 	}
 
 	exprClone.Args[0] = mtchr.Clone
 
-	gexp = &GomegaExpression{
+	gexp := &GomegaExpression{
 		orig:  origExpr,
 		clone: exprClone,
 
@@ -97,7 +90,8 @@ func New(origExpr *ast.CallExpr, pass *analysis.Pass, handler *gomegahandler.Han
 		origAssertionFuncName: origSel.Sel.Name,
 		actualFuncName:        info.MethodName,
 
-		isAsync: actl.IsAsync(),
+		isAsync:          actl.IsAsync(),
+		isUsingGomegaVar: info.UseGomegaVar,
 
 		actual:  actl,
 		matcher: mtchr,
@@ -109,7 +103,7 @@ func New(origExpr *ast.CallExpr, pass *analysis.Pass, handler *gomegahandler.Han
 		gexp.ReverseAssertionFuncLogic()
 	}
 
-	return gexp
+	return gexp, true
 }
 
 func (e *GomegaExpression) IsMissingAssertion() bool {
@@ -139,6 +133,10 @@ func (e *GomegaExpression) GetOrigAssertFuncName() string {
 
 func (e *GomegaExpression) IsAsync() bool {
 	return e.isAsync
+}
+
+func (e *GomegaExpression) IsUsingGomegaVar() bool {
+	return e.isUsingGomegaVar
 }
 
 func (e *GomegaExpression) ReverseAssertionFuncLogic() {

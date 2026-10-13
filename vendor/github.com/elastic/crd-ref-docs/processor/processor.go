@@ -46,10 +46,9 @@ var ignoredCommentRegex = regexp.MustCompile(`\s*^(?i:\+|copyright)`)
 type groupVersionInfo struct {
 	schema.GroupVersion
 	*loader.Package
-	doc     string
-	kinds   map[string]struct{}
-	types   types.TypeMap
-	markers markers.MarkerValues
+	doc   string
+	kinds map[string]struct{}
+	types types.TypeMap
 }
 
 func Process(config *config.Config) ([]types.GroupVersionDetails, error) {
@@ -107,7 +106,7 @@ func Process(config *config.Config) ([]types.GroupVersionDetails, error) {
 				zap.S().Fatalw("Type not loaded", "type", key)
 			}
 		}
-		details.Markers = gvi.markers
+
 		gvDetails = append(gvDetails, details)
 	}
 
@@ -248,9 +247,8 @@ func (p *processor) extractGroupVersionIfExists(collector *markers.Collector, pk
 			Group:   groupName.(string),
 			Version: version,
 		},
-		Package: pkg,
 		doc:     p.extractPkgDocumentation(pkg),
-		markers: markerValues,
+		Package: pkg,
 	}
 
 	return gvInfo
@@ -300,7 +298,7 @@ func (p *processor) processType(pkg *loader.Package, parentType *types.Type, t g
 	}
 
 	if depth > p.maxDepth {
-		zap.S().Warnw("Not loading type due to reaching max recursion depth", "type", t.String())
+		zap.S().Debugw("Not loading type due to reaching max recursion depth", "type", t.String())
 		typeDef.Kind = types.UnknownKind
 		return typeDef
 	}
@@ -505,14 +503,6 @@ func mkRegistry(customMarkers []config.Marker) (*markers.Registry, error) {
 		}
 	}
 
-	// Register k8s:* markers - sig apimachinery plans to unify CRD and native types on these.
-	if err := registry.Define("k8s:required", markers.DescribesField, struct{}{}); err != nil {
-		return nil, err
-	}
-	if err := registry.Define("k8s:optional", markers.DescribesField, struct{}{}); err != nil {
-		return nil, err
-	}
-
 	for _, marker := range customMarkers {
 		t := markers.DescribesField
 		switch marker.Target {
@@ -552,7 +542,7 @@ func parseMarkers(markers markers.MarkerValues) (string, []string) {
 			name := strings.TrimPrefix(name, "kubebuilder:validation:")
 
 			switch name {
-			case "items:Pattern", "Pattern":
+			case "Pattern":
 				value = fmt.Sprintf("`%s`", value)
 			// FIXME: XValidation currently removed due to being long and difficult to read.
 			// E.g. "XValidation: {self.page < 200 Please start a new book.}"
@@ -562,29 +552,16 @@ func parseMarkers(markers markers.MarkerValues) (string, []string) {
 			validation = append(validation, fmt.Sprintf("%s: %v", name, value))
 		}
 
-		switch v := value.(type) {
-		case crdmarkers.KubernetesDefault:
-			defaultValue = fmt.Sprintf("%v", v.Value)
-		case crdmarkers.Default:
-			defaultValue = fmt.Sprintf("%v", v.Value)
+		if name == "kubebuilder:default" {
+			if value, ok := value.(crdmarkers.Default); ok {
+				defaultValue = fmt.Sprintf("%v", value.Value)
+				if strings.HasPrefix(defaultValue, "map[") {
+					defaultValue = strings.TrimPrefix(defaultValue, "map[")
+					defaultValue = strings.TrimSuffix(defaultValue, "]")
+					defaultValue = fmt.Sprintf("{ %s }", defaultValue)
+				}
+			}
 		}
-
-    // Handle standalone +required and +k8s:required marker
-		// This is equivalent to +kubebuilder:validation:Required
-		if name == "required" || name == "k8s:required" {
-			validation = append(validation, "Required: {}")
-		}
-		// Handle standalone +optional and +k8s:optional marker
-		// This is equivalent to +kubebuilder:validation:Optional
-		if name == "optional" || name == "k8s:optional" {
-			validation = append(validation, "Optional: {}")
-		}
-	}
-
-	if strings.HasPrefix(defaultValue, "map[") {
-		defaultValue = strings.TrimPrefix(defaultValue, "map[")
-		defaultValue = strings.TrimSuffix(defaultValue, "]")
-		defaultValue = fmt.Sprintf("{ %s }", defaultValue)
 	}
 
 	return defaultValue, validation

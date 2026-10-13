@@ -7,8 +7,8 @@ import (
 	"github.com/mgechev/revive/lint"
 )
 
-// Unix is an implementation of the [lint.Formatter] interface
-// which formats the errors to a simple line based error format:
+// Unix is an implementation of the Formatter interface
+// which formats the errors to a simple line based error format
 //
 //	main.go:24:9: [errorf] should replace errors.New(fmt.Sprintf(...)) with fmt.Errorf(...)
 type Unix struct {
@@ -24,10 +24,7 @@ func (*Unix) Name() string {
 func (*Unix) Format(failures <-chan lint.Failure, _ lint.Config) (string, error) {
 	var sb strings.Builder
 	for failure := range failures {
-		_, err := fmt.Fprintf(&sb, "%v: [%s] %s\n", failure.Position.Start, failure.RuleName, failure.Failure)
-		if err != nil {
-			return "", err
-		}
+		sb.WriteString(fmt.Sprintf("%v: [%s] %s\n", failure.Position.Start, failure.RuleName, failure.Failure))
 	}
 	return sb.String(), nil
 }

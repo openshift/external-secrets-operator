@@ -1,11 +1,3 @@
 out.asciidoc
 out.md
-
-# editor and IDE paraphernalia
 .idea
-.vscode
-*.swp
-*.sw
-*.iml
-*~
-*.DS_Store

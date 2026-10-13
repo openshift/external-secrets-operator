@@ -4,11 +4,8 @@ package sqlbuilders
 import (
 	"go/ast"
 	"go/token"
-	"go/types"
 	"strings"
 )
-
-const bunPkgPath = "github.com/uptrace/bun"
 
 // BunChecker checks github.com/uptrace/bun for SELECT * patterns.
 type BunChecker struct{}
@@ -23,15 +20,28 @@ func (c *BunChecker) Name() string {
 	return "bun"
 }
 
-// IsApplicable checks if the call is from bun using type information.
-func (c *BunChecker) IsApplicable(info *types.Info, call *ast.CallExpr) bool {
+// IsApplicable checks if the call might be from bun.
+func (c *BunChecker) IsApplicable(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 
-	// Check if the receiver type is from bun package
-	return IsTypeFromPackage(info, sel.X, bunPkgPath)
+	// bun methods to check
+	bunMethods := []string{
+		"NewSelect", "NewInsert", "NewUpdate", "NewDelete",
+		"Column", "ColumnExpr", "ExcludeColumn",
+		"Model", "Scan", "Exec",
+		"NewRaw", "Raw",
+	}
+
+	for _, method := range bunMethods {
+		if sel.Sel.Name == method {
+			return true
+		}
+	}
+
+	return false
 }
 
 // CheckSelectStar checks for SELECT * in bun calls.

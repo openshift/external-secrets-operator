@@ -18,8 +18,6 @@ type EarlyReturnRule struct {
 	allowJump bool
 }
 
-var _ lint.ConfigurableRule = (*EarlyReturnRule)(nil)
-
 // Configure validates the rule configuration, and configures the rule accordingly.
 //
 // Configuration implements the [lint.ConfigurableRule] interface.

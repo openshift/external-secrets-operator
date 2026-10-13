@@ -44,7 +44,7 @@ func newAnalyzer(cfg *ConflictingMarkersConfig) *analysis.Analyzer {
 	for _, conflictSet := range cfg.Conflicts {
 		for _, set := range conflictSet.Sets {
 			for _, markerID := range set {
-				markers.DefaultRegistry().Register(markers.IdentifierFromString(markerID))
+				markers.DefaultRegistry().Register(markerID)
 			}
 		}
 	}
@@ -94,14 +94,8 @@ func checkConflict(pass *analysis.Pass, field *ast.Field, markers markers.Marker
 		foundMarkers := sets.New[string]()
 
 		for _, markerID := range set {
-			if strings.Contains(markerID, "=") {
-				if markers.HasWithValue(markerID) {
-					foundMarkers.Insert(markerID)
-				}
-			} else {
-				if markers.Has(markerID) {
-					foundMarkers.Insert(markerID)
-				}
+			if markers.Has(markerID) {
+				foundMarkers.Insert(markerID)
 			}
 		}
 		// Only add the set if it has at least one marker

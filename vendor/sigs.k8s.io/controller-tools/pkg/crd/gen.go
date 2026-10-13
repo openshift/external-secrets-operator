@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"slices"
+	"sort"
 	"strings"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	crdmarkers "sigs.k8s.io/controller-tools/pkg/crd/markers"
 	"sigs.k8s.io/controller-tools/pkg/genall"
@@ -108,15 +108,15 @@ func (Generator) RegisterMarkers(into *markers.Registry) error {
 }
 
 // transformRemoveCRDStatus ensures we do not write the CRD status field.
-func transformRemoveCRDStatus(obj map[string]any) error {
+func transformRemoveCRDStatus(obj map[string]interface{}) error {
 	delete(obj, "status")
 	return nil
 }
 
 // transformPreserveUnknownFields adds spec.preserveUnknownFields=value.
-func transformPreserveUnknownFields(value bool) func(map[string]any) error {
-	return func(obj map[string]any) error {
-		if spec, ok := obj["spec"].(map[any]any); ok {
+func transformPreserveUnknownFields(value bool) func(map[string]interface{}) error {
+	return func(obj map[string]interface{}) error {
+		if spec, ok := obj["spec"].(map[interface{}]interface{}); ok {
 			spec["preserveUnknownFields"] = value
 		}
 		return nil
@@ -185,9 +185,9 @@ func (g Generator) Generate(ctx *genall.GenerationContext) error {
 		// Prevent the top level metadata for the CRD to be generate regardless of the intention in the arguments
 		FixTopLevelMetadata(crdRaw)
 
-		versionedCRDs := make([]any, len(crdVersions))
+		versionedCRDs := make([]interface{}, len(crdVersions))
 		for i, ver := range crdVersions {
-			conv, err := AsVersion(crdRaw, schema.GroupVersion{Group: apiextensionsv1.SchemeGroupVersion.Group, Version: ver})
+			conv, err := AsVersion(crdRaw, schema.GroupVersion{Group: apiext.SchemeGroupVersion.Group, Version: ver})
 			if err != nil {
 				return err
 			}
@@ -195,14 +195,14 @@ func (g Generator) Generate(ctx *genall.GenerationContext) error {
 		}
 
 		for i, crd := range versionedCRDs {
-			removeDescriptionFromMetadata(crd.(*apiextensionsv1.CustomResourceDefinition))
+			removeDescriptionFromMetadata(crd.(*apiext.CustomResourceDefinition))
 			var fileName string
 			if i == 0 {
 				fileName = fmt.Sprintf("%s_%s.yaml", crdRaw.Spec.Group, crdRaw.Spec.Names.Plural)
 			} else {
 				fileName = fmt.Sprintf("%s_%s.%s.yaml", crdRaw.Spec.Group, crdRaw.Spec.Names.Plural, crdVersions[i])
 			}
-			if err := ctx.WriteYAML(fileName, headerText, []any{crd}, yamlOpts...); err != nil {
+			if err := ctx.WriteYAML(fileName, headerText, []interface{}{crd}, yamlOpts...); err != nil {
 				return err
 			}
 		}
@@ -211,7 +211,7 @@ func (g Generator) Generate(ctx *genall.GenerationContext) error {
 	return nil
 }
 
-func removeDescriptionFromMetadata(crd *apiextensionsv1.CustomResourceDefinition) {
+func removeDescriptionFromMetadata(crd *apiext.CustomResourceDefinition) {
 	for _, versionSpec := range crd.Spec.Versions {
 		if versionSpec.Schema != nil {
 			removeDescriptionFromMetadataProps(versionSpec.Schema.OpenAPIV3Schema)
@@ -219,7 +219,7 @@ func removeDescriptionFromMetadata(crd *apiextensionsv1.CustomResourceDefinition
 	}
 }
 
-func removeDescriptionFromMetadataProps(v *apiextensionsv1.JSONSchemaProps) {
+func removeDescriptionFromMetadataProps(v *apiext.JSONSchemaProps) {
 	if m, ok := v.Properties["metadata"]; ok {
 		meta := &m
 		if meta.Description != "" {
@@ -230,12 +230,12 @@ func removeDescriptionFromMetadataProps(v *apiextensionsv1.JSONSchemaProps) {
 }
 
 // FixTopLevelMetadata resets the schema for the top-level metadata field which is needed for CRD validation
-func FixTopLevelMetadata(crd apiextensionsv1.CustomResourceDefinition) {
+func FixTopLevelMetadata(crd apiext.CustomResourceDefinition) {
 	for _, v := range crd.Spec.Versions {
 		if v.Schema != nil && v.Schema.OpenAPIV3Schema != nil && v.Schema.OpenAPIV3Schema.Properties != nil {
 			schemaProperties := v.Schema.OpenAPIV3Schema.Properties
 			if _, ok := schemaProperties["metadata"]; ok {
-				schemaProperties["metadata"] = apiextensionsv1.JSONSchemaProps{Type: "object"}
+				schemaProperties["metadata"] = apiext.JSONSchemaProps{Type: "object"}
 			}
 		}
 	}
@@ -243,7 +243,7 @@ func FixTopLevelMetadata(crd apiextensionsv1.CustomResourceDefinition) {
 
 // addAttribution adds attribution info to indicate controller-gen tool was used
 // to generate this CRD definition along with the version info.
-func addAttribution(crd *apiextensionsv1.CustomResourceDefinition) {
+func addAttribution(crd *apiext.CustomResourceDefinition) {
 	if crd.ObjectMeta.Annotations == nil {
 		crd.ObjectMeta.Annotations = map[string]string{}
 	}
@@ -328,8 +328,8 @@ func FindKubeKinds(parser *Parser, metav1Pkg *loader.Package) []schema.GroupKind
 	for groupKind := range kubeKinds {
 		groupKindList = append(groupKindList, groupKind)
 	}
-	slices.SortStableFunc(groupKindList, func(a, b schema.GroupKind) int {
-		return strings.Compare(a.String(), b.String())
+	sort.Slice(groupKindList, func(i, j int) bool {
+		return groupKindList[i].String() < groupKindList[j].String()
 	})
 
 	return groupKindList

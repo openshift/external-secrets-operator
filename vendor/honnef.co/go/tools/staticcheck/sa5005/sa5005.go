@@ -39,7 +39,7 @@ to zero before the object is being passed to the finalizer.`,
 
 var Analyzer = SCAnalyzer.Analyzer
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	cb := func(caller *ir.Function, site ir.CallInstruction, callee *ir.Function) {
 		if callee.RelString(nil) != "runtime.SetFinalizer" {
 			return

@@ -11,13 +11,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "S1037",
 		Run:      run,
-		Requires: append([]*analysis.Analyzer{generated.Analyzer}, code.RequiredAnalyzers...),
+		Requires: []*analysis.Analyzer{inspect.Analyzer, generated.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Elaborate way of sleeping`,
@@ -36,20 +37,23 @@ var (
 	checkElaborateSleepR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "time") (Ident "Sleep")) [arg])`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
-	for node, m := range code.Matches(pass, checkElaborateSleepQ) {
-		if body, ok := m.State["body"].([]ast.Stmt); ok && len(body) == 0 {
-			report.Report(pass, node, "should use time.Sleep instead of elaborate way of sleeping",
-				report.ShortRange(),
-				report.FilterGenerated(),
-				report.Fixes(edit.Fix("Use time.Sleep", edit.ReplaceWithPattern(pass.Fset, node, checkElaborateSleepR, m.State))))
-		} else {
-			// TODO(dh): we could make a suggested fix if the body
-			// doesn't declare or shadow any identifiers
-			report.Report(pass, node, "should use time.Sleep instead of elaborate way of sleeping",
-				report.ShortRange(),
-				report.FilterGenerated())
+func run(pass *analysis.Pass) (interface{}, error) {
+	fn := func(node ast.Node) {
+		if m, ok := code.Match(pass, checkElaborateSleepQ, node); ok {
+			if body, ok := m.State["body"].([]ast.Stmt); ok && len(body) == 0 {
+				report.Report(pass, node, "should use time.Sleep instead of elaborate way of sleeping",
+					report.ShortRange(),
+					report.FilterGenerated(),
+					report.Fixes(edit.Fix("Use time.Sleep", edit.ReplaceWithPattern(pass.Fset, node, checkElaborateSleepR, m.State))))
+			} else {
+				// TODO(dh): we could make a suggested fix if the body
+				// doesn't declare or shadow any identifiers
+				report.Report(pass, node, "should use time.Sleep instead of elaborate way of sleeping",
+					report.ShortRange(),
+					report.FilterGenerated())
+			}
 		}
 	}
+	code.Preorder(pass, fn, (*ast.SelectStmt)(nil))
 	return nil, nil
 }

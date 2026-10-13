@@ -2,20 +2,17 @@ package formatter
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/fatih/color"
 
 	"github.com/mgechev/revive/lint"
 )
 
-// Stylish is an implementation of the [lint.Formatter] interface
-// which formats the errors to a stylish, human-readable format.
+// Stylish is an implementation of the Formatter interface
+// which formats the errors to JSON.
 type Stylish struct {
 	Metadata lint.FormatterMetadata
 }
-
-var _ lint.Formatter = (*Stylish)(nil)
 
 // Name returns the name of the formatter.
 func (*Stylish) Name() string {
@@ -46,27 +43,24 @@ func (*Stylish) Format(failures <-chan lint.Failure, config lint.Config) (string
 		if currentType == lint.SeverityError {
 			totalErrors++
 		}
-		result = append(result, formatFailure(f, currentType))
+		result = append(result, formatFailure(f, lint.Severity(currentType)))
 	}
 
 	fileReport := map[string][][]string{}
-	var files []string
 
 	for _, row := range result {
 		if _, ok := fileReport[row[0]]; !ok {
 			fileReport[row[0]] = [][]string{}
-			files = append(files, row[0])
 		}
 
 		fileReport[row[0]] = append(fileReport[row[0]], []string{row[1], row[2], row[3]})
 	}
-	slices.Sort(files)
 
 	output := ""
-	for _, filename := range files {
+	for filename, val := range fileReport {
 		c := color.New(color.Underline)
 		output += c.SprintfFunc()(filename + "\n")
-		output += table(fileReport[filename]) + "\n"
+		output += table(val) + "\n"
 	}
 
 	problemsLabel := "problems"

@@ -68,15 +68,14 @@ const (
 )
 
 type Flags struct {
-	Config            string
-	LogLevel          string
-	OutputPath        string
-	Renderer          string
-	SourcePath        string
-	TemplatesDir      string
-	OutputMode        string
-	MaxDepth          int
-	TemplateKeyValues KeyValueFlags
+	Config       string
+	LogLevel     string
+	OutputPath   string
+	Renderer     string
+	SourcePath   string
+	TemplatesDir string
+	OutputMode   string
+	MaxDepth     int
 }
 
 func Load(flags Flags) (*Config, error) {

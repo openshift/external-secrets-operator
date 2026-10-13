@@ -75,8 +75,6 @@ func (s *Shortener) formatDecl(decl dst.Decl) {
 // formatStmt formats an AST statement node.
 // Among other examples, these include assignments, case clauses,
 // for statements, if statements, and select statements.
-//
-//nolint:funlen // the number of statements is expected.
 func (s *Shortener) formatStmt(stmt dst.Stmt, force bool) {
 	stmtType := reflect.TypeOf(stmt)
 
@@ -147,12 +145,6 @@ func (s *Shortener) formatStmt(stmt dst.Stmt, force bool) {
 	case *dst.SwitchStmt:
 		s.formatStmt(st.Body, false)
 
-		// Ignored: st.Init
-
-		if st.Tag != nil {
-			s.formatExpr(st.Tag, shouldShorten, false)
-		}
-
 	case *dst.TypeSwitchStmt:
 		s.formatStmt(st.Body, false)
 
@@ -220,7 +212,7 @@ func (s *Shortener) formatExpr(expr dst.Expr, force, isChain bool) {
 		}
 
 	case *dst.CompositeLit:
-		if shouldShorten || annotation.HasRecursive(e) {
+		if shouldShorten {
 			for i, element := range e.Elts {
 				if i == 0 {
 					element.Decorations().Before = dst.NewLine

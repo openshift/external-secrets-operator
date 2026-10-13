@@ -3,7 +3,6 @@ package rule
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/mgechev/revive/lint"
 )
@@ -56,7 +55,7 @@ func (r *FileHeaderRule) Apply(file *lint.File, _ lint.Arguments) []lint.Failure
 	if g == nil {
 		return failure
 	}
-	var comment strings.Builder
+	comment := ""
 	for _, c := range g.List {
 		text := c.Text
 		if multiRegexp.MatchString(text) {
@@ -64,7 +63,7 @@ func (r *FileHeaderRule) Apply(file *lint.File, _ lint.Arguments) []lint.Failure
 		} else if singleRegexp.MatchString(text) {
 			text = text[2:]
 		}
-		comment.WriteString(text)
+		comment += text
 	}
 
 	regex, err := regexp.Compile(r.header)
@@ -72,7 +71,7 @@ func (r *FileHeaderRule) Apply(file *lint.File, _ lint.Arguments) []lint.Failure
 		return newInternalFailureError(err)
 	}
 
-	if !regex.MatchString(comment.String()) {
+	if !regex.MatchString(comment) {
 		return failure
 	}
 	return nil

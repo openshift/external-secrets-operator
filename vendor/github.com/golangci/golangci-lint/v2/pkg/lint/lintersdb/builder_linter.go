@@ -9,7 +9,6 @@ import (
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/bidichk"
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/bodyclose"
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/canonicalheader"
-	"github.com/golangci/golangci-lint/v2/pkg/golinters/clickhouselint"
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/containedctx"
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/contextcheck"
 	"github.com/golangci/golangci-lint/v2/pkg/golinters/copyloopvar"
@@ -133,7 +132,7 @@ func NewLinterBuilder() *LinterBuilder {
 }
 
 // Build loads all the "internal" linters.
-// The configuration is used for the linter settings.
+// The configuration is use for the linter settings.
 func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 	if cfg == nil {
 		return nil, nil
@@ -162,7 +161,7 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 			WithSince("v1.43.0").
 			WithURL("https://github.com/breml/bidichk"),
 
-		linter.NewConfig(bodyclose.New(&cfg.Linters.Settings.BodyClose)).
+		linter.NewConfig(bodyclose.New()).
 			WithSince("v1.18.0").
 			WithLoadForGoAnalysis().
 			WithURL("https://github.com/timakin/bodyclose"),
@@ -172,11 +171,6 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 			WithLoadForGoAnalysis().
 			WithAutoFix().
 			WithURL("https://github.com/lasiar/canonicalheader"),
-
-		linter.NewConfig(clickhouselint.New()).
-			WithSince("v2.12.0").
-			WithLoadForGoAnalysis().
-			WithURL("https://github.com/ClickHouse/clickhouse-go-linter"),
 
 		linter.NewConfig(containedctx.New()).
 			WithSince("v1.44.0").
@@ -400,12 +394,6 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 
 		linter.NewConfig(gomodguard.New(&cfg.Linters.Settings.Gomodguard)).
 			WithSince("v1.25.0").
-			DeprecatedWarning("new major version.", "v2.12.0",
-				linter.Replacement("gomodguard_v2", gomodguard.Migration, &cfg.Linters.Settings.Gomodguard)).
-			WithURL("https://github.com/ryancurrah/gomodguard"),
-
-		linter.NewConfig(gomodguard.NewV2(&cfg.Linters.Settings.Gomodguardv2)).
-			WithSince("v2.12.0").
 			WithURL("https://github.com/ryancurrah/gomodguard"),
 
 		linter.NewConfig(goprintffuncname.New()).
@@ -544,7 +532,6 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 		linter.NewConfig(noinlineerr.New()).
 			WithSince("v2.2.0").
 			WithLoadForGoAnalysis().
-			WithAutoFix().
 			WithURL("https://github.com/AlwxSin/noinlineerr"),
 
 		linter.NewConfig(nonamedreturns.New(&cfg.Linters.Settings.NoNamedReturns)).
@@ -569,7 +556,6 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 
 		linter.NewConfig(prealloc.New(&cfg.Linters.Settings.Prealloc)).
 			WithSince("v1.19.0").
-			WithLoadForGoAnalysis().
 			WithURL("https://github.com/alexkohler/prealloc"),
 
 		linter.NewConfig(predeclared.New(&cfg.Linters.Settings.Predeclared)).
@@ -605,9 +591,9 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 		linter.NewConfig(rowserrcheck.New(&cfg.Linters.Settings.RowsErrCheck)).
 			WithSince("v1.23.0").
 			WithLoadForGoAnalysis().
-			WithURL("https://github.com/golangci/rowserrcheck"),
+			WithURL("https://github.com/jingyugao/rowserrcheck"),
 
-		linter.NewConfig(sloglint.New(&cfg.Linters.Settings.Sloglint)).
+		linter.NewConfig(sloglint.New(&cfg.Linters.Settings.SlogLint)).
 			WithSince("v1.55.0").
 			WithLoadForGoAnalysis().
 			WithAutoFix().
@@ -633,7 +619,7 @@ func (LinterBuilder) Build(cfg *config.Config) ([]*linter.Config, error) {
 		linter.NewConfig(swaggo.New()).
 			WithSince("v2.2.0").
 			WithAutoFix().
-			WithURL("https://github.com/swaggo/swag"),
+			WithURL("https://github.com/swaggo/swaggo"),
 
 		linter.NewConfig(tagalign.New(&cfg.Linters.Settings.TagAlign)).
 			WithSince("v1.53.0").

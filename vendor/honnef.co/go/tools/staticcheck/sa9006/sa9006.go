@@ -11,13 +11,14 @@ import (
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA9006",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Dubious bit shifting of a fixed size integer value`,
@@ -58,7 +59,7 @@ var (
 	`)
 )
 
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	isDubiousShift := func(x, y ast.Expr) (int64, int64, bool) {
 		typ, ok := pass.TypesInfo.TypeOf(x).Underlying().(*types.Basic)
 		if !ok {
@@ -83,7 +84,11 @@ func run(pass *analysis.Pass) (any, error) {
 		return typeBits, shiftLength, shiftLength >= typeBits
 	}
 
-	for node := range code.Matches(pass, checkFixedLengthTypeShiftQ) {
+	fn := func(node ast.Node) {
+		if _, ok := code.Match(pass, checkFixedLengthTypeShiftQ, node); !ok {
+			return
+		}
+
 		switch e := node.(type) {
 		case *ast.AssignStmt:
 			if size, shift, yes := isDubiousShift(e.Lhs[0], e.Rhs[0]); yes {
@@ -95,6 +100,7 @@ func run(pass *analysis.Pass) (any, error) {
 			}
 		}
 	}
+	code.Preorder(pass, fn, (*ast.AssignStmt)(nil), (*ast.BinaryExpr)(nil))
 
 	return nil, nil
 }

@@ -39,7 +39,7 @@ func Initializer() initializer.AnalyzerInitializer {
 	)
 }
 
-// Init returns the initialized Analyzer.
+// Init returns the intialized Analyzer.
 func initAnalyzer(ofc *OptionalFieldsConfig) (*analysis.Analyzer, error) {
 	return newAnalyzer(ofc), nil
 }

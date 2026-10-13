@@ -8,16 +8,16 @@ import (
 	"honnef.co/go/tools/analysis/edit"
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
-	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 var SCAnalyzer = lint.InitializeAnalyzer(&lint.Analyzer{
 	Analyzer: &analysis.Analyzer{
 		Name:     "SA1016",
 		Run:      run,
-		Requires: code.RequiredAnalyzers,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	},
 	Doc: &lint.RawDocumentation{
 		Title: `Trapping a signal that cannot be trapped`,
@@ -33,16 +33,7 @@ kernel. It is therefore pointless to try and handle these signals.`,
 
 var Analyzer = SCAnalyzer.Analyzer
 
-var query = pattern.MustParse(`
-	(CallExpr
-		(Symbol
-			(Or
-				"os/signal.Ignore"
-				"os/signal.Notify"
-				"os/signal.Reset"))
-		_)`)
-
-func run(pass *analysis.Pass) (any, error) {
+func run(pass *analysis.Pass) (interface{}, error) {
 	isSignal := func(pass *analysis.Pass, expr ast.Expr, name string) bool {
 		if expr, ok := expr.(*ast.SelectorExpr); ok {
 			return code.SelectorName(pass, expr) == name
@@ -51,8 +42,13 @@ func run(pass *analysis.Pass) (any, error) {
 		}
 	}
 
-	for node := range code.Matches(pass, query) {
+	fn := func(node ast.Node) {
 		call := node.(*ast.CallExpr)
+		if !code.IsCallToAny(pass, call,
+			"os/signal.Ignore", "os/signal.Notify", "os/signal.Reset") {
+			return
+		}
+
 		hasSigterm := false
 		for _, arg := range call.Args {
 			if conv, ok := arg.(*ast.CallExpr); ok && isSignal(pass, conv.Fun, "os.Signal") {
@@ -83,7 +79,7 @@ func run(pass *analysis.Pass) (any, error) {
 					}
 					ncall := *call
 					ncall.Args = nargs
-					fixes = append(fixes, edit.Fix(fmt.Sprintf("Use syscall.SIGTERM instead of %s", report.Render(pass, arg)), edit.ReplaceWithNode(pass.Fset, call, &ncall)))
+					fixes = append(fixes, edit.Fix(fmt.Sprintf("use syscall.SIGTERM instead of %s", report.Render(pass, arg)), edit.ReplaceWithNode(pass.Fset, call, &ncall)))
 				}
 				nargs := make([]ast.Expr, 0, len(call.Args))
 				for j, a := range call.Args {
@@ -94,7 +90,7 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 				ncall := *call
 				ncall.Args = nargs
-				fixes = append(fixes, edit.Fix(fmt.Sprintf("Remove %s from list of arguments", report.Render(pass, arg)), edit.ReplaceWithNode(pass.Fset, call, &ncall)))
+				fixes = append(fixes, edit.Fix(fmt.Sprintf("remove %s from list of arguments", report.Render(pass, arg)), edit.ReplaceWithNode(pass.Fset, call, &ncall)))
 				report.Report(pass, arg, fmt.Sprintf("%s cannot be trapped (did you mean syscall.SIGTERM?)", report.Render(pass, arg)), report.Fixes(fixes...))
 			}
 			if isSignal(pass, arg, "syscall.SIGSTOP") {
@@ -107,9 +103,10 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 				ncall := *call
 				ncall.Args = nargs
-				report.Report(pass, arg, "syscall.SIGSTOP cannot be trapped", report.Fixes(edit.Fix("Remove syscall.SIGSTOP from list of arguments", edit.ReplaceWithNode(pass.Fset, call, &ncall))))
+				report.Report(pass, arg, "syscall.SIGSTOP cannot be trapped", report.Fixes(edit.Fix("remove syscall.SIGSTOP from list of arguments", edit.ReplaceWithNode(pass.Fset, call, &ncall))))
 			}
 		}
 	}
+	code.Preorder(pass, fn, (*ast.CallExpr)(nil))
 	return nil, nil
 }

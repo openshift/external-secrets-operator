@@ -23,7 +23,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/Masterminds/sprig"
 	"github.com/elastic/crd-ref-docs/config"
 	"github.com/elastic/crd-ref-docs/templates"
 	"github.com/elastic/crd-ref-docs/types"
@@ -77,7 +77,6 @@ func (m *MarkdownRenderer) ToFuncMap() template.FuncMap {
 		"TypeID":             m.TypeID,
 		"RenderFieldDoc":     m.RenderFieldDoc,
 		"RenderDefault":      m.RenderDefault,
-		"TemplateValue":      m.TemplateValue,
 	}
 }
 
@@ -131,13 +130,6 @@ func (m *MarkdownRenderer) RenderLocalLink(text string) string {
 		).Replace(text),
 	)
 	return fmt.Sprintf("[%s](#%s)", text, anchor)
-}
-
-func (m *MarkdownRenderer) TemplateValue(key string) string {
-	if m == nil || m.conf == nil {
-		return ""
-	}
-	return m.conf.TemplateKeyValues.AsMap()[key]
 }
 
 func (m *MarkdownRenderer) RenderExternalLink(link, text string) string {

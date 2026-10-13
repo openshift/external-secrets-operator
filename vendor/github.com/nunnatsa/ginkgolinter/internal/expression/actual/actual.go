@@ -7,6 +7,7 @@ import (
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/nunnatsa/ginkgolinter/internal/gomegahandler"
+	"github.com/nunnatsa/ginkgolinter/internal/gomegainfo"
 )
 
 type Actual struct {
@@ -20,13 +21,13 @@ type Actual struct {
 	actualOffset int
 }
 
-func New(origExpr, cloneExpr *ast.CallExpr, clone *ast.CallExpr, pass *analysis.Pass, timePkg string, info *gomegahandler.GomegaBasicInfo) (*Actual, bool) {
-	arg, actualOffset := getActualArgPayload(clone, pass, info)
+func New(origExpr, cloneExpr *ast.CallExpr, orig *ast.CallExpr, clone *ast.CallExpr, pass *analysis.Pass, timePkg string, info *gomegahandler.GomegaBasicInfo) (*Actual, bool) {
+	arg, actualOffset := getActualArgPayload(orig, clone, pass, info)
 	if arg == nil {
 		return nil, false
 	}
 
-	argType := pass.TypesInfo.TypeOf(info.RootCall.Args[actualOffset])
+	argType := pass.TypesInfo.TypeOf(orig.Args[actualOffset])
 	isTuple := false
 
 	if tpl, ok := argType.(*gotypes.Tuple); ok {
@@ -39,15 +40,15 @@ func New(origExpr, cloneExpr *ast.CallExpr, clone *ast.CallExpr, pass *analysis.
 		isTuple = tpl.Len() > 1
 	}
 
-	isAsyncExpr := info.RootCallType == gomegahandler.AsyncAssertionCall
+	isAsyncExpr := gomegainfo.IsAsyncActualMethod(info.MethodName)
 
 	var asyncArg *AsyncArg
 	if isAsyncExpr {
-		asyncArg = newAsyncArg(origExpr, cloneExpr, info.RootCall, clone, argType, pass, actualOffset, timePkg)
+		asyncArg = newAsyncArg(origExpr, cloneExpr, orig, clone, argType, pass, actualOffset, timePkg)
 	}
 
 	return &Actual{
-		Orig:         info.RootCall,
+		Orig:         orig,
 		Clone:        clone,
 		Arg:          arg,
 		argType:      argType,

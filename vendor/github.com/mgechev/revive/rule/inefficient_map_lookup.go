@@ -155,11 +155,6 @@ func (w *lintInefficientMapLookup) isRangeOverMapKey(stmt ast.Stmt) bool {
 		return false // not a range
 	}
 
-	// Check if we range on the key
-	if rangeStmt.Key == nil {
-		return false // no key in range
-	}
-
 	// Check if we range only on key
 	// for key := range ...
 	// for key, _ := range ...
