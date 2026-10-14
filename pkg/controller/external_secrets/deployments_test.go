@@ -3081,8 +3081,9 @@ func TestGetDeploymentObjectOperandArgsFromEnv(t *testing.T) {
 			t.Fatalf("getDeploymentObject() unexpected error: %v", err)
 		}
 		args := containerArgsByName(dep, OperandBitwardenContainer)
-		if !reflect.DeepEqual(args, []string{"--enable-debug=true"}) {
-			t.Errorf("Args = %#v, want [--enable-debug=true]", args)
+		want := []string{"--state-path=/state/.bitwarden-state", "--enable-debug=true"}
+		if !reflect.DeepEqual(args, want) {
+			t.Errorf("Args = %#v, want %#v", args, want)
 		}
 	})
 

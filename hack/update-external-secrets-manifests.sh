@@ -4,7 +4,8 @@ set -o nounset
 set -o pipefail
 set -o errexit
 
-EXTERNAL_SECRETS_VERSION=${1:?"missing external-secrets helm chart version. See https://charts.external-secrets.io or https://github.com/external-secrets/external-secrets/releases"}
+EXTERNAL_SECRETS_VERSION=${1:?"missing external-secrets version. Please specify a version from https://github.com/external-secrets/external-secrets/releases"}
+BITWARDEN_SDK_SERVER_VERSION=${2:?"missing bitwarden-sdk-server version. Please specify a version from https://github.com/external-secrets/bitwarden-sdk-server/releases"}
 MANIFESTS_PATH=./_output/manifests
 OPERAND_BINDATA=bindata/operands/external-secrets
 
@@ -12,24 +13,35 @@ mkdir -p ${MANIFESTS_PATH}
 
 echo "---- Downloading external-secrets manifests ${EXTERNAL_SECRETS_VERSION} ----"
 
+# The chart version doesn't have a "v" prefix, so strip it before using it in the helm command.
+EXTERNAL_SECRETS_CHART_VERSION="${EXTERNAL_SECRETS_VERSION#v}"
+
 bin/helm repo add external-secrets https://charts.external-secrets.io --force-update
 # render templates with certManager enabled to fetch cert-manager specific manifests.
 bin/helm template external-secrets external-secrets/external-secrets -n external-secrets \
-	--version "${EXTERNAL_SECRETS_VERSION}" \
+	--version "${EXTERNAL_SECRETS_CHART_VERSION}" \
 	--set webhook.certManager.enabled=true \
-	--set bitwarden-sdk-server.enabled=true \
 	--set metrics.service.enabled=true \
 	--set webhook.metrics.service.enabled=true \
 	--set certController.metrics.service.enabled=false \
 	> ${MANIFESTS_PATH}/manifests.yaml
 # render templates with certManager disabled to fetch cert-controller specific manifests.
 bin/helm template external-secrets external-secrets/external-secrets -n external-secrets \
-	--version "${EXTERNAL_SECRETS_VERSION}" \
+	--version "${EXTERNAL_SECRETS_CHART_VERSION}" \
 	--set webhook.certManager.enabled=false \
-	--set bitwarden-sdk-server.enabled=true \
 	--set metrics.service.enabled=true \
 	--set webhook.metrics.service.enabled=true \
 	--set certController.metrics.service.enabled=true \
+	>> ${MANIFESTS_PATH}/manifests.yaml
+
+echo "---- Downloading bitwarden-sdk-server manifests ${BITWARDEN_SDK_SERVER_VERSION} ----"
+
+# bitwarden-sdk-server publishes its own standalone chart as an OCI artifact, independently
+# versioned from the external-secrets chart. Render it directly so the operand tracks its
+# own upstream releases instead of the stale subchart pin.
+bin/helm template external-secrets "oci://ghcr.io/external-secrets/charts/bitwarden-sdk-server" \
+	--version "${BITWARDEN_SDK_SERVER_VERSION}" -n external-secrets \
+	--set state.path=/state/.bitwarden-state | grep -Ev "^(Pulled|Digest):" \
 	>> ${MANIFESTS_PATH}/manifests.yaml
 
 echo "---- Patching external-secrets manifests ----"

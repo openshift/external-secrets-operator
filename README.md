@@ -35,10 +35,11 @@ The operand manifests are pre-rendered from upstream Helm charts at build time (
 | Component | Version |
 |-----------|---------|
 | Go | 1.26 (workspace mode via `go.work`) |
-| Kubernetes libraries | v0.35.6 |
-| controller-runtime | v0.23.3 |
-| cert-manager | v1.18.5 |
-| External Secrets (operand) | v2.5.0 |
+| Kubernetes libraries | v0.36.3 |
+| controller-runtime | v0.24.1 |
+| cert-manager | v1.21.1 |
+| External Secrets (operand) | v2.12.0 |
+| Bitwarden SDK Server (operand component) | v0.8.1 |
 | Container tool | podman (default; override with `CONTAINER_TOOL=docker`) |
 
 ## Project Structure

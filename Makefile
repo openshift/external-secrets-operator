@@ -25,8 +25,14 @@ ifneq ($(shell echo '$(IMG_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && e
 $(error IMG_VERSION '$(IMG_VERSION)' is not valid semver (expected: Major.Minor.Patch))
 endif
 
-# EXTERNAL_SECRETS_VERSION defines the upstream Helm chart version (SemVer, no "v" prefix).
-EXTERNAL_SECRETS_VERSION ?= 2.5.0
+# EXTERNAL_SECRETS_VERSION defines the external-secrets release version to fetch helm charts.
+EXTERNAL_SECRETS_VERSION ?= v2.12.0
+
+# BITWARDEN_SDK_SERVER_VERSION defines the version of the bitwarden-sdk-server Helm chart to fetch.
+# Pinned independently of EXTERNAL_SECRETS_VERSION because it is rendered directly from its own
+# upstream chart repository (ghcr.io/external-secrets/charts/bitwarden-sdk-server) to pull the
+# latest standalone chart.
+BITWARDEN_SDK_SERVER_VERSION ?= v0.8.1
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -539,7 +545,7 @@ update: generate manifests update-operand-manifests update-bindata bundle docs #
 .PHONY: update-operand-manifests
 update-operand-manifests: $(HELM) $(YQ) ## Update external-secrets operand manifests from upstream helm charts.
 	@echo "Updating external-secrets operand manifests..."
-	@hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION)
+	@hack/update-external-secrets-manifests.sh $(EXTERNAL_SECRETS_VERSION) $(BITWARDEN_SDK_SERVER_VERSION)
 
 .PHONY: update-vendor
 update-vendor: ## Update vendor directory for all modules in the workspace.
