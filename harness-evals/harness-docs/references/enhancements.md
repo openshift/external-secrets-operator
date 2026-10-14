@@ -19,5 +19,5 @@ Catalog of design documentation for the External Secrets Operator.
 ## Notes
 
 - Enhancement proposals are the source of truth for feature design decisions
-- Enhancement proposals are cross-component feature designs; component-specific ADRs are in [`../decisions/`](../decisions/)
+- Enhancement proposals are cross-component feature designs; component-specific ADRs are in [`docs/decisions/`](../../../docs/decisions/)
 - For the latest proposal status, check the [openshift/enhancements](https://github.com/openshift/enhancements/tree/master/enhancements/external-secrets-operator) repository
