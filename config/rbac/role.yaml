@@ -150,6 +150,7 @@ rules:
   - generators.external-secrets.io
   resources:
   - acraccesstokens
+  - beyondtrustworkloadcredentialsdynamicsecrets
   - cloudsmithaccesstokens
   - clustergenerators
   - ecrauthorizationtokens
@@ -157,6 +158,7 @@ rules:
   - gcraccesstokens
   - generatorstates
   - githubaccesstokens
+  - gitlabdeploytokens
   - grafanas
   - mfas
   - passwords

@@ -4,9 +4,9 @@
 
 The OpenShift External Secrets Operator (ESO) manages the lifecycle of the upstream [external-secrets](https://github.com/external-secrets/external-secrets) project on OpenShift. It is **not** a fork — it deploys and configures the upstream operand via static YAML manifests embedded as bindata.
 
-**Framework**: controller-runtime v0.23.3 (no library-go, no operator-sdk Go libraries)
+**Framework**: controller-runtime v0.24.1 (no library-go, no operator-sdk Go libraries)
 **Reconciliation**: Standard Update with `RetryOnConflict` — **NOT Server-Side Apply**
-**Operand version**: external-secrets v2.5.0
+**Operand version**: external-secrets v2.12.0, bitwarden-sdk-server v0.8.1
 
 ## Repository Layout
 

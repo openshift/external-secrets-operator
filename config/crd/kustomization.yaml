@@ -5,6 +5,7 @@ resources:
 - bases/operator.openshift.io_externalsecretsconfigs.yaml
 - bases/operator.openshift.io_externalsecretsmanagers.yaml
 - bases/customresourcedefinition_acraccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_beyondtrustworkloadcredentialsdynamicsecrets.generators.external-secrets.io.yml
 - bases/customresourcedefinition_clusterexternalsecrets.external-secrets.io.yml
 - bases/customresourcedefinition_clustergenerators.generators.external-secrets.io.yml
 - bases/customresourcedefinition_cloudsmithaccesstokens.generators.external-secrets.io.yml
@@ -15,6 +16,7 @@ resources:
 - bases/customresourcedefinition_gcraccesstokens.generators.external-secrets.io.yml
 - bases/customresourcedefinition_generatorstates.generators.external-secrets.io.yml
 - bases/customresourcedefinition_githubaccesstokens.generators.external-secrets.io.yml
+- bases/customresourcedefinition_gitlabdeploytokens.generators.external-secrets.io.yml
 - bases/customresourcedefinition_grafanas.generators.external-secrets.io.yml
 - bases/customresourcedefinition_mfas.generators.external-secrets.io.yml
 - bases/customresourcedefinition_passwords.generators.external-secrets.io.yml

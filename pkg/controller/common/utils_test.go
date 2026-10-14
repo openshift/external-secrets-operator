@@ -551,7 +551,7 @@ func deploymentWithContainerEnv(env []corev1.EnvVar) appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  "external-secrets",
-							Image: "ghcr.io/external-secrets/external-secrets:v2.5.0",
+							Image: "ghcr.io/external-secrets/external-secrets:v2.12.0",
 							Env:   env,
 						},
 					},
@@ -569,7 +569,7 @@ func deploymentWithContainerVolumeMounts(mounts []corev1.VolumeMount) appsv1.Dep
 					Containers: []corev1.Container{
 						{
 							Name:         "external-secrets",
-							Image:        "ghcr.io/external-secrets/external-secrets:v2.5.0",
+							Image:        "ghcr.io/external-secrets/external-secrets:v2.12.0",
 							VolumeMounts: mounts,
 						},
 					},

@@ -7,7 +7,7 @@ metadata:
   labels:
     app.kubernetes.io/name: bitwarden-sdk-server
     app.kubernetes.io/instance: external-secrets
-    app.kubernetes.io/version: "v0.6.0"
+    app.kubernetes.io/version: "v0.8.1"
     app.kubernetes.io/managed-by: external-secrets-operator
 spec:
   replicas: 1
@@ -25,12 +25,16 @@ spec:
       securityContext: {}
       containers:
         - name: bitwarden-sdk-server
+          args:
+            - --state-path=/state/.bitwarden-state
           securityContext: {}
-          image: "ghcr.io/external-secrets/bitwarden-sdk-server:v0.6.0"
+          image: "ghcr.io/external-secrets/bitwarden-sdk-server:v0.8.1"
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /certs
               name: bitwarden-tls-certs
+            - mountPath: /state
+              name: bitwarden-state
           ports:
             - name: http
               containerPort: 9998
@@ -57,3 +61,5 @@ spec:
                 path: key.pem
               - key: ca.crt
                 path: ca.pem
+        - name: bitwarden-state
+          emptyDir: {}
