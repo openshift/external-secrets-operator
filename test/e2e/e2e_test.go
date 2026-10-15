@@ -626,12 +626,18 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 
 	Context("Per-Component Replica Scaling", Label("Platform:Generic", "Feature:Replicas"), func() {
 		It("should default to replicas=1 when not configured", func() {
+			esc := &operatorv1alpha1.ExternalSecretsConfig{}
+			Expect(runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc)).To(Succeed())
+
 			By("Verifying default replicas for core controller deployment")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(deployment.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
 				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
+				hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCoreControllerContainer, externalsecrets.LeaderElectionArg)
+				g.Expect(found).To(BeTrue(), "core controller container should exist")
+				g.Expect(hasArg).To(BeTrue(), "core controller should have leader election enabled by default")
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
 
 			By("Verifying default replicas for webhook deployment")
@@ -642,16 +648,21 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Verifying default replicas for cert-controller deployment")
-			Eventually(func(g Gomega) {
-				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCertControllerDeployment, metav1.GetOptions{})
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(deployment.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
-				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
-			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+			if utils.IsCertControllerExpected(esc) {
+				By("Verifying default replicas for cert-controller deployment")
+				Eventually(func(g Gomega) {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCertControllerDeployment, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(deployment.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
+					g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "replicas should default to 1")
+					hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCertControllerContainer, externalsecrets.LeaderElectionArg)
+					g.Expect(found).To(BeTrue(), "cert controller container should exist")
+					g.Expect(hasArg).To(BeTrue(), "cert controller should have leader election enabled by default")
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+			}
 		})
 
-		It("should scale components, enable leader election, persist across reconciles, and scale back", func() {
+		It("should scale components, preserve leader election, persist across reconciles, and scale back", func() {
 			esc := &operatorv1alpha1.ExternalSecretsConfig{}
 			Expect(runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc)).To(Succeed())
 
@@ -669,7 +680,6 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				Expect(err).NotTo(HaveOccurred(), "should restore original componentConfigs")
 			})
 
-			// --- Phase 1: Scale core controller to 2 with leader election ---
 
 			replicaConfigs := []operatorv1alpha1.ComponentConfig{
 				{
@@ -702,13 +712,13 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(2)), "core controller should have 2 ready replicas")
 			}, 3*time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Verifying --enable-leader-election=true is set on core controller")
+			By("Verifying --enable-leader-election=true is present on core controller")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred())
 				hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCoreControllerContainer, externalsecrets.LeaderElectionArg)
 				g.Expect(found).To(BeTrue(), "core controller container should exist")
-				g.Expect(hasArg).To(BeTrue(), "core controller should have --enable-leader-election=true when replicas > 1")
+				g.Expect(hasArg).To(BeTrue(), "core controller should have --enable-leader-election=true as a default arg")
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
 			By("Verifying leader election lease exists in operand namespace")
@@ -794,8 +804,6 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				}
 			}, 30*time.Second, 10*time.Second).Should(Succeed(), "replica counts should persist across reconcile loops")
 
-			// --- Phase 4: Scale back to 1 and verify leader election removed ---
-
 			By("Clearing componentConfigs from ExternalSecretsConfig")
 			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				existingCR := &operatorv1alpha1.ExternalSecretsConfig{}
@@ -817,15 +825,13 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "core controller should have 1 ready replica")
 			}, 3*time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Verifying --enable-leader-election is removed from core controller after scale-back")
+			By("Verifying --enable-leader-election=true persists on core controller after scale-back")
 			Eventually(func(g Gomega) {
 				deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCoreControllerDeployment, metav1.GetOptions{})
 				g.Expect(err).NotTo(HaveOccurred())
-				args, found := getDeploymentContainerArgs(deployment, externalsecrets.OperandCoreControllerContainer)
+				hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCoreControllerContainer, externalsecrets.LeaderElectionArg)
 				g.Expect(found).To(BeTrue(), "core controller container should exist")
-				for _, arg := range args {
-					g.Expect(arg).NotTo(ContainSubstring("--enable-leader-election"), "core controller should not have leader election arg after scale-back to 1")
-				}
+				g.Expect(hasArg).To(BeTrue(), "core controller should retain leader election as a default arg after scale-back")
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
 			By("Verifying webhook reverts to replicas=1 with pod ready")
@@ -836,6 +842,26 @@ var _ = Describe("External Secrets Operator End-to-End test scenarios", Ordered,
 				g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "webhook should revert to 1 replica")
 				g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "webhook should have 1 ready replica")
 			}, 3*time.Minute, 5*time.Second).Should(Succeed())
+
+			if utils.IsCertControllerExpected(esc) {
+				By("Verifying cert-controller reverts to replicas=1 with pod ready")
+				Eventually(func(g Gomega) {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCertControllerDeployment, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(deployment.Spec.Replicas).NotTo(BeNil())
+					g.Expect(*deployment.Spec.Replicas).To(Equal(int32(1)), "cert-controller should revert to 1 replica")
+					g.Expect(deployment.Status.ReadyReplicas).To(Equal(int32(1)), "cert-controller should have 1 ready replica")
+				}, 3*time.Minute, 5*time.Second).Should(Succeed())
+
+				By("Verifying --enable-leader-election=true persists on cert-controller after scale-back")
+				Eventually(func(g Gomega) {
+					deployment, err := clientset.AppsV1().Deployments(operandNamespace).Get(ctx, externalsecrets.OperandCertControllerDeployment, metav1.GetOptions{})
+					g.Expect(err).NotTo(HaveOccurred())
+					hasArg, found := deploymentContainerHasArg(deployment, externalsecrets.OperandCertControllerContainer, externalsecrets.LeaderElectionArg)
+					g.Expect(found).To(BeTrue(), "cert-controller container should exist")
+					g.Expect(hasArg).To(BeTrue(), "cert-controller should retain leader election as a default arg after scale-back")
+				}, time.Minute, 5*time.Second).Should(Succeed())
+			}
 		})
 	})
 
