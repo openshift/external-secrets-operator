@@ -389,7 +389,7 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 		"--metrics-addr=:8080",
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
-		"--enable-leader-election=true",
+		LeaderElectionArg,
 		"--enable-push-secret-reconciler=true",
 	}
 
@@ -457,6 +457,7 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 		fmt.Sprintf("--loglevel=%s", logLevel),
 		"--zap-time-encoding=epoch",
 		"--enable-partial-cache=true",
+		LeaderElectionArg,
 	}
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
@@ -953,6 +954,11 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 				deployment.Spec.RevisionHistoryLimit = i.DeploymentConfigs.RevisionHistoryLimit
 			}
 
+			// Apply Replicas if set
+			if i.DeploymentConfigs != nil && i.DeploymentConfigs.Replicas != nil {
+				deployment.Spec.Replicas = i.DeploymentConfigs.Replicas
+			}
+
 			// Apply OverrideEnv only to the target component container.
 			if len(i.OverrideEnv) > 0 {
 				for j := range deployment.Spec.Template.Spec.Containers {
@@ -962,10 +968,10 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 					}
 				}
 			}
+
 			break
 		}
 	}
-
 	return nil
 }
 
