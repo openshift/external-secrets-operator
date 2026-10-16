@@ -39,6 +39,10 @@ const (
 	// UnsafeAllowGenericTargetsArg is the core controller argument that enables generic target support.
 	UnsafeAllowGenericTargetsArg = "--unsafe-allow-generic-targets=true"
 
+	// LeaderElectionArg is the core controller arg for leader election.
+	// Applied only when the core controller replicas > 1.
+	LeaderElectionArg = "--enable-leader-election=true"
+
 	// OperandBitwardenContainer is the bitwarden container name.
 	OperandBitwardenContainer = "bitwarden-sdk-server"
 
