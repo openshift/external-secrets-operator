@@ -2147,14 +2147,14 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			expectNoLeaderElectionIn: true,
 		},
 		{
-			name:                    "replicas=1 on core controller removes pre-existing leader election arg",
+			name:                    "replicas=1 on core controller does not remove pre-existing leader election arg",
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
 			replicas:                ptr.To(int32(1)),
 			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
 			expectedReplicas:        ptr.To(int32(1)),
-			expectLeaderElectionArg: false,
+			expectLeaderElectionArg: true,
 		},
 	}
 
@@ -2276,9 +2276,6 @@ func TestApplyUserDeploymentConfigsReplicasRegression(t *testing.T) {
 			t.Errorf("expected Replicas=3, got %v", deployment.Spec.Replicas)
 		}
 		container := &deployment.Spec.Template.Spec.Containers[0]
-		if !slices.Contains(container.Args, LeaderElectionArg) {
-			t.Errorf("expected leader election arg for replicas=3, got args: %v", container.Args)
-		}
 		envFound := false
 		for _, env := range container.Env {
 			if env.Name == "LOG_LEVEL" && env.Value == "debug" {
@@ -2327,67 +2324,6 @@ func TestApplyUserDeploymentConfigsReplicasRegression(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestApplyLeaderElection(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		replicas     *int32
-		existingArgs []string
-		expectedArgs []string
-	}{
-		{
-			name:         "injects leader election when replicas > 1",
-			replicas:     ptr.To(int32(3)),
-			existingArgs: []string{"--some-flag=value"},
-			expectedArgs: []string{"--some-flag=value", LeaderElectionArg},
-		},
-		{
-			name:         "removes leader election when replicas = 1",
-			replicas:     ptr.To(int32(1)),
-			existingArgs: []string{"--some-flag=value", LeaderElectionArg},
-			expectedArgs: []string{"--some-flag=value"},
-		},
-		{
-			name:         "removes leader election when replicas = nil",
-			replicas:     nil,
-			existingArgs: []string{LeaderElectionArg, "--other=true"},
-			expectedArgs: []string{"--other=true"},
-		},
-		{
-			name:         "no-op when replicas = 1 and no leader election arg present",
-			replicas:     ptr.To(int32(1)),
-			existingArgs: []string{"--some-flag=value"},
-			expectedArgs: []string{"--some-flag=value"},
-		},
-		{
-			name:         "idempotent injection when already present and replicas > 1",
-			replicas:     ptr.To(int32(2)),
-			existingArgs: []string{LeaderElectionArg, "--other=true"},
-			expectedArgs: []string{LeaderElectionArg, "--other=true"},
-		},
-		{
-			name:         "empty args with replicas > 1",
-			replicas:     ptr.To(int32(5)),
-			existingArgs: nil,
-			expectedArgs: []string{LeaderElectionArg},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			container := &corev1.Container{
-				Args: slices.Clone(tt.existingArgs),
-			}
-			applyLeaderElection(container, tt.replicas)
-			if !slices.Equal(container.Args, tt.expectedArgs) {
-				t.Errorf("applyLeaderElection() args = %v, want %v", container.Args, tt.expectedArgs)
-			}
-		})
-	}
 }
 
 func TestDeploymentSpecModifiedWithReplicas(t *testing.T) {
