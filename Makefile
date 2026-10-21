@@ -353,6 +353,10 @@ deploy: $(KUSTOMIZE) manifests ## Deploy controller to the K8s cluster specified
 	@cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	@$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
 
+.PHONY: deploy-external-secrets
+deploy-external-secrets: ## Apply ExternalSecretsConfig (with Bitwarden plugin) and wait until the operand is Available (CI / local).
+	@./hack/deploy-external-secrets.sh
+
 .PHONY: undeploy
 undeploy: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	@echo "Uninstalling the CRDs and the operator..."
