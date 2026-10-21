@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
@@ -49,7 +51,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 		name          string
 		deployment    *appsv1.Deployment
 		overrides     *runtime.RawExtension
-		componentName v1alpha1.ComponentName
 		containerName string
 		wantErr       bool
 		errSubstring  string
@@ -59,7 +60,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			name:          "nil overrides is no-op",
 			deployment:    baseDeployment(),
 			overrides:     nil,
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.Containers[0].Args) != 3 {
@@ -81,7 +81,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				args := d.Spec.Template.Spec.Containers[0].Args
@@ -96,60 +95,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 				}
 				if slices.Contains(args, "--metrics-addr=:8080") {
 					t.Errorf("expected --metrics-addr=:8080 to be dropped, got %v", args)
-				}
-			},
-		},
-		{
-			name: "valid args override with replicas>1 re-asserts leader election",
-			deployment: func() *appsv1.Deployment {
-				d := baseDeployment()
-				d.Spec.Replicas = ptr.To(int32(2))
-				d.Spec.Template.Spec.Containers[0].Args = append(d.Spec.Template.Spec.Containers[0].Args, LeaderElectionArg)
-				return d
-			}(),
-			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=20"}},
-							},
-						},
-					},
-				},
-			}),
-			componentName: v1alpha1.CoreController,
-			containerName: OperandCoreControllerContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if !slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("expected leader election arg to be re-asserted when replicas=2, got %v", args)
-				}
-				if !slices.Contains(args, "--concurrent=20") {
-					t.Errorf("expected --concurrent=20 in args, got %v", args)
-				}
-			},
-		},
-		{
-			name:       "valid args override with replicas=1 does not re-assert leader election",
-			deployment: baseDeployment(),
-			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=20"}},
-							},
-						},
-					},
-				},
-			}),
-			componentName: v1alpha1.CoreController,
-			containerName: OperandCoreControllerContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("expected no leader election arg when replicas=1, got %v", args)
 				}
 			},
 		},
@@ -176,7 +121,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.Affinity == nil || d.Spec.Template.Spec.Affinity.PodAntiAffinity == nil {
@@ -198,7 +142,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.Tolerations) != 1 {
@@ -221,7 +164,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.NodeSelector["disktype"] != "ssd" {
@@ -243,7 +185,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.TopologySpreadConstraints) != 1 {
@@ -268,7 +209,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				res := d.Spec.Template.Spec.Containers[0].Resources
@@ -277,33 +217,26 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 				}
 			},
 		},
+		// --- Disallowed top-level fields ---
 		{
-			name: "webhook component does not re-assert leader election",
-			deployment: func() *appsv1.Deployment {
-				d := baseDeployment()
-				d.Spec.Replicas = ptr.To(int32(2))
-				d.Spec.Template.Spec.Containers[0].Name = OperandWebhookContainer
-				return d
-			}(),
+			name:       "reject metadata at top level",
+			deployment: baseDeployment(),
 			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandWebhookContainer, "args": []string{"webhook", "--port=10250"}},
-							},
-						},
-					},
-				},
+				"metadata": map[string]any{"name": "evil"},
 			}),
-			componentName: v1alpha1.Webhook,
-			containerName: OperandWebhookContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("webhook should not have leader election arg, got %v", args)
-				}
-			},
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "metadata",
+		},
+		{
+			name:       "reject status at top level",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"status": map[string]any{},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "status",
 		},
 
 		// --- Disallowed paths ---
@@ -313,7 +246,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"replicas": 3},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.replicas",
@@ -324,7 +256,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"selector": map[string]any{"matchLabels": map[string]string{"app": "evil"}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.selector",
@@ -335,7 +266,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"revisionHistoryLimit": 5},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "revisionHistoryLimit",
@@ -346,7 +276,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"labels": map[string]string{"evil": "true"}}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.template.metadata",
@@ -359,7 +288,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"volumes": []map[string]any{{"name": "evil"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "volumes",
@@ -372,7 +300,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"initContainers": []map[string]any{{"name": "evil", "image": "evil:latest"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "initContainers",
@@ -387,10 +314,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].env",
+			errSubstring:  "containers[0].env",
 		},
 		{
 			name:       "reject container image",
@@ -402,10 +328,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].image",
+			errSubstring:  "containers[0].image",
 		},
 		{
 			name:       "reject container ports",
@@ -417,10 +342,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].ports",
+			errSubstring:  "containers[0].ports",
 		},
 		{
 			name:       "reject container securityContext",
@@ -432,10 +356,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].securityContext",
+			errSubstring:  "containers[0].securityContext",
 		},
 		{
 			name:       "reject container volumeMounts",
@@ -447,10 +370,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].volumeMounts",
+			errSubstring:  "containers[0].volumeMounts",
 		},
 		{
 			name:       "reject container command",
@@ -462,10 +384,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].command",
+			errSubstring:  "containers[0].command",
 		},
 		{
 			name:       "reject wrong container name",
@@ -477,10 +398,58 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "not a valid target",
+			errSubstring:  "must match the component container",
+		},
+		{
+			// The container loop must inspect every entry, not stop after the first match:
+			// a valid entry for the component container followed by an entry for an unrelated
+			// container must still be rejected.
+			name:       "reject second container entry with mismatched name",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=20"}},
+						{"name": "evil-sidecar", "args": []string{"--hack"}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "must match the component container",
+		},
+		{
+			// Strategic-merge-patch directive keys ($patch, $retainKeys, $setElementOrder/*) are
+			// never valid field names on any Kubernetes API type, so they're rejected by the
+			// strict DisallowUnknownFields decode at the top of validateOverridePaths before the
+			// allowlist walk even runs. This pins that down explicitly rather than relying on it
+			// as an accidental side effect.
+			name:       "reject $patch directive key in container entry",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": OperandCoreControllerContainer, "$patch": "replace", "args": []string{"--concurrent=20"}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "$patch",
+		},
+		{
+			name:       "reject $setElementOrder directive key at pod-spec level",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"$setElementOrder/containers": []map[string]any{{"name": OperandCoreControllerContainer}},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "$setElementOrder/containers",
 		},
 		{
 			name:       "reject container without name",
@@ -492,7 +461,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "container name is required",
@@ -501,7 +469,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			name:          "reject invalid JSON",
 			deployment:    baseDeployment(),
 			overrides:     &runtime.RawExtension{Raw: []byte(`{not valid json}`)},
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "invalid JSON",
@@ -514,7 +481,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"serviceAccountName": "evil",
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "serviceAccountName",
@@ -527,7 +493,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"ephemeralContainers": []map[string]any{{"name": "debug", "image": "busybox"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "ephemeralContainers",
@@ -540,10 +505,38 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"foo": "evil:latest",
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "unknown field",
+		},
+		{
+			// Regression test: a strategic merge patch treats an explicit JSON null as
+			// "delete this field". Before the fix, unstructured.NestedMap's error for a
+			// null "spec" value was conflated with "spec absent", so this patch would
+			// silently skip all allowlist checks and wipe out deployment.Spec entirely.
+			name:       "reject null spec",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": nil,
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "spec",
+		},
+		{
+			// Regression test: same conflation as above, but for the "containers" key,
+			// which is already allowlisted at the pod-spec level, making this reachable
+			// without even tripping the top-level/pod-spec allowlist checks.
+			name:       "reject null containers",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": nil,
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "containers",
 		},
 		{
 			name:       "comprehensive valid override with all allowlisted fields",
@@ -583,7 +576,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.Affinity == nil {
@@ -612,7 +604,7 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := applyAdvancedOverrides(tt.deployment, tt.overrides, tt.componentName, tt.containerName)
+			err := applyAdvancedOverrides(tt.deployment, tt.overrides, tt.containerName)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -638,100 +630,216 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 func TestApplyAdvancedOverridesViaReconciler(t *testing.T) {
 	t.Parallel()
 
-	t.Run("advancedOverrides applied through applyUserDeploymentConfigs", func(t *testing.T) {
-		t.Parallel()
-		r := testReconciler(t)
+	tests := []struct {
+		name string
+		// initialArgs seeds the container's Args before advancedOverrides is applied, simulating
+		// whatever first-class/upstream logic (e.g. the OPERAND_EXTERNAL_SECRETS_ARGS env-var
+		// escape hatch, applied earlier in getDeploymentObject) already ran.
+		initialArgs  []string
+		overrides    map[string]any
+		wantErr      bool
+		assertDeploy func(t *testing.T, d *appsv1.Deployment)
+	}{
+		{
+			name:        "advancedOverrides applied through applyUserDeploymentConfigs",
+			initialArgs: []string{"--concurrent=1", "--metrics-addr=:8080"},
+			overrides: map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"nodeSelector": map[string]string{"disktype": "ssd"},
+						},
+					},
+				},
+			},
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				if d.Spec.Template.Spec.NodeSelector["disktype"] != "ssd" {
+					t.Errorf("expected nodeSelector to be applied, got %v", d.Spec.Template.Spec.NodeSelector)
+				}
+			},
+		},
+		{
+			name: "invalid advancedOverrides returns error through applyUserDeploymentConfigs",
+			overrides: map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"volumes": []map[string]any{{"name": "evil"}},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			// Both applyOperandArgsFromEnv (the temporary v1.1/1.2 escape hatch, see its TODO)
+			// and advancedOverrides (its replacement) can set container args for the same
+			// component. getDeploymentObject calls the env-var hatch first and advancedOverrides
+			// last, so advancedOverrides must win for any flag both of them touch. initialArgs
+			// below is seeded via mergeContainerArgs (what the env-var hatch calls internally)
+			// rather than applyOperandArgsFromEnv + t.Setenv, since t.Setenv panics under any
+			// parallel ancestor test, and os.Environ is process-global.
+			name:        "advancedOverrides args take precedence over the OPERAND_EXTERNAL_SECRETS_ARGS env-var escape hatch",
+			initialArgs: mustMergeContainerArgs(t, []string{"--concurrent=1", "--metrics-addr=:8080"}, "--concurrent=20,--loglevel=debug"),
+			overrides: map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=99"}},
+					},
+				}}},
+			},
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				got := d.Spec.Template.Spec.Containers[0].Args
+				if !slices.Equal(got, []string{"--concurrent=99"}) {
+					t.Errorf("expected advancedOverrides args to fully replace the env-var hatch's args, got %v", got)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := testReconciler(t)
+			deployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: OperandCoreControllerContainer, Args: tt.initialArgs},
+							},
+						},
+					},
+				},
+			}
+
+			overrideJSON, err := json.Marshal(tt.overrides)
+			if err != nil {
+				t.Fatalf("failed to marshal overrides: %v", err)
+			}
+			esc := &v1alpha1.ExternalSecretsConfig{
+				Spec: v1alpha1.ExternalSecretsConfigSpec{
+					ControllerConfig: v1alpha1.ControllerConfig{
+						ComponentConfigs: []v1alpha1.ComponentConfig{
+							{
+								ComponentName:     v1alpha1.CoreController,
+								AdvancedOverrides: &runtime.RawExtension{Raw: overrideJSON},
+							},
+						},
+					},
+				},
+			}
+
+			err = r.applyUserDeploymentConfigs(deployment, esc, controllerDeploymentAssetName)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !common.IsUserConfigurationError(err) {
+					t.Errorf("expected UserConfigurationError, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.assertDeploy != nil {
+				tt.assertDeploy(t, deployment)
+			}
+		})
+	}
+}
+
+// mustMergeContainerArgs seeds a table case's initialArgs by merging envArgs (in the
+// OPERAND_EXTERNAL_SECRETS_ARGS env-var format) onto base, exactly as applyOperandArgsFromEnv
+// would, without needing a live environment variable.
+func mustMergeContainerArgs(t *testing.T, base []string, envArgs string) []string {
+	t.Helper()
+	overrides, err := parseOperandArgsEnv(envArgs)
+	if err != nil {
+		t.Fatalf("failed to parse env args %q: %v", envArgs, err)
+	}
+	return mergeContainerArgs(base, overrides)
+}
+
+// FuzzApplyAdvancedOverrides asserts an invariant that's cheaper to check by fuzzing than to
+// enumerate by hand: for arbitrary attacker/user-controlled JSON, applyAdvancedOverrides must
+// either return an error, or leave every field that has no advancedOverrides allowlist entry
+// (replicas, selector, container count, and each container's name/image/env) exactly as it was.
+// The seed corpus includes the null-value shapes that were found to violate this invariant
+// before the fix to validateAllowedFields / the containers NestedSlice check.
+func FuzzApplyAdvancedOverrides(f *testing.F) {
+	seeds := []string{
+		`{"spec": null}`,
+		`{"spec": {"template": null}}`,
+		`{"spec": {"template": {"spec": null}}}`,
+		`{"spec": {"template": {"spec": {"containers": null}}}}`,
+		`{"spec": {"template": {"spec": {"affinity": null}}}}`,
+		`{"spec": {"replicas": 5}}`,
+		`{"spec": {"selector": {"matchLabels": {"app": "evil"}}}}`,
+		`{"metadata": {"name": "evil"}}`,
+		`{"spec": {"template": {"spec": {"containers": [{"name": "core-controller", "$patch": "replace"}]}}}}`,
+		`{"spec": {"template": {"spec": {"containers": [{"name": "core-controller", "image": "evil:latest"}]}}}}`,
+		`not json`,
+		`null`,
+		`42`,
+		`[]`,
+		`{}`,
+	}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+
+	f.Fuzz(func(t *testing.T, raw []byte) {
 		deployment := &appsv1.Deployment{
 			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(1)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "external-secrets"}},
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name: OperandCoreControllerContainer,
-								Args: []string{"--concurrent=1", "--metrics-addr=:8080"},
+								Name:  OperandCoreControllerContainer,
+								Image: "quay.io/example/external-secrets:v1",
+								Args:  []string{"--concurrent=1"},
+								Env:   []corev1.EnvVar{{Name: "FOO", Value: "bar"}},
 							},
 						},
 					},
 				},
 			},
 		}
+		original := deployment.DeepCopy()
 
-		overrideJSON, _ := json.Marshal(map[string]any{
-			"spec": map[string]any{
-				"template": map[string]any{
-					"spec": map[string]any{
-						"nodeSelector": map[string]string{"disktype": "ssd"},
-					},
-				},
-			},
-		})
-
-		esc := &v1alpha1.ExternalSecretsConfig{
-			Spec: v1alpha1.ExternalSecretsConfigSpec{
-				ControllerConfig: v1alpha1.ControllerConfig{
-					ComponentConfigs: []v1alpha1.ComponentConfig{
-						{
-							ComponentName:     v1alpha1.CoreController,
-							AdvancedOverrides: &runtime.RawExtension{Raw: overrideJSON},
-						},
-					},
-				},
-			},
+		err := applyAdvancedOverrides(deployment, &runtime.RawExtension{Raw: raw}, OperandCoreControllerContainer)
+		if err != nil {
+			return // rejected: nothing further to check
 		}
 
-		if err := r.applyUserDeploymentConfigs(deployment, esc, controllerDeploymentAssetName); err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		// No error means applyAdvancedOverrides considered this input safe. Assert it didn't
+		// touch anything outside the documented allowlist.
+		if !reflect.DeepEqual(deployment.Spec.Replicas, original.Spec.Replicas) {
+			t.Fatalf("replicas changed without error: %v -> %v", original.Spec.Replicas, deployment.Spec.Replicas)
 		}
-
-		if deployment.Spec.Template.Spec.NodeSelector["disktype"] != "ssd" {
-			t.Errorf("expected nodeSelector to be applied, got %v", deployment.Spec.Template.Spec.NodeSelector)
+		if !reflect.DeepEqual(deployment.Spec.Selector, original.Spec.Selector) {
+			t.Fatalf("selector changed without error: %v -> %v", original.Spec.Selector, deployment.Spec.Selector)
 		}
-	})
-
-	t.Run("invalid advancedOverrides returns error through applyUserDeploymentConfigs", func(t *testing.T) {
-		t.Parallel()
-		r := testReconciler(t)
-		deployment := &appsv1.Deployment{
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{Name: OperandCoreControllerContainer},
-						},
-					},
-				},
-			},
+		if len(deployment.Spec.Template.Spec.Containers) != len(original.Spec.Template.Spec.Containers) {
+			t.Fatalf("container count changed without error: %d -> %d",
+				len(original.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
 		}
-
-		overrideJSON, _ := json.Marshal(map[string]any{
-			"spec": map[string]any{
-				"template": map[string]any{
-					"spec": map[string]any{
-						"volumes": []map[string]any{{"name": "evil"}},
-					},
-				},
-			},
-		})
-
-		esc := &v1alpha1.ExternalSecretsConfig{
-			Spec: v1alpha1.ExternalSecretsConfigSpec{
-				ControllerConfig: v1alpha1.ControllerConfig{
-					ComponentConfigs: []v1alpha1.ComponentConfig{
-						{
-							ComponentName:     v1alpha1.CoreController,
-							AdvancedOverrides: &runtime.RawExtension{Raw: overrideJSON},
-						},
-					},
-				},
-			},
-		}
-
-		err := r.applyUserDeploymentConfigs(deployment, esc, controllerDeploymentAssetName)
-		if err == nil {
-			t.Fatal("expected error for disallowed volumes path")
-		}
-		if !common.IsUserConfigurationError(err) {
-			t.Errorf("expected UserConfigurationError, got %v", err)
+		for i := range original.Spec.Template.Spec.Containers {
+			oc := original.Spec.Template.Spec.Containers[i]
+			nc := deployment.Spec.Template.Spec.Containers[i]
+			if oc.Name != nc.Name {
+				t.Fatalf("container[%d] name changed without error: %q -> %q", i, oc.Name, nc.Name)
+			}
+			if oc.Image != nc.Image {
+				t.Fatalf("container[%d] image changed without error: %q -> %q", i, oc.Image, nc.Image)
+			}
+			if !reflect.DeepEqual(oc.Env, nc.Env) {
+				t.Fatalf("container[%d] env changed without error: %+v -> %+v", i, oc.Env, nc.Env)
+			}
 		}
 	})
 }

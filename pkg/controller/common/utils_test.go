@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 )
@@ -541,6 +542,193 @@ func TestDeploymentObjectChanged(t *testing.T) {
 			t.Fatal("expected change when volume mount path differs")
 		}
 	})
+
+	t.Run("SecurityContext nil on fetched should trigger change", func(t *testing.T) {
+		t.Parallel()
+		allowPrivEsc := false
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivEsc,
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].SecurityContext = nil
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when desired has SecurityContext but fetched is nil")
+		}
+	})
+
+	t.Run("SecurityContext nil on desired should trigger change", func(t *testing.T) {
+		t.Parallel()
+		allowPrivEsc := false
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].SecurityContext = nil
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivEsc,
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when fetched has SecurityContext but desired is nil")
+		}
+	})
+
+	t.Run("SecurityContext both nil should not trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].SecurityContext = nil
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].SecurityContext = nil
+
+		if HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected no change when both SecurityContexts are nil")
+		}
+	})
+
+	t.Run("LivenessProbe difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].LivenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(8080)},
+			},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].LivenessProbe = nil
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when LivenessProbe differs")
+		}
+	})
+
+	t.Run("ReadinessProbe difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/readyz", Port: intstr.FromInt32(8080)},
+			},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(8080)},
+			},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when ReadinessProbe path differs")
+		}
+	})
+
+	t.Run("port protocol difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
+			{Name: "metrics", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
+			{Name: "metrics", ContainerPort: 8080, Protocol: corev1.ProtocolUDP},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when port Protocol differs")
+		}
+	})
+
+	t.Run("port name difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
+			{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
+			{Name: "metrics", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when port Name differs")
+		}
+	})
+
+	t.Run("HostNetwork difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.HostNetwork = true
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.HostNetwork = false
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when HostNetwork differs")
+		}
+	})
+
+	t.Run("Selector difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Selector = &v1.LabelSelector{
+			MatchLabels: map[string]string{"app": "v2"},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Selector = &v1.LabelSelector{
+			MatchLabels: map[string]string{"app": "v1"},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when Selector differs")
+		}
+	})
+
+	t.Run("Strategy difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
+		fetched := baseDeployment()
+		fetched.Spec.Strategy = appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when Strategy differs")
+		}
+	})
+
+	t.Run("MinReadySeconds difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.MinReadySeconds = 30
+		fetched := baseDeployment()
+		fetched.Spec.MinReadySeconds = 0
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when MinReadySeconds differs")
+		}
+	})
+
+	t.Run("Paused difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Paused = true
+		fetched := baseDeployment()
+		fetched.Spec.Paused = false
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when Paused differs")
+		}
+	})
+
+	t.Run("ProgressDeadlineSeconds difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		pds := int32(600)
+		desired.Spec.ProgressDeadlineSeconds = &pds
+		fetched := baseDeployment()
+		fetched.Spec.ProgressDeadlineSeconds = nil
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when ProgressDeadlineSeconds differs")
+		}
+	})
 }
 
 func deploymentWithContainerEnv(env []corev1.EnvVar) appsv1.Deployment {
@@ -571,6 +759,23 @@ func deploymentWithContainerVolumeMounts(mounts []corev1.VolumeMount) appsv1.Dep
 							Name:         "external-secrets",
 							Image:        "ghcr.io/external-secrets/external-secrets:v2.12.0",
 							VolumeMounts: mounts,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func baseDeployment() appsv1.Deployment {
+	return appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "external-secrets",
+							Image: "ghcr.io/external-secrets/external-secrets:v2.12.0",
 						},
 					},
 				},

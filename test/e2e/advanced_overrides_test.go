@@ -30,7 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/ptr"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
@@ -568,8 +568,8 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 				g.Expect(isExternalSecretsConfigDegraded(ctx)).To(BeTrue(),
 					"ExternalSecretsConfig should be Degraded when container name is invalid")
 				msg := externalSecretsConfigDegradedMessage(ctx)
-				g.Expect(msg).To(ContainSubstring("not a valid target"),
-					"Degraded message should indicate the container name is not valid")
+				g.Expect(msg).To(ContainSubstring("must match the component container"),
+					"Degraded message should indicate the container name must match")
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -801,41 +801,6 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 		})
 	})
 
-	Context("Leader election re-assertion after advancedOverrides", func() {
-		It("should re-assert --enable-leader-election=true on the core controller when replicas > 1 after advancedOverrides", func() {
-
-			By("Setting advancedOverrides with custom args (which replaces the args list)")
-			setAdvancedOverrides(ctx, runtimeClient, operatorv1alpha1.CoreController, rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{
-									"name": externalsecrets.OperandCoreControllerContainer,
-									"args": []string{"--concurrent=20"},
-								},
-							},
-						},
-					},
-				},
-			}), ptr.To(int32(2)))
-
-			By("Waiting for ExternalSecretsConfig to be Ready")
-			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
-
-			By("Verifying replicas > 1 and leader election arg is re-asserted")
-			Eventually(func(g Gomega) {
-				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
-				g.Expect(dep.Spec.Replicas).NotTo(BeNil(), "replicas should be set")
-				g.Expect(*dep.Spec.Replicas).To(BeNumerically(">", 1), "Core controller replicas must be > 1")
-				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
-				g.Expect(c).NotTo(BeNil())
-				g.Expect(c.Args).To(ContainElement(externalsecrets.LeaderElectionArg),
-					"leader election should be re-asserted when replicas > 1")
-			}, 2*time.Minute, 5*time.Second).Should(Succeed())
-		})
-	})
-
 	Context("Rapid consecutive updates", func() {
 		It("should handle rapid valid-then-invalid-then-valid advancedOverrides updates without crashing", func() {
 			By("Applying a valid advancedOverrides patch")
@@ -883,6 +848,208 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 			Eventually(func(g Gomega) {
 				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
 				g.Expect(dep.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("phase", "three"))
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Rejected container and initContainer injection", func() {
+		It("should set Degraded when advancedOverrides tries to add a sidecar container", func() {
+			By("Setting advancedOverrides with an extra sidecar container alongside the valid one")
+			setAdvancedOverrides(ctx, runtimeClient, operatorv1alpha1.CoreController, rawJSON(map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"containers": []map[string]any{
+								{
+									"name": externalsecrets.OperandCoreControllerContainer,
+									"args": []string{"--concurrent=20"},
+								},
+								{
+									"name":  "sidecar",
+									"image": "busybox",
+								},
+							},
+						},
+					},
+				},
+			}), nil)
+
+			By("Waiting for ExternalSecretsConfig to become Degraded")
+			Eventually(func(g Gomega) {
+				g.Expect(isExternalSecretsConfigDegraded(ctx)).To(BeTrue(),
+					"ExternalSecretsConfig should be Degraded when adding a sidecar container via advancedOverrides")
+				msg := externalSecretsConfigDegradedMessage(ctx)
+				g.Expect(msg).To(ContainSubstring("must match the component container"),
+					"Degraded message should indicate the container name must match the component")
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying the core controller Deployment was not modified")
+			dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
+			for _, c := range dep.Spec.Template.Spec.Containers {
+				Expect(c.Name).NotTo(Equal("sidecar"), "sidecar container should not be injected")
+			}
+		})
+
+		It("should set Degraded when advancedOverrides tries to add initContainers", func() {
+			By("Setting advancedOverrides targeting initContainers")
+			setAdvancedOverrides(ctx, runtimeClient, operatorv1alpha1.CoreController, rawJSON(map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"initContainers": []map[string]any{
+								{"name": "init-setup", "image": "busybox", "command": []string{"sh", "-c", "echo init"}},
+							},
+						},
+					},
+				},
+			}), nil)
+
+			By("Waiting for ExternalSecretsConfig to become Degraded")
+			Eventually(func(g Gomega) {
+				g.Expect(isExternalSecretsConfigDegraded(ctx)).To(BeTrue(),
+					"ExternalSecretsConfig should be Degraded when adding initContainers via advancedOverrides")
+				msg := externalSecretsConfigDegradedMessage(ctx)
+				g.Expect(msg).To(ContainSubstring("initContainers"),
+					"Degraded message should mention initContainers")
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Verifying the core controller Deployment has no initContainers")
+			dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
+			Expect(dep.Spec.Template.Spec.InitContainers).To(BeEmpty(),
+				"initContainers should not be injected via advancedOverrides")
+		})
+	})
+
+	Context("overrideEnv and advancedOverrides applied together", func() {
+		It("should apply both overrideEnv and advancedOverrides correctly on the same component", func() {
+			By("Setting overrideEnv and advancedOverrides on the core controller simultaneously")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				esc := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc); err != nil {
+					return err
+				}
+				found := false
+				for i := range esc.Spec.ControllerConfig.ComponentConfigs {
+					if esc.Spec.ControllerConfig.ComponentConfigs[i].ComponentName == operatorv1alpha1.CoreController {
+						esc.Spec.ControllerConfig.ComponentConfigs[i].OverrideEnv = []corev1.EnvVar{
+							{Name: "GOMAXPROCS", Value: "4"},
+						}
+						esc.Spec.ControllerConfig.ComponentConfigs[i].AdvancedOverrides = rawJSON(map[string]any{
+							"spec": map[string]any{
+								"template": map[string]any{
+									"spec": map[string]any{
+										"nodeSelector": map[string]string{"disktype": "ssd"},
+									},
+								},
+							},
+						})
+						found = true
+						break
+					}
+				}
+				if !found {
+					esc.Spec.ControllerConfig.ComponentConfigs = append(esc.Spec.ControllerConfig.ComponentConfigs, operatorv1alpha1.ComponentConfig{
+						ComponentName: operatorv1alpha1.CoreController,
+						OverrideEnv: []corev1.EnvVar{
+							{Name: "GOMAXPROCS", Value: "4"},
+						},
+						AdvancedOverrides: rawJSON(map[string]any{
+							"spec": map[string]any{
+								"template": map[string]any{
+									"spec": map[string]any{
+										"nodeSelector": map[string]string{"disktype": "ssd"},
+									},
+								},
+							},
+						}),
+					})
+				}
+				return runtimeClient.Update(ctx, esc)
+			})
+			Expect(err).NotTo(HaveOccurred(), "should set overrideEnv and advancedOverrides together")
+
+			By("Waiting for ExternalSecretsConfig to be Ready")
+			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+			By("Verifying both overrideEnv and advancedOverrides are applied to the core controller")
+			Eventually(func(g Gomega) {
+				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
+
+				g.Expect(dep.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("disktype", "ssd"),
+					"nodeSelector from advancedOverrides should be applied")
+
+				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
+				g.Expect(c).NotTo(BeNil(), "core controller container should exist")
+				envMap := make(map[string]string)
+				for _, e := range c.Env {
+					envMap[e.Name] = e.Value
+				}
+				g.Expect(envMap).To(HaveKeyWithValue("GOMAXPROCS", "4"),
+					"GOMAXPROCS from overrideEnv should be applied")
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Cleaning up overrideEnv after test")
+			Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				esc := &operatorv1alpha1.ExternalSecretsConfig{}
+				if err := runtimeClient.Get(ctx, client.ObjectKey{Name: common.ExternalSecretsConfigObjectName}, esc); err != nil {
+					return err
+				}
+				for i := range esc.Spec.ControllerConfig.ComponentConfigs {
+					if esc.Spec.ControllerConfig.ComponentConfigs[i].ComponentName == operatorv1alpha1.CoreController {
+						esc.Spec.ControllerConfig.ComponentConfigs[i].OverrideEnv = nil
+						break
+					}
+				}
+				return runtimeClient.Update(ctx, esc)
+			})).To(Succeed())
+		})
+	})
+
+	Context("advancedOverrides args replace operator defaults", func() {
+		It("should replace default args with advancedOverrides args on the core controller", func() {
+			By("Capturing baseline args on the core controller before override")
+			var baselineArgs []string
+			Eventually(func(g Gomega) {
+				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
+				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
+				g.Expect(c).NotTo(BeNil())
+				g.Expect(c.Args).NotTo(BeEmpty(), "baseline args should be present")
+				baselineArgs = c.Args
+			}, time.Minute, 5*time.Second).Should(Succeed())
+
+			By("Setting advancedOverrides with custom args that replace the full args list")
+			setAdvancedOverrides(ctx, runtimeClient, operatorv1alpha1.CoreController, rawJSON(map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"containers": []map[string]any{
+								{
+									"name": externalsecrets.OperandCoreControllerContainer,
+									"args": []string{"--concurrent=50", "--client-burst=500"},
+								},
+							},
+						},
+					},
+				},
+			}), nil)
+
+			By("Waiting for ExternalSecretsConfig to be Ready")
+			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
+
+			By("Verifying the args list is fully replaced by advancedOverrides")
+			Eventually(func(g Gomega) {
+				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
+				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
+				g.Expect(c).NotTo(BeNil())
+				g.Expect(c.Args).To(ContainElement("--concurrent=50"), "should have overridden --concurrent=50")
+				g.Expect(c.Args).To(ContainElement("--client-burst=500"), "should have overridden --client-burst=500")
+
+				for _, baseArg := range baselineArgs {
+					if baseArg != "--concurrent=50" && baseArg != "--client-burst=500" {
+						g.Expect(c.Args).NotTo(ContainElement(baseArg),
+							"baseline arg %q should be replaced by strategic merge", baseArg)
+					}
+				}
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
