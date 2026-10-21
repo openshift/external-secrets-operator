@@ -49,7 +49,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 		name          string
 		deployment    *appsv1.Deployment
 		overrides     *runtime.RawExtension
-		componentName v1alpha1.ComponentName
 		containerName string
 		wantErr       bool
 		errSubstring  string
@@ -59,7 +58,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			name:          "nil overrides is no-op",
 			deployment:    baseDeployment(),
 			overrides:     nil,
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.Containers[0].Args) != 3 {
@@ -81,7 +79,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				args := d.Spec.Template.Spec.Containers[0].Args
@@ -96,60 +93,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 				}
 				if slices.Contains(args, "--metrics-addr=:8080") {
 					t.Errorf("expected --metrics-addr=:8080 to be dropped, got %v", args)
-				}
-			},
-		},
-		{
-			name: "valid args override with replicas>1 re-asserts leader election",
-			deployment: func() *appsv1.Deployment {
-				d := baseDeployment()
-				d.Spec.Replicas = ptr.To(int32(2))
-				d.Spec.Template.Spec.Containers[0].Args = append(d.Spec.Template.Spec.Containers[0].Args, LeaderElectionArg)
-				return d
-			}(),
-			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=20"}},
-							},
-						},
-					},
-				},
-			}),
-			componentName: v1alpha1.CoreController,
-			containerName: OperandCoreControllerContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if !slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("expected leader election arg to be re-asserted when replicas=2, got %v", args)
-				}
-				if !slices.Contains(args, "--concurrent=20") {
-					t.Errorf("expected --concurrent=20 in args, got %v", args)
-				}
-			},
-		},
-		{
-			name:       "valid args override with replicas=1 does not re-assert leader election",
-			deployment: baseDeployment(),
-			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandCoreControllerContainer, "args": []string{"--concurrent=20"}},
-							},
-						},
-					},
-				},
-			}),
-			componentName: v1alpha1.CoreController,
-			containerName: OperandCoreControllerContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("expected no leader election arg when replicas=1, got %v", args)
 				}
 			},
 		},
@@ -176,7 +119,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.Affinity == nil || d.Spec.Template.Spec.Affinity.PodAntiAffinity == nil {
@@ -198,7 +140,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.Tolerations) != 1 {
@@ -221,7 +162,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.NodeSelector["disktype"] != "ssd" {
@@ -243,7 +183,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if len(d.Spec.Template.Spec.TopologySpreadConstraints) != 1 {
@@ -268,7 +207,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				res := d.Spec.Template.Spec.Containers[0].Resources
@@ -277,33 +215,26 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 				}
 			},
 		},
+		// --- Disallowed top-level fields ---
 		{
-			name: "webhook component does not re-assert leader election",
-			deployment: func() *appsv1.Deployment {
-				d := baseDeployment()
-				d.Spec.Replicas = ptr.To(int32(2))
-				d.Spec.Template.Spec.Containers[0].Name = OperandWebhookContainer
-				return d
-			}(),
+			name:       "reject metadata at top level",
+			deployment: baseDeployment(),
 			overrides: rawJSON(map[string]any{
-				"spec": map[string]any{
-					"template": map[string]any{
-						"spec": map[string]any{
-							"containers": []map[string]any{
-								{"name": OperandWebhookContainer, "args": []string{"webhook", "--port=10250"}},
-							},
-						},
-					},
-				},
+				"metadata": map[string]any{"name": "evil"},
 			}),
-			componentName: v1alpha1.Webhook,
-			containerName: OperandWebhookContainer,
-			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
-				args := d.Spec.Template.Spec.Containers[0].Args
-				if slices.Contains(args, LeaderElectionArg) {
-					t.Errorf("webhook should not have leader election arg, got %v", args)
-				}
-			},
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "metadata",
+		},
+		{
+			name:       "reject status at top level",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"status": map[string]any{},
+			}),
+			containerName: OperandCoreControllerContainer,
+			wantErr:       true,
+			errSubstring:  "status",
 		},
 
 		// --- Disallowed paths ---
@@ -313,7 +244,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"replicas": 3},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.replicas",
@@ -324,7 +254,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"selector": map[string]any{"matchLabels": map[string]string{"app": "evil"}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.selector",
@@ -335,7 +264,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"revisionHistoryLimit": 5},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "revisionHistoryLimit",
@@ -346,7 +274,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"labels": map[string]string{"evil": "true"}}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "spec.template.metadata",
@@ -359,7 +286,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"volumes": []map[string]any{{"name": "evil"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "volumes",
@@ -372,7 +298,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"initContainers": []map[string]any{{"name": "evil", "image": "evil:latest"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "initContainers",
@@ -387,10 +312,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].env",
+			errSubstring:  "containers[0].env",
 		},
 		{
 			name:       "reject container image",
@@ -402,10 +326,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].image",
+			errSubstring:  "containers[0].image",
 		},
 		{
 			name:       "reject container ports",
@@ -417,10 +340,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].ports",
+			errSubstring:  "containers[0].ports",
 		},
 		{
 			name:       "reject container securityContext",
@@ -432,10 +354,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].securityContext",
+			errSubstring:  "containers[0].securityContext",
 		},
 		{
 			name:       "reject container volumeMounts",
@@ -447,10 +368,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].volumeMounts",
+			errSubstring:  "containers[0].volumeMounts",
 		},
 		{
 			name:       "reject container command",
@@ -462,10 +382,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "containers[].command",
+			errSubstring:  "containers[0].command",
 		},
 		{
 			name:       "reject wrong container name",
@@ -477,10 +396,9 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
-			errSubstring:  "not a valid target",
+			errSubstring:  "must match the component container",
 		},
 		{
 			name:       "reject container without name",
@@ -492,7 +410,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "container name is required",
@@ -501,7 +418,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			name:          "reject invalid JSON",
 			deployment:    baseDeployment(),
 			overrides:     &runtime.RawExtension{Raw: []byte(`{not valid json}`)},
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "invalid JSON",
@@ -514,7 +430,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"serviceAccountName": "evil",
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "serviceAccountName",
@@ -527,7 +442,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"ephemeralContainers": []map[string]any{{"name": "debug", "image": "busybox"}},
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "ephemeralContainers",
@@ -540,7 +454,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					"foo": "evil:latest",
 				}}},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			wantErr:       true,
 			errSubstring:  "unknown field",
@@ -583,7 +496,6 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					},
 				},
 			}),
-			componentName: v1alpha1.CoreController,
 			containerName: OperandCoreControllerContainer,
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.Affinity == nil {
@@ -612,7 +524,7 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := applyAdvancedOverrides(tt.deployment, tt.overrides, tt.componentName, tt.containerName)
+			err := applyAdvancedOverrides(tt.deployment, tt.overrides, tt.containerName)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")

@@ -9,8 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
 
@@ -32,10 +32,9 @@ var allowedContainerFields = map[string]bool{
 }
 
 // applyAdvancedOverrides validates the advancedOverrides patch against the allowlist,
-// applies it as a strategic merge patch to the Deployment, and re-asserts leader election
-// on the core controller when replicas > 1. Returns a UserConfigurationError on disallowed
+// applies it as a strategic merge patch to the Deployment. Returns a UserConfigurationError on disallowed
 // paths or invalid patch data so the reconciler sets Degraded status.
-func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.RawExtension, componentName operatorv1alpha1.ComponentName, containerName string) error {
+func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.RawExtension, containerName string) error {
 	if overrides == nil || overrides.Raw == nil {
 		return nil
 	}
@@ -53,15 +52,6 @@ func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.Ra
 		return common.NewUserConfigurationError(err, "failed to apply advancedOverrides strategic merge patch")
 	}
 
-	if componentName == operatorv1alpha1.CoreController {
-		for i := range deployment.Spec.Template.Spec.Containers {
-			if deployment.Spec.Template.Spec.Containers[i].Name == containerName {
-				applyLeaderElection(&deployment.Spec.Template.Spec.Containers[i], deployment.Spec.Replicas)
-				break
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -77,85 +67,113 @@ func validateOverridePaths(raw map[string]interface{}, validContainerName string
 		return common.NewUserConfigurationError(err, "advancedOverrides contains invalid deployment fields")
 	}
 
-	specMap, exists, err := unstructured.NestedMap(raw, "spec")
-	if err != nil || !exists {
-		return nil
-	}
-
-	for key := range specMap {
-		if key != "template" {
-			return disallowedPathError("spec."+key, firstClassHint(key))
-		}
-	}
-
-	tmplMap, exists, err := unstructured.NestedMap(specMap, "template")
-	if err != nil || !exists {
-		return nil
-	}
-
-	for key := range tmplMap {
+	for key := range raw {
 		if key != "spec" {
-			return disallowedPathError("spec.template."+key, "use the first-class annotations/labels fields instead")
+			return forbiddenFieldError(field.NewPath(key), "")
 		}
 	}
 
-	podSpecMap, exists, err := unstructured.NestedMap(tmplMap, "spec")
-	if err != nil || !exists {
+	specPath := field.NewPath("spec")
+	specMap, err := validateAllowedFields(raw, "spec", specPath,
+		func(key string) bool { return key == "template" }, firstClassHint)
+	if err != nil {
+		return err
+	}
+
+	tmplPath := specPath.Child("template")
+	tmplMap, err := validateAllowedFields(specMap, "template", tmplPath,
+		func(key string) bool { return key == "spec" },
+		func(_ string) string { return "use the first-class annotations/labels fields instead" })
+	if err != nil {
+		return err
+	}
+
+	podSpecPath := tmplPath.Child("spec")
+	podSpecMap, err := validateAllowedFields(tmplMap, "spec", podSpecPath,
+		func(key string) bool { return allowedPodSpecFields[key] }, nil)
+	if err != nil {
+		return err
+	}
+
+	containers, exists, _ := unstructured.NestedSlice(podSpecMap, "containers")
+	if !exists {
 		return nil
 	}
 
-	for key := range podSpecMap {
-		if !allowedPodSpecFields[key] {
-			return disallowedPathError("spec.template.spec."+key, "")
-		}
-	}
-
-	containers, exists, err := unstructured.NestedSlice(podSpecMap, "containers")
-	if err != nil || !exists {
-		return nil
-	}
-
-	for _, entry := range containers {
+	containersPath := podSpecPath.Child("containers")
+	for i, entry := range containers {
 		cMap, ok := entry.(map[string]interface{})
 		if !ok {
 			continue
 		}
+		containerPath := containersPath.Index(i)
 
 		name, _, _ := unstructured.NestedString(cMap, "name")
 		if name == "" {
 			return common.NewUserConfigurationError(
-				fmt.Errorf("container name is required in advancedOverrides"),
+				field.Required(containerPath.Child("name"), "container name is required in advancedOverrides"),
 				"each container entry in advancedOverrides must specify a name",
 			)
 		}
 		if name != validContainerName {
 			return common.NewUserConfigurationError(
-				fmt.Errorf("container %q is not a valid target for this component", name),
+				field.Invalid(containerPath.Child("name"), name, fmt.Sprintf("must match the component container %q", validContainerName)),
 				"advancedOverrides container name must match the component container %q", validContainerName,
 			)
 		}
 
 		for key := range cMap {
-			if !allowedContainerFields[key] {
-				return disallowedPathError("spec.template.spec.containers[]."+key, "")
+			if allowedContainerFields[key] {
+				continue
 			}
+			return forbiddenFieldError(containerPath.Child(key), firstClassHint(key))
 		}
 	}
 
 	return nil
 }
 
-// disallowedPathError builds a UserConfigurationError for a rejected path.
-func disallowedPathError(path, hint string) *common.ReconcileError {
-	msg := fmt.Sprintf("%s is not allowed in advancedOverrides", path)
-	if hint != "" {
-		msg += "; " + hint
+// validateAllowedFields extracts the nested map at fieldName from parent and rejects any of its
+// keys not permitted by allowed, using hint (if non-nil) to generate a field-specific hint for
+// the error message. If fieldName is absent from parent, it returns (nil, nil): not an error,
+// since a patch may legitimately omit any level of this nesting, and the nil result propagates
+// safely through subsequent unstructured.Nested* / validateAllowedFields calls.
+func validateAllowedFields(parent map[string]interface{}, fieldName string, fldPath *field.Path, allowed func(key string) bool, hint func(key string) string) (map[string]interface{}, error) {
+	m, exists, err := unstructured.NestedMap(parent, fieldName)
+	if err != nil || !exists {
+		return nil, nil
 	}
-	return common.NewUserConfigurationError(fmt.Errorf("%s", msg), "%s is not allowed in advancedOverrides", path)
+
+	for key := range m {
+		if allowed(key) {
+			continue
+		}
+		h := ""
+		if hint != nil {
+			h = hint(key)
+		}
+		return nil, forbiddenFieldError(fldPath.Child(key), h)
+	}
+
+	return m, nil
 }
 
-// firstClassHint returns a user-friendly hint for deployment-level fields
-// that have first-class API equivalents.
+// forbiddenFieldError builds the UserConfigurationError for a disallowed advancedOverrides
+// field at fldPath, appending hint (if non-empty) to point the user at the correct alternative.
+func forbiddenFieldError(fldPath *field.Path, hint string) error {
+	detail := "field is not allowed in advancedOverrides"
+	if hint != "" {
+		detail += "; " + hint
+	}
+	return common.NewUserConfigurationError(
+		field.Forbidden(fldPath, detail),
+		"advancedOverrides contains a disallowed field",
+	)
+}
+
+// firstClassHint returns a user-friendly hint for advancedOverrides fields
+// that are blocked specifically because overriding them would bypass validation (CEL rules,
+// Minimum/Maximum bounds, immutability) enforced on their first-class CRD equivalent.
 func firstClassHint(key string) string {
 	switch key {
 	case "replicas":
@@ -164,6 +182,8 @@ func firstClassHint(key string) string {
 		return "use the first-class deploymentConfigs.revisionHistoryLimit field instead"
 	case "selector":
 		return "spec.selector is operator-managed and cannot be overridden"
+	case "env":
+		return "use the first-class spec.controllerConfig.componentConfigs.overrideEnv field instead"
 	default:
 		return ""
 	}
