@@ -214,6 +214,76 @@ func TestCreateOrApplyDeployments(t *testing.T) {
 			},
 		},
 		{
+			name: "deployment applies default resource limits when no user override is set",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				setupDeploymentCreate(m, capturedDeployment, "external-secrets")
+			},
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Fatal("deployment should not be nil")
+				}
+				for _, container := range deployment.Spec.Template.Spec.Containers {
+					if !container.Resources.Requests.Cpu().Equal(*defaultResourceRequirements.Requests.Cpu()) {
+						t.Errorf("container %s: CPU request = %v, want %v", container.Name, container.Resources.Requests.Cpu(), defaultResourceRequirements.Requests.Cpu())
+					}
+					if !container.Resources.Requests.Memory().Equal(*defaultResourceRequirements.Requests.Memory()) {
+						t.Errorf("container %s: memory request = %v, want %v", container.Name, container.Resources.Requests.Memory(), defaultResourceRequirements.Requests.Memory())
+					}
+					if !container.Resources.Limits.Cpu().Equal(*defaultResourceRequirements.Limits.Cpu()) {
+						t.Errorf("container %s: CPU limit = %v, want %v", container.Name, container.Resources.Limits.Cpu(), defaultResourceRequirements.Limits.Cpu())
+					}
+					if !container.Resources.Limits.Memory().Equal(*defaultResourceRequirements.Limits.Memory()) {
+						t.Errorf("container %s: memory limit = %v, want %v", container.Name, container.Resources.Limits.Memory(), defaultResourceRequirements.Limits.Memory())
+					}
+				}
+			},
+		},
+		{
+			name: "user-specified resources override defaults",
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
+				setupDeploymentCreate(m, capturedDeployment, "external-secrets")
+			},
+			updateExternalSecretsConfig: func(i *v1alpha1.ExternalSecretsConfig) {
+				i.Status.ExternalSecretsImage = commontest.TestExternalSecretsImageName
+				i.Spec.ApplicationConfig.Resources = &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("200m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("1000m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				}
+			},
+			validateDeployment: func(t *testing.T, deployment *appsv1.Deployment) {
+				if deployment == nil {
+					t.Fatal("deployment should not be nil")
+				}
+				wantCPUReq := resource.MustParse("200m")
+				wantMemReq := resource.MustParse("512Mi")
+				wantCPULimit := resource.MustParse("1000m")
+				wantMemLimit := resource.MustParse("1Gi")
+				for _, container := range deployment.Spec.Template.Spec.Containers {
+					if !container.Resources.Requests.Cpu().Equal(wantCPUReq) {
+						t.Errorf("container %s: CPU request = %v, want %v", container.Name, container.Resources.Requests.Cpu(), wantCPUReq)
+					}
+					if !container.Resources.Requests.Memory().Equal(wantMemReq) {
+						t.Errorf("container %s: memory request = %v, want %v", container.Name, container.Resources.Requests.Memory(), wantMemReq)
+					}
+					if !container.Resources.Limits.Cpu().Equal(wantCPULimit) {
+						t.Errorf("container %s: CPU limit = %v, want %v", container.Name, container.Resources.Limits.Cpu(), wantCPULimit)
+					}
+					if !container.Resources.Limits.Memory().Equal(wantMemLimit) {
+						t.Errorf("container %s: memory limit = %v, want %v", container.Name, container.Resources.Limits.Memory(), wantMemLimit)
+					}
+				}
+			},
+		},
+		{
 			name: "deployment reconciliation fails as image env var is empty",
 			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient, capturedDeployment **appsv1.Deployment) {
 				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
