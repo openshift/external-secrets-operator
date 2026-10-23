@@ -8,11 +8,14 @@ exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
 require (
 	github.com/cert-manager/cert-manager v1.21.1
 	github.com/go-logr/logr v1.4.4
+	github.com/openshift/api v0.0.0-20260807110950-72ae4424ef35
+	github.com/openshift/controller-runtime-common v0.0.0-20260813135806-e1187ec555fc
 	go.uber.org/zap v1.28.0
 	k8s.io/api v0.36.3
 	k8s.io/apiextensions-apiserver v0.36.3
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
+	k8s.io/klog/v2 v2.140.0
 	k8s.io/kubernetes v1.36.3
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	sigs.k8s.io/controller-runtime v0.24.1
@@ -53,6 +56,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.32.1 // indirect
 	github.com/onsi/gomega v1.40.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/openshift/library-go v0.0.0-20260807194649-ee0a87843dda // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -83,7 +87,6 @@ require (
 	k8s.io/component-base v0.36.3 // indirect
 	k8s.io/component-helpers v0.35.6 // indirect
 	k8s.io/controller-manager v0.35.6 // indirect
-	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/kubelet v0.32.2 //indirect
 	sigs.k8s.io/gateway-api v1.6.0 // indirect
