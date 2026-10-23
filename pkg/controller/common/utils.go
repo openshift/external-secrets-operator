@@ -324,7 +324,27 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *ResourceMetadata) bool {
-	if desired.Spec.Replicas != nil && !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
+	if !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.Selector, fetched.Spec.Selector) {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
+		return true
+	}
+
+	if desired.Spec.MinReadySeconds != fetched.Spec.MinReadySeconds {
+		return true
+	}
+
+	if desired.Spec.Paused != fetched.Spec.Paused {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
 		return true
 	}
 
@@ -336,6 +356,10 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 	}
 
 	if desired.Spec.Template.Spec.DNSPolicy != "" && desired.Spec.Template.Spec.DNSPolicy != fetched.Spec.Template.Spec.DNSPolicy {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.HostNetwork != fetched.Spec.Template.Spec.HostNetwork {
 		return true
 	}
 
@@ -353,15 +377,19 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if desired.Spec.Template.Spec.NodeSelector != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
+	if !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
 		return true
 	}
 
-	if desired.Spec.Template.Spec.Affinity != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Affinity, fetched.Spec.Template.Spec.Affinity) {
+	if !reflect.DeepEqual(desired.Spec.Template.Spec.Affinity, fetched.Spec.Template.Spec.Affinity) {
 		return true
 	}
 
-	if desired.Spec.Template.Spec.Tolerations != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+	if !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
 		return true
 	}
 
@@ -424,14 +452,16 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		return true
 	}
 
-	// Check ports
+	// Check ports (including Protocol and Name)
 	if len(desiredContainer.Ports) != len(fetchedContainer.Ports) {
 		return true
 	}
-	for _, fetchedPort := range fetchedContainer.Ports {
+	for _, desiredPort := range desiredContainer.Ports {
 		matched := false
-		for _, desiredPort := range desiredContainer.Ports {
-			if fetchedPort.ContainerPort == desiredPort.ContainerPort {
+		for _, fetchedPort := range fetchedContainer.Ports {
+			if desiredPort.ContainerPort == fetchedPort.ContainerPort &&
+				desiredPort.Protocol == fetchedPort.Protocol &&
+				desiredPort.Name == fetchedPort.Name {
 				matched = true
 				break
 			}
@@ -441,23 +471,16 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		}
 	}
 
-	// ReadinessProbe nil checks
-	if (desiredContainer.ReadinessProbe == nil) != (fetchedContainer.ReadinessProbe == nil) {
+	// Probe checks
+	if !reflect.DeepEqual(desiredContainer.ReadinessProbe, fetchedContainer.ReadinessProbe) {
 		return true
 	}
-	if desiredContainer.ReadinessProbe != nil && fetchedContainer.ReadinessProbe != nil {
-		if (desiredContainer.ReadinessProbe.HTTPGet == nil) != (fetchedContainer.ReadinessProbe.HTTPGet == nil) {
-			return true
-		}
-		if desiredContainer.ReadinessProbe.HTTPGet != nil && fetchedContainer.ReadinessProbe.HTTPGet != nil {
-			if desiredContainer.ReadinessProbe.HTTPGet.Path != fetchedContainer.ReadinessProbe.HTTPGet.Path {
-				return true
-			}
-		}
+	if !reflect.DeepEqual(desiredContainer.LivenessProbe, fetchedContainer.LivenessProbe) {
+		return true
 	}
 
-	// SecurityContext nil check
-	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
+	// SecurityContext comparison (handles nil on either side)
+	if !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
 		return true
 	}
 

@@ -969,6 +969,10 @@ func (r *Reconciler) applyUserDeploymentConfigs(deployment *appsv1.Deployment, e
 				}
 			}
 
+			// Apply advancedOverrides as a strategic merge patch after all first-class fields.
+			if err := applyAdvancedOverrides(deployment, i.AdvancedOverrides, containerName); err != nil {
+				return fmt.Errorf("failed to apply advancedOverrides for %s: %w", componentName, err)
+			}
 			break
 		}
 	}

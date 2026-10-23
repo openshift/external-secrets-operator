@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func init() {
@@ -191,6 +192,25 @@ type ComponentConfig struct {
 	// +listMapKey=name
 	// +optional
 	OverrideEnv []corev1.EnvVar `json:"overrideEnv,omitempty"`
+
+	// AdvancedOverrides applies a raw strategic merge patch onto the operator-generated Deployment spec.
+	//
+	// WARNING: DO NOT USE UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING. Supplying fields outside the allowed
+	// list will cause validation to fail, putting the operator in a Degraded condition. Values provided here
+	// take precedence over corresponding first-class CRD fields (e.g., nodeSelector, tolerations).
+	//
+	// Allowed field paths:
+	//   - spec.template.spec.affinity
+	//   - spec.template.spec.tolerations
+	//   - spec.template.spec.nodeSelector
+	//   - spec.template.spec.topologySpreadConstraints
+	//   - spec.template.spec.containers[*].args
+	//   - spec.template.spec.containers[*].resources
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	AdvancedOverrides *runtime.RawExtension `json:"advancedOverrides,omitempty"`
 }
 
 // DeploymentConfig defines configuration overrides for a Kubernetes Deployment resource.
@@ -206,10 +226,10 @@ type DeploymentConfig struct {
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 
 	// replicas specifies the desired number of pod replicas for this component's Deployment.
-	// When set to greater than 1 on ExternalSecretsCoreController or CertController,
-	// leader election is automatically enabled to ensure only one replica actively
-	// reconciles at a time. Other components (Webhook, BitwardenSDKServer) do not use
-	// leader election regardless of replica count.
+	// When set to greater than 1 on the ExternalSecretsCoreController, leader election is
+	// automatically enabled to ensure only one replica actively reconciles at a time.
+	// Other components (Webhook, CertController, BitwardenSDKServer) do not use leader election
+	// regardless of replica count.
 	// +kubebuilder:default:=1
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10
