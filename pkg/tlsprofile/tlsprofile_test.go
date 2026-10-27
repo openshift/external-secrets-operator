@@ -5,87 +5,8 @@ import (
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 )
-
-func TestEffectiveSpec_builtinDeepCopiesCiphers(t *testing.T) {
-	ref := configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
-	if len(ref.Ciphers) == 0 {
-		t.Fatal("expected non-empty intermediate cipher list")
-	}
-	origFirst := ref.Ciphers[0]
-
-	spec, err := EffectiveSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileIntermediateType})
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec.Ciphers[0] = "MUTATED-CIPHER-SHOULD-NOT-LEAK"
-
-	spec2, err := EffectiveSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileIntermediateType})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if spec2.Ciphers[0] != origFirst {
-		t.Fatalf("second EffectiveSpec first cipher %q, want %q", spec2.Ciphers[0], origFirst)
-	}
-	if ref.Ciphers[0] != origFirst {
-		t.Fatalf("global TLSProfiles mutated: got %q want %q", ref.Ciphers[0], origFirst)
-	}
-}
-
-func TestEffectiveSpec_nilUsesIntermediate(t *testing.T) {
-	spec, err := EffectiveSpec(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if spec.MinTLSVersion != configv1.VersionTLS12 {
-		t.Fatalf("expected intermediate min TLS 1.2, got %q", spec.MinTLSVersion)
-	}
-	if len(spec.Ciphers) == 0 {
-		t.Fatal("expected non-empty cipher list")
-	}
-}
-
-func TestEffectiveSpec_unknownTypeReturnsError(t *testing.T) {
-	profile := &configv1.TLSSecurityProfile{
-		Type: configv1.TLSProfileType("bogus-profile-type"),
-	}
-	_, err := EffectiveSpec(profile)
-	if err == nil {
-		t.Fatal("expected error for unrecognized TLS profile type")
-	}
-	if !strings.Contains(err.Error(), "bogus-profile-type") {
-		t.Fatalf("expected error to mention unknown type, got: %v", err)
-	}
-}
-
-func TestEffectiveSpec_custom(t *testing.T) {
-	profile := &configv1.TLSSecurityProfile{
-		Type: configv1.TLSProfileCustomType,
-		Custom: &configv1.CustomTLSProfile{
-			TLSProfileSpec: configv1.TLSProfileSpec{
-				Ciphers:       []string{"TLS_AES_128_GCM_SHA256", "ECDHE-RSA-AES128-GCM-SHA256"},
-				MinTLSVersion: configv1.VersionTLS12,
-			},
-		},
-	}
-	spec, err := EffectiveSpec(profile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(spec.Ciphers) != 2 {
-		t.Fatalf("cipher count: %d", len(spec.Ciphers))
-	}
-}
-
-func TestEffectiveSpec_customNilReturnsError(t *testing.T) {
-	profile := &configv1.TLSSecurityProfile{
-		Type: configv1.TLSProfileCustomType,
-	}
-	_, err := EffectiveSpec(profile)
-	if err == nil {
-		t.Fatal("expected error for nil custom profile")
-	}
-}
 
 func TestOperandTLSArgs_nilSpecReturnsNil(t *testing.T) {
 	args := OperandTLSArgs(nil)
@@ -108,11 +29,11 @@ func parseArgs(t *testing.T, args []string) map[string]string {
 }
 
 func TestOperandTLSArgs_intermediate(t *testing.T) {
-	spec, err := EffectiveSpec(nil)
+	spec, err := openshifttls.GetTLSProfileSpec(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := OperandTLSArgs(spec)
+	args := OperandTLSArgs(&spec)
 	m := parseArgs(t, args)
 
 	if m["--tls-min-version"] != "1.2" {
@@ -160,11 +81,11 @@ func TestOperandTLSArgs_builtinProfilesKeepHTTP2Cipher(t *testing.T) {
 		configv1.TLSProfileOldType,
 		configv1.TLSProfileIntermediateType,
 	} {
-		spec, err := EffectiveSpec(&configv1.TLSSecurityProfile{Type: profileType})
+		spec, err := openshifttls.GetTLSProfileSpec(&configv1.TLSSecurityProfile{Type: profileType})
 		if err != nil {
 			t.Fatalf("%s: %v", profileType, err)
 		}
-		ciphers := parseArgs(t, OperandTLSArgs(spec))["--tls-ciphers"]
+		ciphers := parseArgs(t, OperandTLSArgs(&spec))["--tls-ciphers"]
 		if !strings.Contains(ciphers, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256") &&
 			!strings.Contains(ciphers, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256") {
 			t.Errorf("%s: expected an HTTP/2-required AES_128_GCM_SHA256 cipher, got %q", profileType, ciphers)

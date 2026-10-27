@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 )
 
 func TestClientTLSConfig_nilSpecErrors(t *testing.T) {
@@ -15,11 +16,11 @@ func TestClientTLSConfig_nilSpecErrors(t *testing.T) {
 }
 
 func TestClientTLSConfig_intermediate(t *testing.T) {
-	spec, err := EffectiveSpec(nil)
+	spec, err := openshifttls.GetTLSProfileSpec(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := ClientTLSConfig(spec, nil)
+	cfg, err := ClientTLSConfig(&spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,11 +36,11 @@ func TestClientTLSConfig_intermediate(t *testing.T) {
 }
 
 func TestClientTLSConfig_modern(t *testing.T) {
-	spec, err := EffectiveSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileModernType})
+	spec, err := openshifttls.GetTLSProfileSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileModernType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := ClientTLSConfig(spec, nil)
+	cfg, err := ClientTLSConfig(&spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,11 +68,11 @@ func TestClientTLSConfig_emptyCiphers(t *testing.T) {
 func TestClientTLSConfig_curvePreferencesFromProfileGroups(t *testing.T) {
 	// The Intermediate profile exposes TLS groups, which take precedence over the
 	// DefaultCurvePreferences fallback.
-	spec, err := EffectiveSpec(nil)
+	spec, err := openshifttls.GetTLSProfileSpec(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := ClientTLSConfig(spec, nil)
+	cfg, err := ClientTLSConfig(&spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

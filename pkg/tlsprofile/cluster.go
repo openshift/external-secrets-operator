@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	configv1 "github.com/openshift/api/config/v1"
 )
 
 // APIServerClusterName is the singleton apiserver.config.openshift.io object.
@@ -111,9 +111,9 @@ func ResolveHonoredTLSProfile(ctx context.Context, fetch FetchAPIServerFunc, com
 		klog.Warningf("apiserver.config.openshift.io/cluster has unknown tlsAdherence %q; treating as StrictAllComponents for %s", adherence, component)
 	}
 
-	spec, err := EffectiveSpec(apiServer.Spec.TLSSecurityProfile)
+	spec, err := openshifttls.GetTLSProfileSpec(apiServer.Spec.TLSSecurityProfile)
 	if err != nil {
 		return nil, &InvalidProfileError{err: err}
 	}
-	return spec, nil
+	return &spec, nil
 }

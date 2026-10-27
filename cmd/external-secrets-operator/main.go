@@ -218,7 +218,7 @@ type startupTLSProfile struct {
 
 // resolveStartupTLSProfile reads apiserver.config.openshift.io/cluster once at
 // startup, using an uncached client because the manager cache is not started yet.
-func resolveStartupTLSProfile(restConfig *rest.Config) (*startupTLSProfile, error) {
+func resolveStartupTLSProfile(ctx context.Context, restConfig *rest.Config) (*startupTLSProfile, error) {
 	uncachedClient, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create uncached client for TLS profile resolution: %w", err)
@@ -320,7 +320,7 @@ func main() {
 	// Read the cluster TLS profile once, here. Controllers reuse the recorded spec
 	// instead of re-reading the APIServer object, since any change to it restarts
 	// the operator.
-	startupTLS, err := resolveStartupTLSProfile(restConfig)
+	startupTLS, err := resolveStartupTLSProfile(signalCtx, restConfig)
 	if err != nil {
 		setupLog.Error(err, "failed to resolve cluster TLS profile")
 		os.Exit(1)

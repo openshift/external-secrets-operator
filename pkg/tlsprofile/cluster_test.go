@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	configv1 "github.com/openshift/api/config/v1"
 )
 
 func TestResolveHonoredTLSProfile_fetchErrors(t *testing.T) {
@@ -50,14 +50,16 @@ func TestResolveHonoredTLSProfile_fetchErrors(t *testing.T) {
 }
 
 func TestResolveHonoredTLSProfile_adherence(t *testing.T) {
-	wantModern, err := EffectiveSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileModernType})
+	wantModernVal, err := openshifttls.GetTLSProfileSpec(&configv1.TLSSecurityProfile{Type: configv1.TLSProfileModernType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIntermediate, err := EffectiveSpec(nil)
+	wantModern := &wantModernVal
+	wantIntermediateVal, err := openshifttls.GetTLSProfileSpec(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	wantIntermediate := &wantIntermediateVal
 
 	cases := []struct {
 		name      string
@@ -111,7 +113,7 @@ func TestResolveHonoredTLSProfile_adherence(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "custom TLS profile is missing custom settings",
+			wantErr: "custom TLS profile specified but Custom field is nil",
 		},
 	}
 

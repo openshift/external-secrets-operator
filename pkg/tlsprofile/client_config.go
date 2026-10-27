@@ -7,6 +7,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	crtls "github.com/openshift/controller-runtime-common/pkg/tls"
+	"k8s.io/klog/v2"
 )
 
 // DefaultCurvePreferences is the explicit key-exchange curve order for TLS
@@ -31,7 +32,7 @@ func ClientTLSConfig(spec *configv1.TLSProfileSpec, rootCAs *x509.CertPool) (*tl
 	// (below TLS 1.3) cipher suites to the returned tls.Config.
 	configure, unsupported := crtls.NewTLSConfigFromProfile(*spec)
 	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported TLS cipher/group names in profile: %v", unsupported)
+		klog.Warningf("unsupported TLS cipher/group names in cluster profile, skipped: %v", unsupported)
 	}
 
 	tlsConfig := &tls.Config{
