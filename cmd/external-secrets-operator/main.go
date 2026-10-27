@@ -46,6 +46,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
+	libgocrypto "github.com/openshift/library-go/pkg/crypto"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
@@ -66,12 +67,8 @@ const (
 
 	openshiftCACertificateFile = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 
-	// startupTLSProfileTimeout defines the max waiting timeout for reading TLS profile from the
-	// cluster at startup.
+	// startupTLSProfileTimeout defines the max waiting timeout for reading cluster TLS profile at startup.
 	startupTLSProfileTimeout = 30 * time.Second
-
-	// tlsProfileComponentName identifies the operator in cluster TLS profile logs.
-	tlsProfileComponentName = "external-secrets-operator"
 )
 
 // validateMetricsCertDir validates that the certificate and key files exist in the given directory.
@@ -106,7 +103,6 @@ func loadOpenShiftCACertPool() (*x509.CertPool, error) {
 }
 
 var (
-	ctx      = context.Background()
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -125,7 +121,7 @@ func disableHTTP2(c *tls.Config) {
 // before TLSOpts is assigned so that every option (including the cluster TLS
 // profile) is actually honored by the metrics server. A nil tlsProfileSpec
 // means no cluster TLS profile is enforced.
-func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr, metricsCerts string, tlsProfileSpec *configv1.TLSProfileSpec) (metricsserver.Options, error) {
+func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr, metricsCerts string) (metricsserver.Options, error) {
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/server
@@ -170,12 +166,14 @@ func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr,
 			c.ClientCAs = certPool
 		})
 
-		profileOpt, err := clusterTLSOpt(tlsProfileSpec)
-		if err != nil {
-			return opts, err
-		}
-		if profileOpt != nil {
-			tlsOpts = append(tlsOpts, profileOpt)
+		// nil when no cluster TLS profile is enforced (see
+		// libgocrypto.ShouldHonorClusterTLSProfile) - operator defaults apply.
+		if tlsCfg := tlsprofile.ServerTLSConfig(nil); tlsCfg != nil {
+			tlsOpts = append(tlsOpts, func(c *tls.Config) {
+				c.MinVersion = tlsCfg.MinVersion
+				c.CipherSuites = tlsCfg.CipherSuites
+				c.CurvePreferences = tlsCfg.CurvePreferences
+			})
 		}
 	}
 
@@ -183,45 +181,22 @@ func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr,
 	return opts, nil
 }
 
-// clusterTLSOpt returns a tls.Config mutator applying the cluster TLS profile to
-// the operator's own serving endpoints, or nil when no profile is enforced.
-func clusterTLSOpt(tlsSpec *configv1.TLSProfileSpec) (func(*tls.Config), error) {
-	if tlsSpec == nil {
-		return nil, nil
-	}
-	tlsCfg, err := tlsprofile.ClientTLSConfig(tlsSpec, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build TLS config from cluster profile: %w", err)
-	}
-	setupLog.Info("applying cluster TLS profile to operator serving endpoints",
-		"minTLSVersion", tlsSpec.MinTLSVersion)
-	return func(c *tls.Config) {
-		c.MinVersion = tlsCfg.MinVersion
-		c.CipherSuites = tlsCfg.CipherSuites
-		c.CurvePreferences = tlsCfg.CurvePreferences
-	}, nil
-}
-
-// startupTLSProfile holds everything read from apiserver.config.openshift.io/cluster
-// at operator startup.
-type startupTLSProfile struct {
-	// honored is the TLS profile spec the operator must enforce, or nil when the
-	// cluster profile must not be enforced and existing TLS settings are kept.
-	honored *configv1.TLSProfileSpec
-
-	// initialSpec and initialAdherence seed the TLS security profile watcher, which
-	// restarts the operator when either changes. They are recorded regardless of
-	// whether the profile is honored, since turning adherence on must also restart.
-	initialSpec      configv1.TLSProfileSpec
-	initialAdherence configv1.TLSAdherencePolicy
+// startupConfig holds everything read from apiserver.config.openshift.io/cluster
+// at operator startup. tlsProfileSpec is the raw resolved profile; whether it
+// should be enforced is decided separately via tlsAdherence (see
+// libgocrypto.ShouldHonorClusterTLSProfile).
+type startupConfig struct {
+	tlsProfileSpec configv1.TLSProfileSpec
+	tlsAdherence   configv1.TLSAdherencePolicy
+	tlsProfileType configv1.TLSProfileType
 }
 
 // resolveStartupTLSProfile reads apiserver.config.openshift.io/cluster once at
 // startup, using an uncached client because the manager cache is not started yet.
-func resolveStartupTLSProfile(restConfig *rest.Config) (*startupTLSProfile, error) {
+func resolveStartupTLSProfile(ctx context.Context, restConfig *rest.Config, cfg *startupConfig) error {
 	uncachedClient, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create uncached client for TLS profile resolution: %w", err)
+		return fmt.Errorf("failed to create uncached client for TLS profile resolution: %w", err)
 	}
 	startupCtx, cancel := context.WithTimeout(ctx, startupTLSProfileTimeout)
 	defer cancel()
@@ -231,34 +206,32 @@ func resolveStartupTLSProfile(restConfig *rest.Config) (*startupTLSProfile, erro
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			setupLog.Info("apiserver.config.openshift.io/cluster not found, skipping cluster TLS profile")
-			return &startupTLSProfile{}, nil
+			return nil
 		}
-		return nil, fmt.Errorf("failed to get apiserver.config.openshift.io/cluster: %w", err)
+		return fmt.Errorf("failed to get apiserver.config.openshift.io/cluster: %w", err)
 	}
 
-	// The watcher recomputes the spec with openshifttls.GetTLSProfileSpec on every
-	// APIServer event and compares it against initialSpec, so the seed value must
-	// be computed the same way.
-	initialSpec, err := openshifttls.GetTLSProfileSpec(apiServer.Spec.TLSSecurityProfile)
+	tlsProfileSpec, err := openshifttls.GetTLSProfileSpec(apiServer.Spec.TLSSecurityProfile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
+		return fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
 	}
 
-	honored, err := tlsprofile.ResolveHonoredTLSProfile(
-		startupCtx,
-		func(context.Context) (*configv1.APIServer, error) { return apiServer, nil },
-		tlsProfileComponentName,
-		tlsprofile.FetchErrorPropagateExceptNotFound,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
-	}
+	cfg.tlsProfileSpec = tlsProfileSpec
+	cfg.tlsProfileType = resolveTLSProfileType(apiServer.Spec.TLSSecurityProfile)
+	cfg.tlsAdherence = apiServer.Spec.TLSAdherence
+	return nil
+}
 
-	return &startupTLSProfile{
-		honored:          honored,
-		initialSpec:      initialSpec,
-		initialAdherence: apiServer.Spec.TLSAdherence,
-	}, nil
+// resolveTLSProfileType returns profile.Type, or libgocrypto.DefaultTLSProfileType if profile is
+// nil or has no type set. TLSSecurityProfile is optional on apiserver.config.openshift.io/cluster
+// and commonly unset; this mirrors GetTLSProfileSpec's own profile == nil || profile.Type == ""
+// fallback above so tlsProfileType stays consistent with the resolved tlsProfileSpec instead of
+// panicking on a nil pointer.
+func resolveTLSProfileType(profile *configv1.TLSSecurityProfile) configv1.TLSProfileType {
+	if profile != nil && profile.Type != "" {
+		return profile.Type
+	}
+	return libgocrypto.DefaultTLSProfileType
 }
 
 func init() {
@@ -273,6 +246,15 @@ func init() {
 
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+}
+
+func setStartupConfig(ctx context.Context, restConfig *rest.Config) (*startupConfig, error) {
+	startupCfg := new(startupConfig)
+	err := resolveStartupTLSProfile(ctx, restConfig, startupCfg)
+	if err != nil {
+		return nil, err
+	}
+	return startupCfg, nil
 }
 
 func main() {
@@ -313,21 +295,35 @@ func main() {
 	// Derive a cancellable context from the signal handler so the TLS security
 	// profile watcher can trigger a graceful shutdown; the pod is then restarted
 	// and picks up the new cluster TLS profile.
-	signalCtx, cancel := context.WithCancel(ctrl.SetupSignalHandler())
+	ctx, cancel := context.WithCancel(ctrl.SetupSignalHandler())
 	defer cancel()
-	ctx = signalCtx
 
 	// Read the cluster TLS profile once, here. Controllers reuse the recorded spec
 	// instead of re-reading the APIServer object, since any change to it restarts
 	// the operator.
-	startupTLS, err := resolveStartupTLSProfile(restConfig)
+	startupCfg, err := setStartupConfig(ctx, restConfig)
 	if err != nil {
-		setupLog.Error(err, "failed to resolve cluster TLS profile")
+		setupLog.Error(err, "failed to set startup configuration")
 		os.Exit(1)
 	}
-	tlsprofile.SetStartupProfile(startupTLS.honored)
 
-	metricsServerOptions, err := configureMetricsServerOptions(secureMetrics, enableHTTP2, metricsAddr, metricsCerts, startupTLS.honored)
+	// startupCfg.tlsProfileSpec is resolved unconditionally; whether it should
+	// be enforced is decided separately by ShouldHonorClusterTLSProfile.
+	var tlsSpec *configv1.TLSProfileSpec
+	if libgocrypto.ShouldHonorClusterTLSProfile(startupCfg.tlsAdherence) {
+		tlsSpec = &startupCfg.tlsProfileSpec
+		setupLog.Info("cluster TLS profile will be used for both operator and operands",
+			"profileType", startupCfg.tlsProfileType)
+	} else {
+		setupLog.Info("cluster TLS adherence policy does not require honoring the TLS profile; operator and operand defaults apply",
+			"tlsAdherence", startupCfg.tlsAdherence)
+	}
+	if err := tlsprofile.SetTLSConfig(tlsSpec); err != nil {
+		setupLog.Error(err, "failed to set TLS configuration")
+		os.Exit(1)
+	}
+
+	metricsServerOptions, err := configureMetricsServerOptions(secureMetrics, enableHTTP2, metricsAddr, metricsCerts)
 	if err != nil {
 		setupLog.Error(err, "failed to configure metrics server")
 		os.Exit(1)
@@ -356,8 +352,8 @@ func main() {
 	// own serving TLS settings and the operand's.
 	if err := (&openshifttls.SecurityProfileWatcher{
 		Client:                    mgr.GetClient(),
-		InitialTLSProfileSpec:     startupTLS.initialSpec,
-		InitialTLSAdherencePolicy: startupTLS.initialAdherence,
+		InitialTLSProfileSpec:     startupCfg.tlsProfileSpec,
+		InitialTLSAdherencePolicy: startupCfg.tlsAdherence,
 		OnProfileChange: func(_ context.Context, oldSpec, newSpec configv1.TLSProfileSpec) {
 			setupLog.Info("cluster TLS security profile changed, shutting down to reload it",
 				"oldProfile", oldSpec, "newProfile", newSpec)

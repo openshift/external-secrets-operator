@@ -21,8 +21,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1 "github.com/openshift/api/config/v1"
-
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
@@ -136,18 +134,13 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	}
 	logLevel := getLogLevel(esc, r.esm)
 
-	// Cluster TLS profile for the operand deployments, resolved once at operator
-	// startup. The operator restarts when the cluster profile changes, so there is
-	// no need to re-read apiserver.config.openshift.io/cluster here. A nil spec
-	// means no cluster profile is enforced and the operand defaults are kept.
-	//
-	// TLS args are applied before applyOperandArgsFromEnv so that an explicit
-	// OPERAND_*_ARGS override still wins over the cluster profile.
-	tlsSpec := tlsprofile.StartupProfile()
-
+	// TLS args (derived from the cluster TLS profile resolved once at operator
+	// startup, via tlsprofile.StartupOperandTLSArgs) are applied before
+	// applyOperandArgsFromEnv so that an explicit OPERAND_*_ARGS override still
+	// wins over the cluster profile.
 	switch assetName {
 	case controllerDeploymentAssetName:
-		r.updateContainerSpec(deployment, esc, image, logLevel, tlsSpec)
+		r.updateContainerSpec(deployment, esc, image, logLevel)
 		if err := applyOperandArgsFromEnv(deployment, OperandCoreControllerContainer, OperandExternalSecretsArgsEnvVar); err != nil {
 			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
 		}
@@ -166,19 +159,19 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 			esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval != nil {
 			checkInterval = normalizeDurationArg(esc.Spec.ApplicationConfig.WebhookConfig.CertificateCheckInterval.Duration.String())
 		}
-		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval, tlsSpec)
+		updateWebhookContainerSpec(deployment, image, logLevel, checkInterval)
 		if err := applyOperandArgsFromEnv(deployment, OperandWebhookContainer, OperandWebhookArgsEnvVar); err != nil {
 			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
 		}
 		updateWebhookVolumeConfig(deployment, esc)
 	case certControllerDeploymentAssetName:
-		updateCertControllerContainerSpec(deployment, image, logLevel, tlsSpec)
+		updateCertControllerContainerSpec(deployment, image, logLevel)
 		if err := applyOperandArgsFromEnv(deployment, OperandCertControllerContainer, OperandCertControllerArgsEnvVar); err != nil {
 			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
 		}
 	case bitwardenDeploymentAssetName:
 		deployment.Labels["app.kubernetes.io/version"] = os.Getenv(bitwardenImageVersionEnvVarName)
-		updateBitwardenServerContainerSpec(deployment, bitwardenImage, tlsSpec)
+		updateBitwardenServerContainerSpec(deployment, bitwardenImage)
 		if err := applyOperandArgsFromEnv(deployment, OperandBitwardenContainer, OperandBitwardenSDKServerArgsEnvVar); err != nil {
 			return nil, fmt.Errorf("failed to apply operand args from env: %w", err)
 		}
@@ -389,9 +382,10 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-// argument list for external-secrets deployment resource. A nil tlsSpec means no
-// cluster TLS profile is enforced and no --tls-* args are added.
-func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string, tlsSpec *configv1.TLSProfileSpec) {
+// argument list for external-secrets deployment resource. --tls-* args are
+// added for the cluster TLS profile resolved at operator startup, if any is
+// enforced (see tlsprofile.StartupOperandTLSArgs).
+func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
 		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
 		enableClusterExternalSecretsArgFmt = "--enable-cluster-external-secret-reconciler=%s"
@@ -421,7 +415,7 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 
 	r.updateOptionalFeatures(&args, []operatorv1alpha1.FeatureName{operatorv1alpha1.UnsafeAllowGenericTargets})
 
-	args = append(args, tlsprofile.OperandTLSArgs(tlsSpec)...)
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == OperandCoreControllerContainer {
@@ -433,9 +427,10 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 	}
 }
 
-// argument list for webhook deployment resource. A nil tlsSpec means no cluster
-// TLS profile is enforced and no --tls-* args are added.
-func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, checkInterval string, tlsSpec *configv1.TLSProfileSpec) {
+// argument list for webhook deployment resource. --tls-* args are added for
+// the cluster TLS profile resolved at operator startup, if any is enforced
+// (see tlsprofile.StartupOperandTLSArgs).
+func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, checkInterval string) {
 	args := []string{
 		"webhook",
 		fmt.Sprintf("--dns-name=external-secrets-webhook.%s.svc", deployment.GetNamespace()),
@@ -448,7 +443,7 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 		"--zap-time-encoding=epoch",
 	}
 
-	args = append(args, tlsprofile.OperandTLSArgs(tlsSpec)...)
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "webhook" {
@@ -460,9 +455,10 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 	}
 }
 
-// argument list for cert controller deployment resource. A nil tlsSpec means no
-// cluster TLS profile is enforced and no --tls-* args are added.
-func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string, tlsSpec *configv1.TLSProfileSpec) {
+// argument list for cert controller deployment resource. --tls-* args are
+// added for the cluster TLS profile resolved at operator startup, if any is
+// enforced (see tlsprofile.StartupOperandTLSArgs).
+func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
 	namespace := deployment.GetNamespace()
 	args := []string{
 		"certcontroller",
@@ -479,7 +475,7 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 		LeaderElectionArg,
 	}
 
-	args = append(args, tlsprofile.OperandTLSArgs(tlsSpec)...)
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "cert-controller" {
@@ -493,11 +489,12 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 
 // updateBitwardenServerContainerSpec is for updating the primary container spec in bitwarden-sdk-server
 // deployment object. Unlike the other operand containers, the args in the asset are kept as-is and only
-// the cluster TLS profile flags are appended. A nil tlsSpec adds no --tls-* args.
-func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image string, tlsSpec *configv1.TLSProfileSpec) {
+// the cluster TLS profile flags (resolved at operator startup, if any is enforced - see
+// tlsprofile.StartupOperandTLSArgs) are appended.
+func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image string) {
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "bitwarden-sdk-server" {
-			deployment.Spec.Template.Spec.Containers[i].Args = append(container.Args, tlsprofile.OperandTLSArgs(tlsSpec)...)
+			deployment.Spec.Template.Spec.Containers[i].Args = append(container.Args, tlsprofile.GetOperandTLSArgs()...)
 			deployment.Spec.Template.Spec.Containers[i].Image = image
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break

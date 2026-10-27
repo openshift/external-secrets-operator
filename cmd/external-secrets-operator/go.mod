@@ -9,6 +9,7 @@ require (
 	github.com/openshift/api v0.0.0-20260807110950-72ae4424ef35
 	github.com/openshift/controller-runtime-common v0.0.0-20260813135806-e1187ec555fc
 	github.com/openshift/external-secrets-operator v0.0.0-00010101000000-000000000000
+	github.com/openshift/library-go v0.0.0-20260807194649-ee0a87843dda
 	k8s.io/api v0.36.3
 	k8s.io/apiextensions-apiserver v0.36.3
 	k8s.io/apimachinery v0.36.3

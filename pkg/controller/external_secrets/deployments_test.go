@@ -3488,13 +3488,16 @@ func TestGetDeploymentObjectOperandArgsFromEnv(t *testing.T) {
 	})
 }
 
-// setStartupTLSProfile records spec as the startup cluster TLS profile for the
-// duration of the test, restoring the previous value afterwards.
+// setStartupTLSProfile records spec as the cluster TLS profile for the
+// duration of the test, clearing it afterwards. Not run with t.Parallel():
+// SetTLSConfig mutates a package-level cache shared by every caller, so
+// subtests using this must run sequentially relative to each other.
 func setStartupTLSProfile(t *testing.T, spec *configv1.TLSProfileSpec) {
 	t.Helper()
-	previous := tlsprofile.StartupProfile()
-	t.Cleanup(func() { tlsprofile.SetStartupProfile(previous) })
-	tlsprofile.SetStartupProfile(spec)
+	if err := tlsprofile.SetTLSConfig(spec); err != nil {
+		t.Fatalf("SetTLSConfig: %v", err)
+	}
+	t.Cleanup(func() { _ = tlsprofile.SetTLSConfig(nil) })
 }
 
 func TestGetDeploymentObjectTLSProfileArgs(t *testing.T) {
