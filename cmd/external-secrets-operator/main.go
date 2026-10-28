@@ -24,27 +24,33 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/textlogger"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	escontroller "github.com/openshift/external-secrets-operator/pkg/controller/external_secrets"
 	"github.com/openshift/external-secrets-operator/pkg/operator"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 	"github.com/openshift/external-secrets-operator/pkg/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -59,6 +65,13 @@ const (
 	metricsKeyFileName = "tls.key"
 
 	openshiftCACertificateFile = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+
+	// startupTLSProfileTimeout defines the max waiting timeout for reading TLS profile from the
+	// cluster at startup.
+	startupTLSProfileTimeout = 30 * time.Second
+
+	// tlsProfileComponentName identifies the operator in cluster TLS profile logs.
+	tlsProfileComponentName = "external-secrets-operator"
 )
 
 // validateMetricsCertDir validates that the certificate and key files exist in the given directory.
@@ -98,6 +111,156 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// disableHTTP2 disables HTTP/2 on a TLS listener, since HTTP/2 is prone to
+// known vulnerabilities (e.g. Rapid Reset) that are not worth the risk for the
+// operator's own serving endpoints.
+func disableHTTP2(c *tls.Config) {
+	setupLog.Info("disabling http/2 for the metrics server")
+	c.NextProtos = []string{"http/1.1"}
+}
+
+// configureMetricsServerOptions assembles the metrics server options, wiring up
+// secure serving, the OpenShift service CA for client verification, optional
+// HTTP/2 disabling, and the cluster TLS profile. All TLS options are collected
+// before TLSOpts is assigned so that every option (including the cluster TLS
+// profile) is actually honored by the metrics server. A nil tlsProfileSpec
+// means no cluster TLS profile is enforced.
+func configureMetricsServerOptions(secureMetrics, enableHTTP2 bool, metricsAddr, metricsCerts string, tlsProfileSpec *configv1.TLSProfileSpec) (metricsserver.Options, error) {
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	opts := metricsserver.Options{
+		BindAddress: metricsAddr,
+
+		// FilterProvider is used to protect the metrics endpoint with authn/authz.
+		// These configurations ensure that only authorized users and service accounts
+		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
+		// https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/filters#WithAuthenticationAndAuthorization
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+
+	var tlsOpts []func(*tls.Config)
+	if !enableHTTP2 {
+		// if the enable-http2 flag is false (the default), http/2 should be disabled
+		// due to its vulnerabilities.
+		tlsOpts = append(tlsOpts, disableHTTP2)
+	}
+
+	if secureMetrics {
+		setupLog.Info("setting up secure metrics server")
+		opts.SecureServing = secureMetrics
+
+		if metricsCerts != "" {
+			if err := validateMetricsCertDir(metricsCerts); err != nil {
+				return opts, fmt.Errorf("metrics certificate validation failed: %w", err)
+			}
+			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
+			opts.CertDir = metricsCerts
+			opts.CertName = metricsCertFileName
+			opts.KeyName = metricsKeyFileName
+		}
+
+		certPool, err := loadOpenShiftCACertPool()
+		if err != nil {
+			return opts, fmt.Errorf("failed to load OpenShift CA certificate: %w", err)
+		}
+		setupLog.Info("using openshift service CA for metrics client verification")
+		tlsOpts = append(tlsOpts, func(c *tls.Config) {
+			c.ClientCAs = certPool
+		})
+
+		profileOpt, err := clusterTLSOpt(tlsProfileSpec)
+		if err != nil {
+			return opts, err
+		}
+		if profileOpt != nil {
+			tlsOpts = append(tlsOpts, profileOpt)
+		}
+	}
+
+	opts.TLSOpts = tlsOpts
+	return opts, nil
+}
+
+// clusterTLSOpt returns a tls.Config mutator applying the cluster TLS profile to
+// the operator's own serving endpoints, or nil when no profile is enforced.
+func clusterTLSOpt(tlsSpec *configv1.TLSProfileSpec) (func(*tls.Config), error) {
+	if tlsSpec == nil {
+		return nil, nil
+	}
+	tlsCfg, err := tlsprofile.ClientTLSConfig(tlsSpec, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config from cluster profile: %w", err)
+	}
+	setupLog.Info("applying cluster TLS profile to operator serving endpoints",
+		"minTLSVersion", tlsSpec.MinTLSVersion)
+	return func(c *tls.Config) {
+		c.MinVersion = tlsCfg.MinVersion
+		c.CipherSuites = tlsCfg.CipherSuites
+		c.CurvePreferences = tlsCfg.CurvePreferences
+	}, nil
+}
+
+// startupTLSProfile holds everything read from apiserver.config.openshift.io/cluster
+// at operator startup.
+type startupTLSProfile struct {
+	// honored is the TLS profile spec the operator must enforce, or nil when the
+	// cluster profile must not be enforced and existing TLS settings are kept.
+	honored *configv1.TLSProfileSpec
+
+	// initialSpec and initialAdherence seed the TLS security profile watcher, which
+	// restarts the operator when either changes. They are recorded regardless of
+	// whether the profile is honored, since turning adherence on must also restart.
+	initialSpec      configv1.TLSProfileSpec
+	initialAdherence configv1.TLSAdherencePolicy
+}
+
+// resolveStartupTLSProfile reads apiserver.config.openshift.io/cluster once at
+// startup, using an uncached client because the manager cache is not started yet.
+func resolveStartupTLSProfile(ctx context.Context, restConfig *rest.Config) (*startupTLSProfile, error) {
+	uncachedClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uncached client for TLS profile resolution: %w", err)
+	}
+	startupCtx, cancel := context.WithTimeout(ctx, startupTLSProfileTimeout)
+	defer cancel()
+
+	fetch := tlsprofile.NewClientReaderAPIServerFetch(tlsprofile.NewClientReaderObjectGetter(uncachedClient))
+	apiServer, err := fetch(startupCtx)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			setupLog.Info("apiserver.config.openshift.io/cluster not found, skipping cluster TLS profile")
+			return &startupTLSProfile{}, nil
+		}
+		return nil, fmt.Errorf("failed to get apiserver.config.openshift.io/cluster: %w", err)
+	}
+
+	// The watcher recomputes the spec with openshifttls.GetTLSProfileSpec on every
+	// APIServer event and compares it against initialSpec, so the seed value must
+	// be computed the same way.
+	initialSpec, err := openshifttls.GetTLSProfileSpec(apiServer.Spec.TLSSecurityProfile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
+	}
+
+	honored, err := tlsprofile.ResolveHonoredTLSProfile(
+		startupCtx,
+		func(context.Context) (*configv1.APIServer, error) { return apiServer, nil },
+		tlsProfileComponentName,
+		tlsprofile.FetchErrorPropagateExceptNotFound,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve cluster TLS profile: %w", err)
+	}
+
+	return &startupTLSProfile{
+		honored:          honored,
+		initialSpec:      initialSpec,
+		initialAdherence: apiServer.Spec.TLSAdherence,
+	}, nil
+}
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
@@ -106,6 +269,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(crdv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.AddToScheme(scheme))
 
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -120,8 +284,6 @@ func main() {
 		secureMetrics        bool
 		metricsAddr          string
 		metricsCerts         string
-		metricsTLSOpts       []func(*tls.Config)
-		webhookTLSOpts       []func(*tls.Config)
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
@@ -133,7 +295,7 @@ func main() {
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
-		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.IntVar(&logLevel, "v", 1, "operator log verbosity")
 	flag.StringVar(&metricsCerts, "metrics-cert-dir", "",
 		"Secret name containing the certificates for the metrics server which should be present in operator namespace. "+
@@ -145,70 +307,37 @@ func main() {
 
 	setupLog.Info("starting external-secrets-operator", "version", version.String())
 
-	if !enableHTTP2 {
-		// if the enable-http2 flag is false (the default), http/2 should be disabled
-		// due to its vulnerabilities.
-		disableHTTP2 := func(c *tls.Config) {
-			setupLog.Info("disabling http/2 for both metrics and webhook servers")
-			c.NextProtos = []string{"http/1.1"}
-		}
-		metricsTLSOpts = append(metricsTLSOpts, disableHTTP2)
-		webhookTLSOpts = append(webhookTLSOpts, disableHTTP2)
-	}
-
-	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	})
-
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
-	metricsServerOptions := metricsserver.Options{
-		BindAddress: metricsAddr,
-
-		// FilterProvider is used to protect the metrics endpoint with authn/authz.
-		// These configurations ensure that only authorized users and service accounts
-		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-		// https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/filters#WithAuthenticationAndAuthorization
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
-	}
-
-	if secureMetrics {
-		setupLog.Info("setting up secure metrics server")
-		metricsServerOptions.SecureServing = secureMetrics
-
-		if metricsCerts != "" {
-			if err := validateMetricsCertDir(metricsCerts); err != nil {
-				setupLog.Error(err, "metrics certificate validation failed")
-				os.Exit(1)
-			}
-			setupLog.Info("using certificate key pair found in the configured dir for metrics server")
-			metricsServerOptions.CertDir = metricsCerts
-			metricsServerOptions.CertName = metricsCertFileName
-			metricsServerOptions.KeyName = metricsKeyFileName
-		}
-
-		certPool, err := loadOpenShiftCACertPool()
-		if err != nil {
-			setupLog.Error(err, "failed to load OpenShift CA certificate")
-			os.Exit(1)
-		}
-		setupLog.Info("using openshift service CA for metrics client verification")
-		metricsTLSOpts = append(metricsTLSOpts, func(c *tls.Config) {
-			c.ClientCAs = certPool
-		})
-		metricsServerOptions.TLSOpts = metricsTLSOpts
-	}
-
 	// Create the cache builder with CRD checks
 	restConfig := ctrl.GetConfigOrDie()
+
+	// Derive a cancellable context from the signal handler so the TLS security
+	// profile watcher can trigger a graceful shutdown; the pod is then restarted
+	// and picks up the new cluster TLS profile.
+	signalCtx, cancel := context.WithCancel(ctrl.SetupSignalHandler())
+	defer cancel()
+	ctx = signalCtx
+
+	// Read the cluster TLS profile once, here. Controllers reuse the recorded spec
+	// instead of re-reading the APIServer object, since any change to it restarts
+	// the operator.
+	startupTLS, err := resolveStartupTLSProfile(signalCtx, restConfig)
+	if err != nil {
+		setupLog.Error(err, "failed to resolve cluster TLS profile")
+		os.Exit(1)
+	}
+	tlsprofile.SetStartupProfile(startupTLS.honored)
+
+	metricsServerOptions, err := configureMetricsServerOptions(secureMetrics, enableHTTP2, metricsAddr, metricsCerts, startupTLS.honored)
+	if err != nil {
+		setupLog.Error(err, "failed to configure metrics server")
+		os.Exit(1)
+	}
+
 	cacheBuilder := escontroller.NewCacheBuilder(restConfig)
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "de6a4747.externalsecretsoperator.operator.openshift.io",
@@ -219,6 +348,28 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create controller manager")
+		os.Exit(1)
+	}
+
+	// Watch the cluster APIServer and shut down when the TLS security profile or
+	// the adherence policy changes, so the restarted operator re-resolves both its
+	// own serving TLS settings and the operand's.
+	if err := (&openshifttls.SecurityProfileWatcher{
+		Client:                    mgr.GetClient(),
+		InitialTLSProfileSpec:     startupTLS.initialSpec,
+		InitialTLSAdherencePolicy: startupTLS.initialAdherence,
+		OnProfileChange: func(_ context.Context, oldSpec, newSpec configv1.TLSProfileSpec) {
+			setupLog.Info("cluster TLS security profile changed, shutting down to reload it",
+				"oldProfile", oldSpec, "newProfile", newSpec)
+			cancel()
+		},
+		OnAdherencePolicyChange: func(_ context.Context, oldPolicy, newPolicy configv1.TLSAdherencePolicy) {
+			setupLog.Info("cluster TLS adherence policy changed, shutting down to reload it",
+				"oldPolicy", oldPolicy, "newPolicy", newPolicy)
+			cancel()
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "failed to set up TLS security profile watcher")
 		os.Exit(1)
 	}
 
@@ -237,7 +388,7 @@ func main() {
 	}
 
 	setupLog.Info("starting the controller manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start controller manager")
 		os.Exit(1)
 	}
