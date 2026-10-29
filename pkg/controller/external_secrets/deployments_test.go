@@ -2,6 +2,7 @@ package external_secrets
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -23,6 +25,7 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
+	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 )
 
@@ -1651,6 +1654,51 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 	}
 }
 
+// TestComponentNameMapsToRealContainer verifies that the container name returned by
+// getComponentNameFromAsset actually exists inside the corresponding deployment bindata
+// asset. This prevents the mapping from drifting if upstream manifests rename a container.
+func TestComponentNameMapsToRealContainer(t *testing.T) {
+	t.Parallel()
+
+	assets := []string{
+		controllerDeploymentAssetName,
+		webhookDeploymentAssetName,
+		certControllerDeploymentAssetName,
+		bitwardenDeploymentAssetName,
+	}
+
+	for _, assetName := range assets {
+		t.Run(assetName, func(t *testing.T) {
+			t.Parallel()
+			componentName, containerName, err := getComponentNameFromAsset(assetName)
+			if err != nil {
+				t.Fatalf("getComponentNameFromAsset(%q) returned unexpected error: %v", assetName, err)
+			}
+			if containerName == "" {
+				t.Fatalf("getComponentNameFromAsset(%q) returned empty container name for component %s", assetName, componentName)
+			}
+
+			deployment := common.DecodeDeploymentObjBytes(assetsMustAsset(assetName))
+
+			found := false
+			for _, c := range deployment.Spec.Template.Spec.Containers {
+				if c.Name == containerName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				var names []string
+				for _, c := range deployment.Spec.Template.Spec.Containers {
+					names = append(names, c.Name)
+				}
+				t.Errorf("component %s maps to container %q, but the deployment asset %q has containers %v",
+					componentName, containerName, assetName, names)
+			}
+		})
+	}
+}
+
 func TestMergeEnvVars(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -2085,6 +2133,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 		assetName                string
 		containerName            string
 		componentName            v1alpha1.ComponentName
+		initialReplicas          *int32
 		replicas                 *int32
 		existingArgs             []string
 		expectedReplicas         *int32
@@ -2115,8 +2164,9 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(1)),
 			replicas:                nil,
-			expectedReplicas:        nil,
+			expectedReplicas:        ptr.To(int32(1)),
 			expectLeaderElectionArg: false,
 		},
 		{
@@ -2154,6 +2204,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(3)),
 			replicas:                ptr.To(int32(1)),
 			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
 			expectedReplicas:        ptr.To(int32(1)),
@@ -2167,6 +2218,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			r := testReconciler(t)
 			deployment := &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
+					Replicas: tt.initialReplicas,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -3613,6 +3665,81 @@ func TestGetDeploymentObjectTLSProfileArgs(t *testing.T) {
 	})
 }
 
+// TestGetDeploymentObjectCoreControllerFullArgsCombined is a regression test for the full core
+// controller args pipeline: defaults, namespace-scoping, an optional feature flag, the
+// OPERAND_EXTERNAL_SECRETS_ARGS env-var escape hatch, and advancedOverrides, all active at once,
+// going through the real getDeploymentObject/updateContainerSpec/applyOperandArgsFromEnv/
+// applyUserDeploymentConfigs pipeline (not a hand-built deployment). It asserts the exact final
+// Args list, not just presence of individual flags, so a future regression to full-replace
+// semantics anywhere in that pipeline would be caught here.
+func TestGetDeploymentObjectCoreControllerFullArgsCombined(t *testing.T) {
+	t.Setenv(externalsecretsImageEnvVarName, commontest.TestExternalSecretsImageName)
+	t.Setenv(bitwardenImageEnvVarName, commontest.TestBitwardenImageName)
+	t.Setenv(OperandExternalSecretsArgsEnvVar, "--concurrent=5,--loglevel=debug,--zap-time-encoding=millis")
+
+	overrideJSON, err := json.Marshal(map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": OperandCoreControllerContainer, "args": []string{
+							"--client-burst=200",
+							"--enable-push-secret-reconciler=false",
+							"--loglevel=warn",
+						}},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal advancedOverrides: %v", err)
+	}
+
+	esc := commontest.TestExternalSecretsConfig()
+	esc.Spec.ApplicationConfig.OperatingNamespace = "my-namespace"
+	esc.Spec.ControllerConfig.ComponentConfigs = []v1alpha1.ComponentConfig{
+		{
+			ComponentName:     v1alpha1.CoreController,
+			AdvancedOverrides: &runtime.RawExtension{Raw: overrideJSON},
+		},
+	}
+
+	r := testReconciler(t)
+	r.esm = &v1alpha1.ExternalSecretsManager{
+		Spec: v1alpha1.ExternalSecretsManagerSpec{
+			Features: []v1alpha1.Feature{
+				{Name: v1alpha1.UnsafeAllowGenericTargets, Mode: v1alpha1.Enabled},
+			},
+		},
+	}
+	resourceMetadata := testResourceMetadata(esc)
+
+	dep, err := r.getDeploymentObject(controllerDeploymentAssetName, esc, resourceMetadata)
+	if err != nil {
+		t.Fatalf("getDeploymentObject() unexpected error: %v", err)
+	}
+
+	want := []string{
+		"--concurrent=5", // from the OPERAND_EXTERNAL_SECRETS_ARGS env-var escape hatch
+		"--metrics-addr=:8080",
+		"--loglevel=warn",            // advancedOverrides wins over the env var's --loglevel=debug
+		"--zap-time-encoding=millis", // from the env var; advancedOverrides doesn't touch this flag
+		LeaderElectionArg,
+		"--enable-push-secret-reconciler=false", // advancedOverrides wins over the default =true
+		"--namespace=my-namespace",              // from ApplicationConfig.OperatingNamespace
+		"--enable-cluster-store-reconciler=false",
+		"--enable-cluster-external-secret-reconciler=false",
+		UnsafeAllowGenericTargetsArg, // from the enabled ESM feature
+		"--client-burst=200",         // new flag, added by advancedOverrides
+	}
+
+	got := containerArgsByName(dep, OperandCoreControllerContainer)
+	if !slices.Equal(got, want) {
+		t.Errorf("Args = %#v,\nwant   %#v", got, want)
+	}
+}
+
 func containerArgsByName(dep *appsv1.Deployment, name string) []string {
 	for i := range dep.Spec.Template.Spec.Containers {
 		if dep.Spec.Template.Spec.Containers[i].Name == name {
@@ -3620,4 +3747,9 @@ func containerArgsByName(dep *appsv1.Deployment, name string) []string {
 		}
 	}
 	return nil
+}
+
+// assetsMustAsset wraps assets.MustAsset for use in tests.
+func assetsMustAsset(name string) []byte {
+	return assets.MustAsset(name)
 }

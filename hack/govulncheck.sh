@@ -20,7 +20,7 @@ set -o errexit
 # KNOWN_VULNS_UNTIL (UTC, YYYY-MM-DD): ignores are valid through this date inclusive.
 # After it expires, re-run the scan, drop fixed IDs, re-justify remaining ones, and
 # advance this date (typically ~2 weeks).
-KNOWN_VULNS_UNTIL="2026-11-06"
+KNOWN_VULNS_UNTIL="2026-11-13"
 #
 ## Below vulnerabilities are in the kubernetes package, which impacts the server and not the operator, which is the client.
 # - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes

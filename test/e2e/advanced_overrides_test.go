@@ -21,7 +21,7 @@ package e2e
 
 import (
 	"context"
-	"slices"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -794,9 +794,15 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
 				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
 				g.Expect(c).NotTo(BeNil())
-				g.Expect(slices.ContainsFunc(c.Args, func(a string) bool {
-					return a == "--metrics-addr=:8080" || a == "--zap-time-encoding=epoch"
-				})).To(BeFalse(), "strategic merge replaces the args list; baseline defaults come from the override")
+				// applyAdvancedOverrides merges args by flag key (mergeContainerArgs): baseline
+				// flags the override doesn't repeat survive, and --concurrent is replaced since
+				// the override above sets it.
+				g.Expect(c.Args).To(ContainElement("--metrics-addr=:8080"),
+					"baseline flag not repeated by the override must be preserved by the per-flag merge")
+				g.Expect(c.Args).To(ContainElement("--zap-time-encoding=epoch"),
+					"baseline flag not repeated by the override must be preserved by the per-flag merge")
+				g.Expect(c.Args).NotTo(ContainElement("--concurrent=1"),
+					"baseline --concurrent must be replaced by the override's value")
 			}, time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -1005,8 +1011,8 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 		})
 	})
 
-	Context("advancedOverrides args replace operator defaults", func() {
-		It("should replace default args with advancedOverrides args on the core controller", func() {
+	Context("advancedOverrides args merge with operator defaults by flag key", func() {
+		It("should override only the flag keys the advancedOverrides args repeat, preserving the rest on the core controller", func() {
 			By("Capturing baseline args on the core controller before override")
 			var baselineArgs []string
 			Eventually(func(g Gomega) {
@@ -1017,7 +1023,7 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 				baselineArgs = c.Args
 			}, time.Minute, 5*time.Second).Should(Succeed())
 
-			By("Setting advancedOverrides with custom args that replace the full args list")
+			By("Setting advancedOverrides with args that repeat one baseline flag key and add a new one")
 			setAdvancedOverrides(ctx, runtimeClient, operatorv1alpha1.CoreController, rawJSON(map[string]any{
 				"spec": map[string]any{
 					"template": map[string]any{
@@ -1036,19 +1042,25 @@ var _ = Describe("Advanced Overrides", Ordered, Label("Platform:Generic", "Featu
 			By("Waiting for ExternalSecretsConfig to be Ready")
 			Expect(utils.WaitForExternalSecretsConfigReady(ctx, dynamicClient, common.ExternalSecretsConfigObjectName, 2*time.Minute)).To(Succeed())
 
-			By("Verifying the args list is fully replaced by advancedOverrides")
+			By("Verifying only the repeated flag key is overridden and every other baseline arg is preserved")
 			Eventually(func(g Gomega) {
 				dep := getOperandDeployment(ctx, clientset, externalsecrets.OperandCoreControllerDeployment)
 				c := containerByName(dep, externalsecrets.OperandCoreControllerContainer)
 				g.Expect(c).NotTo(BeNil())
 				g.Expect(c.Args).To(ContainElement("--concurrent=50"), "should have overridden --concurrent=50")
-				g.Expect(c.Args).To(ContainElement("--client-burst=500"), "should have overridden --client-burst=500")
+				g.Expect(c.Args).To(ContainElement("--client-burst=500"), "should have added --client-burst=500, a new flag key not present in baseline")
+				g.Expect(c.Args).NotTo(ContainElement("--concurrent=1"), "baseline --concurrent must be replaced by the override's value")
 
+				// applyAdvancedOverrides merges args by flag key (mergeContainerArgs): only the
+				// flag keys the override repeats (--concurrent) are replaced; every other
+				// baseline flag (--metrics-addr, LeaderElectionArg,
+				// --enable-push-secret-reconciler, etc.) must survive untouched.
 				for _, baseArg := range baselineArgs {
-					if baseArg != "--concurrent=50" && baseArg != "--client-burst=500" {
-						g.Expect(c.Args).NotTo(ContainElement(baseArg),
-							"baseline arg %q should be replaced by strategic merge", baseArg)
+					if strings.HasPrefix(baseArg, "--concurrent=") || strings.HasPrefix(baseArg, "--client-burst=") {
+						continue
 					}
+					g.Expect(c.Args).To(ContainElement(baseArg),
+						"baseline arg %q not repeated by the override should be preserved", baseArg)
 				}
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
 		})

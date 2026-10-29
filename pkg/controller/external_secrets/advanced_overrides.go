@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -34,6 +35,8 @@ var allowedContainerFields = map[string]bool{
 // applyAdvancedOverrides validates the advancedOverrides patch against the allowlist,
 // applies it as a strategic merge patch to the Deployment. Returns a UserConfigurationError on disallowed
 // paths or invalid patch data so the reconciler sets Degraded status.
+//
+// the function automaticallyinjects containerName (derived from the parent ComponentConfig.componentName)
 func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.RawExtension, containerName string) error {
 	if overrides == nil || overrides.Raw == nil {
 		return nil
@@ -44,15 +47,76 @@ func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.Ra
 		return common.NewUserConfigurationError(err, "advancedOverrides contains invalid JSON")
 	}
 
+	// Auto-inject container name from the parent ComponentConfig when the user omits it.
+	if injected := injectContainerName(raw, containerName); injected {
+		patched, err := json.Marshal(raw)
+		if err != nil {
+			return common.NewUserConfigurationError(err, "advancedOverrides contains invalid JSON after container name injection")
+		}
+		overrides = &runtime.RawExtension{Raw: patched}
+	}
+
 	if err := validateOverridePaths(overrides.Raw, raw, containerName); err != nil {
 		return err
+	}
+
+	// args is a plain []string with no strategic-merge-patch key, so StrategicMergePatch replaces
+	// the entire slice. This means users would otherwise have to provide all required args,
+	// including those derived by the operator (e.g., features, namespace-scoped args).
+	// Therefore, we re-merge the args after StrategicMergePatch completes.
+	var originalArgs []string
+	if idx := containerIndex(deployment, containerName); idx >= 0 {
+		originalArgs = slices.Clone(deployment.Spec.Template.Spec.Containers[idx].Args)
 	}
 
 	if err := strategicMergePatchDeployment(deployment, overrides.Raw); err != nil {
 		return common.NewUserConfigurationError(err, "failed to apply advancedOverrides strategic merge patch")
 	}
 
+	if idx := containerIndex(deployment, containerName); idx >= 0 {
+		c := &deployment.Spec.Template.Spec.Containers[idx]
+		c.Args = mergeContainerArgs(originalArgs, c.Args)
+	}
+
 	return nil
+}
+
+// containerIndex returns the index of the container named name in deployment's pod template, or
+// -1 if no such container exists.
+func containerIndex(deployment *appsv1.Deployment, name string) int {
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// injectContainerName walks spec.template.spec.containers[] in the unstructured override
+// and sets the "name" field to containerName on any entry that omits it. Returns true when
+// at least one entry was patched so the caller can re-marshal the modified map.
+func injectContainerName(raw map[string]any, containerName string) bool {
+	val, found, err := unstructured.NestedFieldNoCopy(raw, "spec", "template", "spec", "containers")
+	if err != nil || !found {
+		return false
+	}
+	containers, ok := val.([]any)
+	if !ok || len(containers) == 0 {
+		return false
+	}
+
+	injected := false
+	for _, entry := range containers {
+		cMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasName := cMap["name"]; !hasName {
+			cMap["name"] = containerName
+			injected = true
+		}
+	}
+	return injected
 }
 
 // validateOverridePaths walks the unstructured object and rejects any path not on the allowlist.
@@ -224,9 +288,20 @@ func strategicMergePatchDeployment(deployment *appsv1.Deployment, patchBytes []b
 		return fmt.Errorf("strategic merge patch failed: %w", err)
 	}
 
-	if err := json.Unmarshal(patched, deployment); err != nil {
+	// Unmarshal into a fresh Deployment, not into the existing deployment in place. A
+	// strategic merge patch deletes a field by omitting it from the merged JSON (e.g. an
+	// override of {"affinity": null} produces merged JSON with no "affinity" key at all, not
+	// an explicit null) - and json.Unmarshal only overwrites fields present in its input,
+	// leaving fields absent from patched untouched on whatever they already were. Decoding
+	// into deployment directly would silently keep deployment's pre-existing value for any
+	// field the override tried to null out. result is only copied over on successful decode,
+	// so a decode failure leaves the caller's deployment untouched rather than partially
+	// zeroed.
+	result := appsv1.Deployment{}
+	if err := json.Unmarshal(patched, &result); err != nil {
 		return fmt.Errorf("failed to unmarshal patched deployment: %w", err)
 	}
+	*deployment = result
 
 	return nil
 }

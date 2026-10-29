@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
@@ -68,7 +69,11 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			},
 		},
 		{
-			name:       "valid args override replaces args list",
+			// args has no strategic-merge-patch key, so the generic patch alone would replace
+			// the whole list; applyAdvancedOverrides reconciles it back to a per-flag merge via
+			// mergeContainerArgs. Flags the override repeats (--concurrent) get the override's
+			// value; flags it doesn't mention (--metrics-addr, --loglevel) survive untouched.
+			name:       "valid args override merges by flag, override wins per-flag",
 			deployment: baseDeployment(),
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{
@@ -91,10 +96,13 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 					t.Errorf("expected --client-burst=200 in args, got %v", args)
 				}
 				if slices.Contains(args, "--concurrent=1") {
-					t.Errorf("expected --concurrent=1 to be replaced, got %v", args)
+					t.Errorf("expected --concurrent=1 to be replaced by the override's value, got %v", args)
 				}
-				if slices.Contains(args, "--metrics-addr=:8080") {
-					t.Errorf("expected --metrics-addr=:8080 to be dropped, got %v", args)
+				if !slices.Contains(args, "--metrics-addr=:8080") {
+					t.Errorf("expected --metrics-addr=:8080 to survive untouched, got %v", args)
+				}
+				if !slices.Contains(args, "--loglevel=info") {
+					t.Errorf("expected --loglevel=info to survive untouched, got %v", args)
 				}
 			},
 		},
@@ -125,6 +133,45 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				if d.Spec.Template.Spec.Affinity == nil || d.Spec.Template.Spec.Affinity.PodAntiAffinity == nil {
 					t.Fatal("expected pod anti-affinity to be set")
+				}
+			},
+		},
+		{
+			// Regression test: a strategic merge patch deletes a field by omitting it from the
+			// merged JSON when the patch sets it to null, not by setting it to an explicit null.
+			// strategicMergePatchDeployment must decode the merged result into a fresh
+			// Deployment rather than unmarshaling into the one that already has affinity set -
+			// json.Unmarshal only overwrites fields present in its input, so decoding into the
+			// existing object would silently leave the pre-existing affinity in place.
+			name: "null affinity override clears pre-existing affinity",
+			deployment: func() *appsv1.Deployment {
+				d := baseDeployment()
+				d.Spec.Template.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{
+									{Key: "kubernetes.io/arch", Operator: corev1.NodeSelectorOpIn, Values: []string{"amd64"}},
+								},
+							}},
+						},
+					},
+				}
+				return d
+			}(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"affinity": nil,
+						},
+					},
+				},
+			}),
+			containerName: OperandCoreControllerContainer,
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				if d.Spec.Template.Spec.Affinity != nil {
+					t.Fatalf("expected pre-existing affinity to be cleared by the null override, got %+v", d.Spec.Template.Spec.Affinity)
 				}
 			},
 		},
@@ -452,12 +499,50 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			errSubstring:  "$setElementOrder/containers",
 		},
 		{
-			name:       "reject container without name",
+			name:       "auto-inject container name when omitted",
 			deployment: baseDeployment(),
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
 					"containers": []map[string]any{
 						{"args": []string{"--concurrent=20"}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				args := d.Spec.Template.Spec.Containers[0].Args
+				if !slices.Contains(args, "--concurrent=20") {
+					t.Errorf("expected --concurrent=20 in args after auto-inject, got %v", args)
+				}
+			},
+		},
+		{
+			name:       "auto-inject container name with resources override",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"resources": map[string]any{
+							"requests": map[string]string{"cpu": "100m", "memory": "128Mi"},
+						}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				res := d.Spec.Template.Spec.Containers[0].Resources
+				if res.Requests.Cpu().Cmp(resource.MustParse("100m")) != 0 {
+					t.Errorf("expected CPU request 100m after auto-inject, got %v", res.Requests.Cpu())
+				}
+			},
+		},
+		{
+			name:       "reject explicit empty container name",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": "", "args": []string{"--concurrent=20"}},
 					},
 				}}},
 			}),
@@ -627,6 +712,79 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 	}
 }
 
+func TestInjectContainerName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		raw           map[string]any
+		containerName string
+		wantInjected  bool
+		wantName      string
+	}{
+		{
+			name:          "inject name when missing",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  true,
+			wantName:      OperandCoreControllerContainer,
+		},
+		{
+			name:          "do not overwrite existing name",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "webhook", "args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+			wantName:      "webhook",
+		},
+		{
+			name:          "do not overwrite explicit empty name",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "", "args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+			wantName:      "",
+		},
+		{
+			name:          "no containers path is no-op",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"nodeSelector": map[string]any{"tier": "eso"}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+		{
+			name:          "empty containers list is no-op",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+		{
+			name:          "nil raw is no-op",
+			raw:           nil,
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := injectContainerName(tt.raw, tt.containerName)
+			if got != tt.wantInjected {
+				t.Errorf("injectContainerName() = %v, want %v", got, tt.wantInjected)
+			}
+			if tt.wantName != "" || tt.wantInjected {
+				containers, exists, err := unstructured.NestedSlice(tt.raw, "spec", "template", "spec", "containers")
+				if err != nil || !exists {
+					t.Fatal("expected containers path to exist after injection")
+				}
+				cMap := containers[0].(map[string]any)
+				name, _ := cMap["name"].(string)
+				if name != tt.wantName {
+					t.Errorf("container name = %q, want %q", name, tt.wantName)
+				}
+			}
+		})
+	}
+}
+
 func TestApplyAdvancedOverridesViaReconciler(t *testing.T) {
 	t.Parallel()
 
@@ -675,11 +833,13 @@ func TestApplyAdvancedOverridesViaReconciler(t *testing.T) {
 			// Both applyOperandArgsFromEnv (the temporary v1.1/1.2 escape hatch, see its TODO)
 			// and advancedOverrides (its replacement) can set container args for the same
 			// component. getDeploymentObject calls the env-var hatch first and advancedOverrides
-			// last, so advancedOverrides must win for any flag both of them touch. initialArgs
-			// below is seeded via mergeContainerArgs (what the env-var hatch calls internally)
-			// rather than applyOperandArgsFromEnv + t.Setenv, since t.Setenv panics under any
-			// parallel ancestor test, and os.Environ is process-global.
-			name:        "advancedOverrides args take precedence over the OPERAND_EXTERNAL_SECRETS_ARGS env-var escape hatch",
+			// last; both merge by flag key (mergeContainerArgs), so advancedOverrides wins only
+			// for the flag it repeats (--concurrent) - flags neither of them repeats
+			// (--metrics-addr) or that only the env-var hatch set (--loglevel) survive.
+			// initialArgs below is seeded via mergeContainerArgs (what the env-var hatch calls
+			// internally) rather than applyOperandArgsFromEnv + t.Setenv, since t.Setenv panics
+			// under any parallel ancestor test, and os.Environ is process-global.
+			name:        "advancedOverrides args win per-flag over the OPERAND_EXTERNAL_SECRETS_ARGS env-var escape hatch",
 			initialArgs: mustMergeContainerArgs(t, []string{"--concurrent=1", "--metrics-addr=:8080"}, "--concurrent=20,--loglevel=debug"),
 			overrides: map[string]any{
 				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
@@ -690,8 +850,9 @@ func TestApplyAdvancedOverridesViaReconciler(t *testing.T) {
 			},
 			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
 				got := d.Spec.Template.Spec.Containers[0].Args
-				if !slices.Equal(got, []string{"--concurrent=99"}) {
-					t.Errorf("expected advancedOverrides args to fully replace the env-var hatch's args, got %v", got)
+				want := []string{"--concurrent=99", "--metrics-addr=:8080", "--loglevel=debug"}
+				if !slices.Equal(got, want) {
+					t.Errorf("expected advancedOverrides to win on --concurrent but leave other flags intact, got %v, want %v", got, want)
 				}
 			},
 		},

@@ -332,7 +332,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
+	if desired.Spec.Strategy.Type != "" && !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
 		return true
 	}
 
@@ -344,7 +344,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
+	if desired.Spec.ProgressDeadlineSeconds != nil && !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
 		return true
 	}
 
@@ -363,7 +363,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if desired.Spec.Template.Labels != nil && !reflect.DeepEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) {
+	if !emptyAwareMapEqual(desired.Spec.Template.Labels, fetched.Spec.Template.Labels) {
 		return true
 	}
 
@@ -377,7 +377,12 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
+	// NodeSelector/Tolerations/TopologySpreadConstraints are compared unconditionally, all
+	// three are settable via advancedOverrides, so desired going from set to nil is a real,
+	// user-intended removal that must be detected as a change, not skipped. The empty-aware
+	// helpers below exist only to treat a nil and a zero-length desired/fetched value as equal,
+	// since reflect.DeepEqual alone does not.
+	if !emptyAwareMapEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
 		return true
 	}
 
@@ -385,11 +390,11 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+	if !emptyAwareSliceEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
+	if !emptyAwareSliceEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
 		return true
 	}
 
@@ -397,17 +402,31 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	// Check regular containers
-	if len(desired.Spec.Template.Spec.Containers) != len(fetched.Spec.Template.Spec.Containers) {
+	// Check regular and init containers
+	if containersModified(desired.Spec.Template.Spec.Containers, fetched.Spec.Template.Spec.Containers) {
 		return true
 	}
-	fetchedContainers := make(map[string]*corev1.Container)
-	for i := range fetched.Spec.Template.Spec.Containers {
-		fetchedContainers[fetched.Spec.Template.Spec.Containers[i].Name] = &fetched.Spec.Template.Spec.Containers[i]
+	if containersModified(desired.Spec.Template.Spec.InitContainers, fetched.Spec.Template.Spec.InitContainers) {
+		return true
 	}
-	for i := range desired.Spec.Template.Spec.Containers {
-		desiredContainer := &desired.Spec.Template.Spec.Containers[i]
-		fetchedContainer, exists := fetchedContainers[desiredContainer.Name]
+
+	return false
+}
+
+// containersModified reports whether any container in desired is missing from fetched (matched
+// by name) or differs per containerSpecModified. Shared by the Containers and InitContainers
+// checks in deploymentSpecModified, which otherwise only differ in which PodSpec field they read.
+func containersModified(desired, fetched []corev1.Container) bool {
+	if len(desired) != len(fetched) {
+		return true
+	}
+	fetchedByName := make(map[string]*corev1.Container, len(fetched))
+	for i := range fetched {
+		fetchedByName[fetched[i].Name] = &fetched[i]
+	}
+	for i := range desired {
+		desiredContainer := &desired[i]
+		fetchedContainer, exists := fetchedByName[desiredContainer.Name]
 		if !exists {
 			return true
 		}
@@ -415,26 +434,6 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 			return true
 		}
 	}
-
-	// Check init containers
-	if len(desired.Spec.Template.Spec.InitContainers) != len(fetched.Spec.Template.Spec.InitContainers) {
-		return true
-	}
-	fetchedInitContainers := make(map[string]*corev1.Container)
-	for i := range fetched.Spec.Template.Spec.InitContainers {
-		fetchedInitContainers[fetched.Spec.Template.Spec.InitContainers[i].Name] = &fetched.Spec.Template.Spec.InitContainers[i]
-	}
-	for i := range desired.Spec.Template.Spec.InitContainers {
-		desiredInitContainer := &desired.Spec.Template.Spec.InitContainers[i]
-		fetchedInitContainer, exists := fetchedInitContainers[desiredInitContainer.Name]
-		if !exists {
-			return true
-		}
-		if containerSpecModified(desiredInitContainer, fetchedInitContainer) {
-			return true
-		}
-	}
-
 	return false
 }
 
@@ -452,16 +451,16 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		return true
 	}
 
-	// Check ports (including Protocol and Name)
+	// Check ports, protocol and name.
 	if len(desiredContainer.Ports) != len(fetchedContainer.Ports) {
 		return true
 	}
-	for _, desiredPort := range desiredContainer.Ports {
+	for _, fetchedPort := range fetchedContainer.Ports {
 		matched := false
-		for _, fetchedPort := range fetchedContainer.Ports {
-			if desiredPort.ContainerPort == fetchedPort.ContainerPort &&
-				desiredPort.Protocol == fetchedPort.Protocol &&
-				desiredPort.Name == fetchedPort.Name {
+		for _, desiredPort := range desiredContainer.Ports {
+			if fetchedPort.ContainerPort == desiredPort.ContainerPort &&
+				portProtocolOrDefault(fetchedPort.Protocol) == portProtocolOrDefault(desiredPort.Protocol) &&
+				fetchedPort.Name == desiredPort.Name {
 				matched = true
 				break
 			}
@@ -471,16 +470,16 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		}
 	}
 
-	// Probe checks
-	if !reflect.DeepEqual(desiredContainer.ReadinessProbe, fetchedContainer.ReadinessProbe) {
+	// ReadinessProbe/LivenessProbe checks
+	if probeModified(desiredContainer.ReadinessProbe, fetchedContainer.ReadinessProbe) {
 		return true
 	}
-	if !reflect.DeepEqual(desiredContainer.LivenessProbe, fetchedContainer.LivenessProbe) {
+	if probeModified(desiredContainer.LivenessProbe, fetchedContainer.LivenessProbe) {
 		return true
 	}
 
-	// SecurityContext comparison (handles nil on either side)
-	if !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
+	// SecurityContext nil check (fetched may be nil, so compare pointers to avoid a deref panic)
+	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
 		return true
 	}
 
@@ -490,10 +489,75 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 	}
 
 	// Check resources
-	if !reflect.DeepEqual(desiredContainer.Resources, fetchedContainer.Resources) {
+	if !resourceRequirementsEqual(desiredContainer.Resources, fetchedContainer.Resources) {
 		return true
 	}
 
+	return false
+}
+
+// resourceListEqual reports whether two ResourceLists are semantically equal. A resource.Quantity
+// holds an internal (value, scale) pair plus a lazily-computed cached string, so two Quantities
+// representing the identical value can have different internal representations depending on how
+// each was constructed - e.g. a desired value built in-memory straight from the CR's "1000m"
+// versus a fetched value reparsed from the API server's canonicalized "1" after a round trip
+// through Update/Get. A plain struct comparison would treat those as different even though they
+// are the same quantity, so each quantity is compared explicitly via resource.Quantity.Equal
+// instead. Nil and zero-length lists are treated as equivalent.
+func resourceListEqual(desired, fetched corev1.ResourceList) bool {
+	if len(desired) == 0 && len(fetched) == 0 {
+		return true
+	}
+	if len(desired) != len(fetched) {
+		return false
+	}
+	for name, desiredQty := range desired {
+		fetchedQty, ok := fetched[name]
+		if !ok || !desiredQty.Equal(fetchedQty) {
+			return false
+		}
+	}
+	return true
+}
+
+// resourceRequirementsEqual reports whether two ResourceRequirements are semantically equal.
+// Limits and Requests are compared via resourceListEqual (see its doc comment for why plain
+// reflect.DeepEqual on resource.Quantity values is unreliable); Claims has no such quantity
+// pitfall, so it is compared with emptyAwareSliceEqual.
+func resourceRequirementsEqual(desired, fetched corev1.ResourceRequirements) bool {
+	return resourceListEqual(desired.Limits, fetched.Limits) &&
+		resourceListEqual(desired.Requests, fetched.Requests) &&
+		emptyAwareSliceEqual(desired.Claims, fetched.Claims)
+}
+
+// portProtocolOrDefault returns p, or corev1.ProtocolTCP if p is empty. ContainerPort.Protocol
+// is optional and defaults to TCP server-side, so a fetched object (always round-tripped
+// through the API server) reports "TCP" for a port that omitted it, while an in-memory desired
+// object that never went through defaulting would still show "". Comparing through this
+// normalizer instead of comparing the raw fields directly avoids that pair looking like a
+// mismatch.
+func portProtocolOrDefault(p corev1.Protocol) corev1.Protocol {
+	if p == "" {
+		return corev1.ProtocolTCP
+	}
+	return p
+}
+
+// probeModified compares desired and fetched probes on nil-ness and, for HTTPGet probes, the
+// request path.
+func probeModified(desired, fetched *corev1.Probe) bool {
+	if (desired == nil) != (fetched == nil) {
+		return true
+	}
+	if desired == nil || fetched == nil {
+		return false
+	}
+	if (desired.HTTPGet == nil) != (fetched.HTTPGet == nil) {
+		return true
+	}
+	if desired.HTTPGet != nil && fetched.HTTPGet != nil && desired.HTTPGet.Path != fetched.HTTPGet.Path {
+		return true
+	}
 	return false
 }
 
@@ -532,6 +596,26 @@ func envVarsEqual(desired, fetched []corev1.EnvVar) bool {
 // Comparison is order-insensitive; copies are sorted before reflect.DeepEqual.
 func volumeMountsEqual(desired, fetched []corev1.VolumeMount) bool {
 	return slicesEqualUnordered(desired, fetched, volumeMountLess)
+}
+
+// emptyAwareSliceEqual reports whether two slices are equal, treating nil and zero-length
+// slices as equivalent - unlike reflect.DeepEqual, which treats a nil slice and an empty
+// non-nil slice as unequal.
+func emptyAwareSliceEqual[T any](desired, fetched []T) bool {
+	if len(desired) == 0 && len(fetched) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(desired, fetched)
+}
+
+// emptyAwareMapEqual reports whether two maps are equal, treating nil and zero-length maps
+// as equivalent - unlike reflect.DeepEqual, which treats a nil map and an empty non-nil map
+// as unequal.
+func emptyAwareMapEqual[K comparable, V any](desired, fetched map[K]V) bool {
+	if len(desired) == 0 && len(fetched) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(desired, fetched)
 }
 
 func volumesEqual(desired, fetched []corev1.Volume) bool {
