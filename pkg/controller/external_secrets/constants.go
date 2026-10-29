@@ -6,6 +6,9 @@ import (
 
 	certmanagerapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 )
@@ -185,6 +188,23 @@ var (
 		operatorv1alpha1.UnsafeAllowGenericTargets: UnsafeAllowGenericTargetsArg,
 	}
 )
+
+// defaultResourceRequirements provides sensible default resource requests and limits
+// applied to all operand deployment containers when no user override is configured.
+// Without limits a memory leak or hostile input can cause unbounded growth and evict
+// co-located workloads on the node (CWE-770, OWASP K8s K01 / CIS 5.7.2).
+// Users can override via ExternalSecretsConfig.spec.appConfig.resources,
+// ExternalSecretsManager.spec.globalConfig.resources, or per-component advancedOverrides.
+var defaultResourceRequirements = corev1.ResourceRequirements{
+	Requests: corev1.ResourceList{
+		corev1.ResourceCPU:    resource.MustParse("100m"),
+		corev1.ResourceMemory: resource.MustParse("256Mi"),
+	},
+	Limits: corev1.ResourceList{
+		corev1.ResourceCPU:    resource.MustParse("500m"),
+		corev1.ResourceMemory: resource.MustParse("512Mi"),
+	},
+}
 
 // asset names are the files present in the root `bindata/` dir, which are then loaded to
 // and made available by the pkg/operator/assets package.

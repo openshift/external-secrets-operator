@@ -250,6 +250,9 @@ func updateContainerSecurityContext(container *corev1.Container) {
 }
 
 // updateResourceRequirement sets validated resource requirements to all containers.
+// When the user provides resources via appConfig or globalConfig, those are validated
+// and applied. Otherwise, defaultResourceRequirements are applied to ensure every
+// container runs with resource limits (CWE-770).
 func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig) error {
 	rscReqs := corev1.ResourceRequirements{}
 	switch {
@@ -258,7 +261,7 @@ func (r *Reconciler) updateResourceRequirement(deployment *appsv1.Deployment, es
 	case r.esm.Spec.GlobalConfig != nil && r.esm.Spec.GlobalConfig.Resources != nil:
 		r.esm.Spec.GlobalConfig.Resources.DeepCopyInto(&rscReqs)
 	default:
-		return nil
+		defaultResourceRequirements.DeepCopyInto(&rscReqs)
 	}
 
 	// Validate the resource requirements
