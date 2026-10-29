@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
@@ -452,12 +453,50 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			errSubstring:  "$setElementOrder/containers",
 		},
 		{
-			name:       "reject container without name",
+			name:       "auto-inject container name when omitted",
 			deployment: baseDeployment(),
 			overrides: rawJSON(map[string]any{
 				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
 					"containers": []map[string]any{
 						{"args": []string{"--concurrent=20"}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				args := d.Spec.Template.Spec.Containers[0].Args
+				if !slices.Contains(args, "--concurrent=20") {
+					t.Errorf("expected --concurrent=20 in args after auto-inject, got %v", args)
+				}
+			},
+		},
+		{
+			name:       "auto-inject container name with resources override",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"resources": map[string]any{
+							"requests": map[string]string{"cpu": "100m", "memory": "128Mi"},
+						}},
+					},
+				}}},
+			}),
+			containerName: OperandCoreControllerContainer,
+			assertDeploy: func(t *testing.T, d *appsv1.Deployment) {
+				res := d.Spec.Template.Spec.Containers[0].Resources
+				if res.Requests.Cpu().Cmp(resource.MustParse("100m")) != 0 {
+					t.Errorf("expected CPU request 100m after auto-inject, got %v", res.Requests.Cpu())
+				}
+			},
+		},
+		{
+			name:       "reject explicit empty container name",
+			deployment: baseDeployment(),
+			overrides: rawJSON(map[string]any{
+				"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+					"containers": []map[string]any{
+						{"name": "", "args": []string{"--concurrent=20"}},
 					},
 				}}},
 			}),
@@ -622,6 +661,79 @@ func TestApplyAdvancedOverrides(t *testing.T) {
 			}
 			if tt.assertDeploy != nil {
 				tt.assertDeploy(t, tt.deployment)
+			}
+		})
+	}
+}
+
+func TestInjectContainerName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		raw           map[string]any
+		containerName string
+		wantInjected  bool
+		wantName      string
+	}{
+		{
+			name:          "inject name when missing",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  true,
+			wantName:      OperandCoreControllerContainer,
+		},
+		{
+			name:          "do not overwrite existing name",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "webhook", "args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+			wantName:      "webhook",
+		},
+		{
+			name:          "do not overwrite explicit empty name",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "", "args": []any{"--concurrent=20"}}}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+			wantName:      "",
+		},
+		{
+			name:          "no containers path is no-op",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"nodeSelector": map[string]any{"tier": "eso"}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+		{
+			name:          "empty containers list is no-op",
+			raw:           map[string]any{"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{}}}}},
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+		{
+			name:          "nil raw is no-op",
+			raw:           nil,
+			containerName: OperandCoreControllerContainer,
+			wantInjected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := injectContainerName(tt.raw, tt.containerName)
+			if got != tt.wantInjected {
+				t.Errorf("injectContainerName() = %v, want %v", got, tt.wantInjected)
+			}
+			if tt.wantName != "" || tt.wantInjected {
+				containers, exists, err := unstructured.NestedSlice(tt.raw, "spec", "template", "spec", "containers")
+				if err != nil || !exists {
+					t.Fatal("expected containers path to exist after injection")
+				}
+				cMap := containers[0].(map[string]any)
+				name, _ := cMap["name"].(string)
+				if name != tt.wantName {
+					t.Errorf("container name = %q, want %q", name, tt.wantName)
+				}
 			}
 		})
 	}

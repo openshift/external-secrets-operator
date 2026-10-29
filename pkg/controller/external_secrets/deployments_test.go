@@ -21,6 +21,7 @@ import (
 	"github.com/openshift/external-secrets-operator/pkg/controller/client/fakes"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/controller/commontest"
+	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
 )
 
 const (
@@ -1648,6 +1649,51 @@ func TestGetComponentNameFromAsset(t *testing.T) {
 	}
 }
 
+// TestComponentNameMapsToRealContainer verifies that the container name returned by
+// getComponentNameFromAsset actually exists inside the corresponding deployment bindata
+// asset. This prevents the mapping from drifting if upstream manifests rename a container.
+func TestComponentNameMapsToRealContainer(t *testing.T) {
+	t.Parallel()
+
+	assets := []string{
+		controllerDeploymentAssetName,
+		webhookDeploymentAssetName,
+		certControllerDeploymentAssetName,
+		bitwardenDeploymentAssetName,
+	}
+
+	for _, assetName := range assets {
+		t.Run(assetName, func(t *testing.T) {
+			t.Parallel()
+			componentName, containerName, err := getComponentNameFromAsset(assetName)
+			if err != nil {
+				t.Fatalf("getComponentNameFromAsset(%q) returned unexpected error: %v", assetName, err)
+			}
+			if containerName == "" {
+				t.Fatalf("getComponentNameFromAsset(%q) returned empty container name for component %s", assetName, componentName)
+			}
+
+			deployment := common.DecodeDeploymentObjBytes(assetsMustAsset(assetName))
+
+			found := false
+			for _, c := range deployment.Spec.Template.Spec.Containers {
+				if c.Name == containerName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				var names []string
+				for _, c := range deployment.Spec.Template.Spec.Containers {
+					names = append(names, c.Name)
+				}
+				t.Errorf("component %s maps to container %q, but the deployment asset %q has containers %v",
+					componentName, containerName, assetName, names)
+			}
+		})
+	}
+}
+
 func TestMergeEnvVars(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -2082,6 +2128,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 		assetName                string
 		containerName            string
 		componentName            v1alpha1.ComponentName
+		initialReplicas          *int32
 		replicas                 *int32
 		existingArgs             []string
 		expectedReplicas         *int32
@@ -2112,8 +2159,9 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(1)),
 			replicas:                nil,
-			expectedReplicas:        nil,
+			expectedReplicas:        ptr.To(int32(1)),
 			expectLeaderElectionArg: false,
 		},
 		{
@@ -2151,6 +2199,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			assetName:               controllerDeploymentAssetName,
 			containerName:           OperandCoreControllerContainer,
 			componentName:           v1alpha1.CoreController,
+			initialReplicas:         ptr.To(int32(3)),
 			replicas:                ptr.To(int32(1)),
 			existingArgs:            []string{"--some-flag=value", LeaderElectionArg},
 			expectedReplicas:        ptr.To(int32(1)),
@@ -2164,6 +2213,7 @@ func TestApplyUserDeploymentConfigsWithReplicas(t *testing.T) {
 			r := testReconciler(t)
 			deployment := &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
+					Replicas: tt.initialReplicas,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -3496,4 +3546,9 @@ func containerArgsByName(dep *appsv1.Deployment, name string) []string {
 		}
 	}
 	return nil
+}
+
+// assetsMustAsset wraps assets.MustAsset for use in tests.
+func assetsMustAsset(name string) []byte {
+	return assets.MustAsset(name)
 }

@@ -34,6 +34,8 @@ var allowedContainerFields = map[string]bool{
 // applyAdvancedOverrides validates the advancedOverrides patch against the allowlist,
 // applies it as a strategic merge patch to the Deployment. Returns a UserConfigurationError on disallowed
 // paths or invalid patch data so the reconciler sets Degraded status.
+//
+// the function automaticallyinjects containerName (derived from the parent ComponentConfig.componentName)
 func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.RawExtension, containerName string) error {
 	if overrides == nil || overrides.Raw == nil {
 		return nil
@@ -42,6 +44,15 @@ func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.Ra
 	var raw map[string]any
 	if err := json.Unmarshal(overrides.Raw, &raw); err != nil {
 		return common.NewUserConfigurationError(err, "advancedOverrides contains invalid JSON")
+	}
+
+	// Auto-inject container name from the parent ComponentConfig when the user omits it.
+	if injected := injectContainerName(raw, containerName); injected {
+		patched, err := json.Marshal(raw)
+		if err != nil {
+			return common.NewUserConfigurationError(err, "advancedOverrides contains invalid JSON after container name injection")
+		}
+		overrides = &runtime.RawExtension{Raw: patched}
 	}
 
 	if err := validateOverridePaths(overrides.Raw, raw, containerName); err != nil {
@@ -53,6 +64,33 @@ func applyAdvancedOverrides(deployment *appsv1.Deployment, overrides *runtime.Ra
 	}
 
 	return nil
+}
+
+// injectContainerName walks spec.template.spec.containers[] in the unstructured override
+// and sets the "name" field to containerName on any entry that omits it. Returns true when
+// at least one entry was patched so the caller can re-marshal the modified map.
+func injectContainerName(raw map[string]any, containerName string) bool {
+	val, found, err := unstructured.NestedFieldNoCopy(raw, "spec", "template", "spec", "containers")
+	if err != nil || !found {
+		return false
+	}
+	containers, ok := val.([]any)
+	if !ok || len(containers) == 0 {
+		return false
+	}
+
+	injected := false
+	for _, entry := range containers {
+		cMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasName := cMap["name"]; !hasName {
+			cMap["name"] = containerName
+			injected = true
+		}
+	}
+	return injected
 }
 
 // validateOverridePaths walks the unstructured object and rejects any path not on the allowlist.

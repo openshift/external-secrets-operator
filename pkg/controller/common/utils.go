@@ -332,7 +332,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
+	if desired.Spec.Strategy.Type != "" && !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
 		return true
 	}
 
@@ -344,7 +344,7 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
+	if desired.Spec.ProgressDeadlineSeconds != nil && !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
 		return true
 	}
 
@@ -377,19 +377,20 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
+	if desired.Spec.Template.Spec.NodeSelector != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.NodeSelector, fetched.Spec.Template.Spec.NodeSelector) {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.Affinity, fetched.Spec.Template.Spec.Affinity) {
+	if desired.Spec.Template.Spec.Affinity != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Affinity, fetched.Spec.Template.Spec.Affinity) {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+	if desired.Spec.Template.Spec.Tolerations != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
 		return true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
+	if desired.Spec.Template.Spec.TopologySpreadConstraints != nil &&
+		!reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
 		return true
 	}
 
@@ -452,16 +453,14 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		return true
 	}
 
-	// Check ports (including Protocol and Name)
+	// Check ports
 	if len(desiredContainer.Ports) != len(fetchedContainer.Ports) {
 		return true
 	}
-	for _, desiredPort := range desiredContainer.Ports {
+	for _, fetchedPort := range fetchedContainer.Ports {
 		matched := false
-		for _, fetchedPort := range fetchedContainer.Ports {
-			if desiredPort.ContainerPort == fetchedPort.ContainerPort &&
-				desiredPort.Protocol == fetchedPort.Protocol &&
-				desiredPort.Name == fetchedPort.Name {
+		for _, desiredPort := range desiredContainer.Ports {
+			if fetchedPort.ContainerPort == desiredPort.ContainerPort {
 				matched = true
 				break
 			}
@@ -471,16 +470,23 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		}
 	}
 
-	// Probe checks
-	if !reflect.DeepEqual(desiredContainer.ReadinessProbe, fetchedContainer.ReadinessProbe) {
+	// ReadinessProbe nil checks
+	if (desiredContainer.ReadinessProbe == nil) != (fetchedContainer.ReadinessProbe == nil) {
 		return true
 	}
-	if !reflect.DeepEqual(desiredContainer.LivenessProbe, fetchedContainer.LivenessProbe) {
-		return true
+	if desiredContainer.ReadinessProbe != nil && fetchedContainer.ReadinessProbe != nil {
+		if (desiredContainer.ReadinessProbe.HTTPGet == nil) != (fetchedContainer.ReadinessProbe.HTTPGet == nil) {
+			return true
+		}
+		if desiredContainer.ReadinessProbe.HTTPGet != nil && fetchedContainer.ReadinessProbe.HTTPGet != nil {
+			if desiredContainer.ReadinessProbe.HTTPGet.Path != fetchedContainer.ReadinessProbe.HTTPGet.Path {
+				return true
+			}
+		}
 	}
 
-	// SecurityContext comparison (handles nil on either side)
-	if !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
+	// SecurityContext nil check (fetched may be nil, so compare pointers to avoid a deref panic)
+	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
 		return true
 	}
 
