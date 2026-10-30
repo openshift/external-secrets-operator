@@ -20,7 +20,7 @@ set -o errexit
 # KNOWN_VULNS_UNTIL (UTC, YYYY-MM-DD): ignores are valid through this date inclusive.
 # After it expires, re-run the scan, drop fixed IDs, re-justify remaining ones, and
 # advance this date (typically ~2 weeks).
-KNOWN_VULNS_UNTIL="2026-11-02"
+KNOWN_VULNS_UNTIL="2026-11-13"
 #
 ## Below vulnerabilities are in the kubernetes package, which impacts the server and not the operator, which is the client.
 # - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes
@@ -36,7 +36,10 @@ KNOWN_VULNS_UNTIL="2026-11-02"
 # - https://pkg.go.dev/vuln/GO-2026-6612 - Double flow control refund on HTTP/2 server streams in net/http
 # - https://pkg.go.dev/vuln/GO-2026-6613 - HTTP/1 server connection desynchronization after 2xx CONNECT response in net/http
 # - https://pkg.go.dev/vuln/GO-2026-6617 - HTTP/2 server crash due to HPACK encoder race in net/http
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-6603|GO-2026-6605|GO-2026-6607|GO-2026-6608|GO-2026-6610|GO-2026-6611|GO-2026-6612|GO-2026-6613|GO-2026-6617"
+#
+## Below vulnerability is in crypto/x509, fixed in go1.27.2 and requires the fix to be available downstream.
+# - https://pkg.go.dev/vuln/GO-2026-6809 - Distrust compromised intermediate certificates in crypto/x509
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-6603|GO-2026-6605|GO-2026-6607|GO-2026-6608|GO-2026-6610|GO-2026-6611|GO-2026-6612|GO-2026-6613|GO-2026-6617|GO-2026-6809"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"

@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 )
@@ -541,6 +542,94 @@ func TestDeploymentObjectChanged(t *testing.T) {
 			t.Fatal("expected change when volume mount path differs")
 		}
 	})
+
+	t.Run("SecurityContext nil on fetched should trigger change", func(t *testing.T) {
+		t.Parallel()
+		allowPrivEsc := false
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivEsc,
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].SecurityContext = nil
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when desired has SecurityContext but fetched is nil")
+		}
+	})
+
+	t.Run("SecurityContext both nil should not trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].SecurityContext = nil
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].SecurityContext = nil
+
+		if HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected no change when both SecurityContexts are nil")
+		}
+	})
+
+	t.Run("ReadinessProbe difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/readyz", Port: intstr.FromInt32(8080)},
+			},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(8080)},
+			},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when ReadinessProbe path differs")
+		}
+	})
+
+	t.Run("TopologySpreadConstraints difference should trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "topology.kubernetes.io/zone", WhenUnsatisfiable: corev1.DoNotSchedule},
+		}
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.TopologySpreadConstraints = nil
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when desired has TopologySpreadConstraints but fetched does not")
+		}
+	})
+
+	t.Run("TopologySpreadConstraints removed externally should trigger change", func(t *testing.T) {
+		t.Parallel()
+		constraints := []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "topology.kubernetes.io/zone", WhenUnsatisfiable: corev1.DoNotSchedule},
+		}
+		desired := baseDeployment()
+		desired.Spec.Template.Spec.TopologySpreadConstraints = constraints
+		fetched := baseDeployment()
+		fetched.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "topology.kubernetes.io/hostname", WhenUnsatisfiable: corev1.ScheduleAnyway},
+		}
+
+		if !HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected change when TopologySpreadConstraints differ")
+		}
+	})
+
+	t.Run("TopologySpreadConstraints absent on both should not trigger change", func(t *testing.T) {
+		t.Parallel()
+		desired := baseDeployment()
+		fetched := baseDeployment()
+
+		if HasObjectChanged(&desired, &fetched, &ResourceMetadata{}) {
+			t.Fatal("expected no change when neither has TopologySpreadConstraints")
+		}
+	})
 }
 
 func deploymentWithContainerEnv(env []corev1.EnvVar) appsv1.Deployment {
@@ -571,6 +660,23 @@ func deploymentWithContainerVolumeMounts(mounts []corev1.VolumeMount) appsv1.Dep
 							Name:         "external-secrets",
 							Image:        "ghcr.io/external-secrets/external-secrets:v2.12.0",
 							VolumeMounts: mounts,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func baseDeployment() appsv1.Deployment {
+	return appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "external-secrets",
+							Image: "ghcr.io/external-secrets/external-secrets:v2.12.0",
 						},
 					},
 				},

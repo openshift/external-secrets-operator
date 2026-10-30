@@ -324,7 +324,27 @@ func certificateSpecModified(desired, fetched *certmanagerv1.Certificate) bool {
 }
 
 func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *ResourceMetadata) bool {
-	if desired.Spec.Replicas != nil && !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
+	if !reflect.DeepEqual(desired.Spec.Replicas, fetched.Spec.Replicas) {
+		return true
+	}
+
+	if !reflect.DeepEqual(desired.Spec.Selector, fetched.Spec.Selector) {
+		return true
+	}
+
+	if desired.Spec.Strategy.Type != "" && !reflect.DeepEqual(desired.Spec.Strategy, fetched.Spec.Strategy) {
+		return true
+	}
+
+	if desired.Spec.MinReadySeconds != fetched.Spec.MinReadySeconds {
+		return true
+	}
+
+	if desired.Spec.Paused != fetched.Spec.Paused {
+		return true
+	}
+
+	if desired.Spec.ProgressDeadlineSeconds != nil && !reflect.DeepEqual(desired.Spec.ProgressDeadlineSeconds, fetched.Spec.ProgressDeadlineSeconds) {
 		return true
 	}
 
@@ -336,6 +356,10 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 	}
 
 	if desired.Spec.Template.Spec.DNSPolicy != "" && desired.Spec.Template.Spec.DNSPolicy != fetched.Spec.Template.Spec.DNSPolicy {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.HostNetwork != fetched.Spec.Template.Spec.HostNetwork {
 		return true
 	}
 
@@ -362,6 +386,11 @@ func deploymentSpecModified(desired, fetched *appsv1.Deployment, metaState *Reso
 	}
 
 	if desired.Spec.Template.Spec.Tolerations != nil && !reflect.DeepEqual(desired.Spec.Template.Spec.Tolerations, fetched.Spec.Template.Spec.Tolerations) {
+		return true
+	}
+
+	if desired.Spec.Template.Spec.TopologySpreadConstraints != nil &&
+		!reflect.DeepEqual(desired.Spec.Template.Spec.TopologySpreadConstraints, fetched.Spec.Template.Spec.TopologySpreadConstraints) {
 		return true
 	}
 
@@ -456,8 +485,8 @@ func containerSpecModified(desiredContainer, fetchedContainer *corev1.Container)
 		}
 	}
 
-	// SecurityContext nil check
-	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(*desiredContainer.SecurityContext, *fetchedContainer.SecurityContext) {
+	// SecurityContext nil check (fetched may be nil, so compare pointers to avoid a deref panic)
+	if desiredContainer.SecurityContext != nil && !reflect.DeepEqual(desiredContainer.SecurityContext, fetchedContainer.SecurityContext) {
 		return true
 	}
 
