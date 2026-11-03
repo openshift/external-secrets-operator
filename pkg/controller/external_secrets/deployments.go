@@ -24,6 +24,7 @@ import (
 	operatorv1alpha1 "github.com/openshift/external-secrets-operator/api/v1alpha1"
 	"github.com/openshift/external-secrets-operator/pkg/controller/common"
 	"github.com/openshift/external-secrets-operator/pkg/operator/assets"
+	"github.com/openshift/external-secrets-operator/pkg/tlsprofile"
 )
 
 // operandArgsEnvSeparator splits OPERAND_*_ARGS on commas that introduce the next
@@ -133,6 +134,10 @@ func (r *Reconciler) getDeploymentObject(assetName string, esc *operatorv1alpha1
 	}
 	logLevel := getLogLevel(esc, r.esm)
 
+	// TLS args (derived from the cluster TLS profile resolved once at operator
+	// startup, via tlsprofile.StartupOperandTLSArgs) are applied before
+	// applyOperandArgsFromEnv so that an explicit OPERAND_*_ARGS override still
+	// wins over the cluster profile.
 	switch assetName {
 	case controllerDeploymentAssetName:
 		r.updateContainerSpec(deployment, esc, image, logLevel)
@@ -377,7 +382,9 @@ func (r *Reconciler) updateImageInStatus(esc *operatorv1alpha1.ExternalSecretsCo
 	return nil
 }
 
-// argument list for external-secrets deployment resource.
+// argument list for external-secrets deployment resource. --tls-* args are
+// added for the cluster TLS profile resolved at operator startup, if any is
+// enforced (see tlsprofile.StartupOperandTLSArgs).
 func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *operatorv1alpha1.ExternalSecretsConfig, image, logLevel string) {
 	var (
 		enableClusterStoreArgFmt           = "--enable-cluster-store-reconciler=%s"
@@ -408,6 +415,8 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 
 	r.updateOptionalFeatures(&args, []operatorv1alpha1.FeatureName{operatorv1alpha1.UnsafeAllowGenericTargets})
 
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
+
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == OperandCoreControllerContainer {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
@@ -418,7 +427,9 @@ func (r *Reconciler) updateContainerSpec(deployment *appsv1.Deployment, esc *ope
 	}
 }
 
-// argument list for webhook deployment resource.
+// argument list for webhook deployment resource. --tls-* args are added for
+// the cluster TLS profile resolved at operator startup, if any is enforced
+// (see tlsprofile.StartupOperandTLSArgs).
 func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, checkInterval string) {
 	args := []string{
 		"webhook",
@@ -432,6 +443,8 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 		"--zap-time-encoding=epoch",
 	}
 
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
+
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "webhook" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
@@ -442,7 +455,9 @@ func updateWebhookContainerSpec(deployment *appsv1.Deployment, image, logLevel, 
 	}
 }
 
-// argument list for cert controller deployment resource.
+// argument list for cert controller deployment resource. --tls-* args are
+// added for the cluster TLS profile resolved at operator startup, if any is
+// enforced (see tlsprofile.StartupOperandTLSArgs).
 func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, logLevel string) {
 	namespace := deployment.GetNamespace()
 	args := []string{
@@ -460,6 +475,8 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 		LeaderElectionArg,
 	}
 
+	args = append(args, tlsprofile.GetOperandTLSArgs()...)
+
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "cert-controller" {
 			deployment.Spec.Template.Spec.Containers[i].Args = args
@@ -471,10 +488,13 @@ func updateCertControllerContainerSpec(deployment *appsv1.Deployment, image, log
 }
 
 // updateBitwardenServerContainerSpec is for updating the primary container spec in bitwarden-sdk-server
-// deployment object.
+// deployment object. Unlike the other operand containers, the args in the asset are kept as-is and only
+// the cluster TLS profile flags (resolved at operator startup, if any is enforced - see
+// tlsprofile.StartupOperandTLSArgs) are appended.
 func updateBitwardenServerContainerSpec(deployment *appsv1.Deployment, image string) {
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "bitwarden-sdk-server" {
+			deployment.Spec.Template.Spec.Containers[i].Args = append(container.Args, tlsprofile.GetOperandTLSArgs()...)
 			deployment.Spec.Template.Spec.Containers[i].Image = image
 			updateContainerSecurityContext(&deployment.Spec.Template.Spec.Containers[i])
 			break
