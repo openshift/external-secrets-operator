@@ -148,6 +148,9 @@ func (r *Reconciler) updateCertificateParams(esc *operatorv1alpha1.ExternalSecre
 
 	certificate.Spec.DNSNames = updateNamespaceForFQDN(certificate.Spec.DNSNames, externalSecretsNamespace)
 
+	// Enforce approved private-key algorithm regardless of bindata / helm defaults.
+	certificate.Spec.PrivateKey = certificatePrivateKey.DeepCopy()
+
 	if certManageConfig.CertificateRenewBefore != nil {
 		certificate.Spec.RenewBefore = certManageConfig.CertificateRenewBefore
 	}

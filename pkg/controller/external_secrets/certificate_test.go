@@ -732,3 +732,63 @@ func testSecretForCertificate() *corev1.Secret {
 		},
 	}
 }
+
+func TestCertificatePrivateKeyAlgorithm(t *testing.T) {
+	t.Parallel()
+
+	assertECDSAP256 := func(t *testing.T, cert *certmanagerv1.Certificate, name string) {
+		t.Helper()
+		if cert.Spec.PrivateKey == nil {
+			t.Fatalf("%s: expected privateKey to be set", name)
+		}
+		if cert.Spec.PrivateKey.Algorithm != certmanagerv1.ECDSAKeyAlgorithm {
+			t.Fatalf("%s: expected ECDSA algorithm, got %q", name, cert.Spec.PrivateKey.Algorithm)
+		}
+		if cert.Spec.PrivateKey.Size != 256 {
+			t.Fatalf("%s: expected size 256, got %d", name, cert.Spec.PrivateKey.Size)
+		}
+		if cert.Spec.PrivateKey.Encoding != certmanagerv1.PKCS8 {
+			t.Fatalf("%s: expected PKCS8 encoding, got %q", name, cert.Spec.PrivateKey.Encoding)
+		}
+	}
+
+	// Bitwarden Certificate bindata is operator-preserved across helm refreshes.
+	t.Run("bitwarden bindata uses ECDSA P-256", func(t *testing.T) {
+		t.Parallel()
+		assertECDSAP256(t, testCertificate(bitwardenCertificateAssetName), bitwardenCertificateAssetName)
+	})
+
+	// Webhook Certificate bindata is helm-refreshed; privateKey is enforced in
+	// updateCertificateParams rather than the update-manifests script.
+	t.Run("updateCertificateParams enforces ECDSA P-256", func(t *testing.T) {
+		t.Parallel()
+		esc := testExternalSecretsConfigForCertificate()
+		esc.Spec.ControllerConfig.CertProvider.CertManager.Mode = v1alpha1.Enabled
+		esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Name = testIssuerName
+		esc.Spec.ControllerConfig.CertProvider.CertManager.IssuerRef.Kind = issuerKind
+
+		r := testReconciler(t)
+		mock := &fakes.FakeCtrlClient{}
+		mock.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+			if ns.Name == testIssuerName {
+				if issuer, ok := obj.(*certmanagerv1.Issuer); ok {
+					testIssuer().DeepCopyInto(issuer)
+				}
+				return true, nil
+			}
+			return false, nil
+		})
+		r.UncachedClient = mock
+
+		cert := testCertificate(webhookCertificateAssetName)
+		cert.Spec.PrivateKey = &certmanagerv1.CertificatePrivateKey{
+			Algorithm: certmanagerv1.RSAKeyAlgorithm,
+			Encoding:  certmanagerv1.PKCS1,
+			Size:      2048,
+		}
+		if err := r.updateCertificateParams(esc, cert); err != nil {
+			t.Fatalf("updateCertificateParams() unexpected err: %v", err)
+		}
+		assertECDSAP256(t, cert, "reconciled webhook certificate")
+	})
+}

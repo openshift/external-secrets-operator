@@ -17,13 +17,24 @@ spec:
     - Egress
   ingress:
     # Allow External Secrets Controller to communicate with Bitwarden SDK Server
-    - ports:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+      ports:
         - protocol: TCP
           port: 9998
-  # Allow access to Kubernetes API server and bitwarden sdk external server
   egress:
-    - ports:
+    # Allow access to Kubernetes API server 
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
+    # Allow access to external Bitwarden SDK / HTTPS endpoints
+    - ports:
         - protocol: TCP
           port: 443
