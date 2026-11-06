@@ -549,6 +549,18 @@ func TestGetResourceLabels(t *testing.T) {
 			}),
 		},
 		{
+			name: "policy-significant reserved domain labels are silently skipped",
+			esm:  nil,
+			escLabels: map[string]string{
+				"pod-security.kubernetes.io/enforce":             "privileged",
+				"security.openshift.io/scc.podSecurityLabelSync": "false",
+				"example.com/team":                               "ok",
+			},
+			wantLabels: getTestLabels(map[string]string{
+				"example.com/team": "ok",
+			}),
+		},
+		{
 			name: "default labels override custom labels with same key",
 			esm:  nil,
 			escLabels: map[string]string{
