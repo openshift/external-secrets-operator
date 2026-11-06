@@ -16,7 +16,13 @@ spec:
     - Egress
     - Ingress
   egress:
-    - ports:
+    # Allow access to Kubernetes API server
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
   ingress:
@@ -28,3 +34,4 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+          

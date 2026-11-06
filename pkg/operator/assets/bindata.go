@@ -106,9 +106,9 @@ spec:
     - 127.0.0.1
     - ::1
   privateKey:
-    algorithm: RSA
+    algorithm: ECDSA
     encoding: PKCS8
-    size: 2048
+    size: 256
   issuerRef:
     group: cert-manager.io
     kind: Issuer
@@ -1575,16 +1575,28 @@ spec:
     - Egress
   ingress:
     # Allow External Secrets Controller to communicate with Bitwarden SDK Server
-    - ports:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+      ports:
         - protocol: TCP
           port: 9998
-  # Allow access to Kubernetes API server and bitwarden sdk external server
   egress:
-    - ports:
+    # Allow access to Kubernetes API server 
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
+    # Allow access to external Bitwarden SDK / HTTPS endpoints
+    - ports:
         - protocol: TCP
-          port: 443`)
+          port: 443
+`)
 
 func operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYmlBytes() ([]byte, error) {
 	return _operatorNetworkpoliciesAllowApiServerEgressForBitwardenSeverYml, nil
@@ -1619,7 +1631,13 @@ spec:
     - Egress
     - Ingress
   egress:
-    - ports:
+    # Allow access to Kubernetes API server
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
   ingress:
@@ -1630,7 +1648,8 @@ spec:
             name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
-          port: 8080`)
+          port: 8080
+          `)
 
 func operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYmlBytes() ([]byte, error) {
 	return _operatorNetworkpoliciesAllowApiServerEgressForCertControllerTrafficYml, nil
@@ -1665,7 +1684,13 @@ spec:
     - Egress
     - Ingress
   egress:
-    - ports:
+    # Allow access to Kubernetes API server 
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
   ingress:
@@ -1676,7 +1701,8 @@ spec:
             name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
-          port: 8080`)
+          port: 8080
+          `)
 
 func operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYmlBytes() ([]byte, error) {
 	return _operatorNetworkpoliciesAllowApiServerEgressForMainControllerTrafficYml, nil
@@ -1712,11 +1738,22 @@ spec:
     - Egress
     - Ingress
   egress:
-    - ports:
+    # Allow access to Kubernetes API server 
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-kube-apiserver
+          podSelector: {}
+      ports:
         - protocol: TCP
           port: 6443
   ingress:
-    - ports:
+    # Allow admission reviews from host-networked kube-apiserver / kubelet
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/host-network: ""
+      ports:
         - protocol: TCP
           port: 10250
     # Allow Prometheus/monitoring to scrape metrics
@@ -1726,7 +1763,8 @@ spec:
             name: openshift-user-workload-monitoring
       ports:
         - protocol: TCP
-          port: 8080`)
+          port: 8080
+`)
 
 func operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYmlBytes() ([]byte, error) {
 	return _operatorNetworkpoliciesAllowApiServerEgressForWebhookTrafficYml, nil

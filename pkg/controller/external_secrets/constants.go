@@ -228,4 +228,14 @@ var (
 	clusterIssuerKind = certmanagerv1.ClusterIssuerKind
 	issuerKind        = certmanagerv1.IssuerKind
 	issuerGroup       = certmanagerapi.GroupName
+
+	// certificatePrivateKey is the operator-enforced key material for cert-manager
+	// Certificate resources (ECDSA P-256 / PKCS8). Applied in updateCertificateParams
+	// so helm-refreshed bindata cannot regress to cert-manager's RSA default.
+	certificatePrivateKey = certmanagerv1.CertificatePrivateKey{
+		RotationPolicy: certmanagerv1.RotationPolicyAlways,
+		Algorithm:      certmanagerv1.ECDSAKeyAlgorithm,
+		Encoding:       certmanagerv1.PKCS8,
+		Size:           256,
+	}
 )
