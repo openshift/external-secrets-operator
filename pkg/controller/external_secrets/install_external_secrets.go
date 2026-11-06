@@ -16,11 +16,18 @@ import (
 )
 
 var (
-	// disallowedLabelMatcher is for restricting the labels defined to apply on all resources
-	// created for `external-secrets` operand deployment. Operator will just update required labels
-	// on the resources, and other labels will be carried as is from the static manifest, hence
-	// adding this rule to restrict users from updating one of aforementioned labels.
-	disallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
+	// disallowedLabelMatcher rejects user/ESM-supplied label keys that must remain
+	// operator-controlled. Matching keys are silently skipped in getResourceLabels
+	// (same pattern as before; no CEL rejection on the CR, to avoid upgrade breakage).
+	// Covers:
+	//   - reserved policy domains aligned with annotations CEL: kubernetes.io / k8s.io /
+	//     openshift.io (including subdomains, e.g. pod-security.kubernetes.io,
+	//     security.openshift.io) and cert-manager.io
+	//   - operand identity domains: external-secrets.io, exact "app", and
+	//     servicebinding.io/controller
+	disallowedLabelMatcher = regexp.MustCompile(
+		`^([^/]*\.)?(kubernetes\.io|k8s\.io|openshift\.io)/|^cert-manager\.io/|^external-secrets\.io/|^servicebinding\.io/controller$|^app$`,
+	)
 )
 
 // reconcileExternalSecretsDeployment runs the full install/reconcile of the external-secrets
@@ -153,6 +160,7 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 	}
 
 	common.ApplyResourceMetadata(desired, resourceMetadata)
+	applyOperandNamespacePodSecurityLabels(desired)
 
 	fetched := &corev1.Namespace{}
 	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
@@ -183,16 +191,64 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 	return nil
 }
 
+// desiredNamespaceLabels returns resourceMetadata labels plus fill-if-absent PSA defaults.
+// Used for create expectations and tests; update path applies PSA separately so existing
+// OpenShift/admin PSA values are never overwritten.
+func desiredNamespaceLabels(resourceMetadata common.ResourceMetadata) map[string]string {
+	labels := make(map[string]string, len(resourceMetadata.Labels)+len(operandNamespacePodSecurityLabels))
+	maps.Copy(labels, resourceMetadata.Labels)
+	for k, v := range operandNamespacePodSecurityLabels {
+		if _, exists := labels[k]; !exists {
+			labels[k] = v
+		}
+	}
+	return labels
+}
+
+// applyOperandNamespacePodSecurityLabels adds restricted PSA labels only when the key is
+// absent. Does not overwrite OpenShift PSA sync or admin values, and does not set
+// security.openshift.io/scc.podSecurityLabelSync or *-version labels.
+func applyOperandNamespacePodSecurityLabels(ns *corev1.Namespace) {
+	if ns.Labels == nil {
+		ns.Labels = make(map[string]string, len(operandNamespacePodSecurityLabels))
+	}
+	for k, v := range operandNamespacePodSecurityLabels {
+		if _, exists := ns.Labels[k]; !exists {
+			ns.Labels[k] = v
+		}
+	}
+}
+
+// operandNamespacePodSecurityLabelsNeedUpdate reports whether any PSA fill-if-absent key
+// is missing from the existing Namespace.
+func operandNamespacePodSecurityLabelsNeedUpdate(existing *corev1.Namespace) bool {
+	if existing.Labels == nil {
+		return len(operandNamespacePodSecurityLabels) > 0
+	}
+	for k := range operandNamespacePodSecurityLabels {
+		if _, exists := existing.Labels[k]; !exists {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Reconciler) resourceMetadataNeedsUpdate(existing *corev1.Namespace, resourceMetadata common.ResourceMetadata) bool {
 	needsUpdate := false
 	if namespaceLabelsNeedUpdate(existing, resourceMetadata.Labels) {
 		needsUpdate = true
 		r.log.V(1).Info("Namespace labels changed, updating", "name", existing.GetName())
-		// Merge existing labels with desired labels (desired labels take precedence)
+		// Merge existing labels with resourceMetadata labels (operator identity labels take precedence)
 		if existing.Labels == nil {
 			existing.Labels = make(map[string]string)
 		}
 		maps.Copy(existing.Labels, resourceMetadata.Labels)
+	}
+
+	if operandNamespacePodSecurityLabelsNeedUpdate(existing) {
+		needsUpdate = true
+		r.log.V(1).Info("Namespace missing PSA labels, adding defaults for absent keys", "name", existing.GetName())
+		applyOperandNamespacePodSecurityLabels(existing)
 	}
 
 	if namespaceAnnotationsNeedUpdate(existing, resourceMetadata.Annotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0 {

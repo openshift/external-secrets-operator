@@ -177,6 +177,17 @@ var (
 		"app.kubernetes.io/part-of":    common.ExternalSecretsOperatorCommonName,
 	}
 
+	// operandNamespacePodSecurityLabels are the restricted Pod Security Admission labels
+	// the operator adds to the operand Namespace when a given key is absent. OpenShift SCC
+	// remains the primary enforcement; these labels are defense-in-depth. Keys that already
+	// exist (OpenShift PSA sync, admin, or another owner) are left unchanged. The operator
+	// does not set *-version labels or security.openshift.io/scc.podSecurityLabelSync.
+	operandNamespacePodSecurityLabels = map[string]string{
+		"pod-security.kubernetes.io/enforce": "restricted",
+		"pod-security.kubernetes.io/audit":   "restricted",
+		"pod-security.kubernetes.io/warn":    "restricted",
+	}
+
 	// featureContainerArgs maps ExternalSecretsManager feature names to the container
 	// argument appended when that feature is enabled and the deployment declares support
 	// via updateOptionalFeatures. Only features listed in both ESM (enabled) and the
