@@ -9,6 +9,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.40.0
+	github.com/openshift/api v0.0.0-20260807110950-72ae4424ef35
 	github.com/openshift/external-secrets-operator v0.0.0-00010101000000-000000000000
 	github.com/operator-framework/api v0.42.0
 	github.com/stretchr/testify v1.11.1
@@ -66,7 +67,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/openshift/api v0.0.0-20260807110950-72ae4424ef35 // indirect
 	github.com/openshift/controller-runtime-common v0.0.0-20260813135806-e1187ec555fc // indirect
 	github.com/openshift/library-go v0.0.0-20260807194649-ee0a87843dda // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
