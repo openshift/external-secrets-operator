@@ -74,12 +74,15 @@ Every `Context`/`Describe` must carry `Label()` decorators:
 |---|---|
 | `Platform:` | `AWS`, `GCP`, `Generic` |
 | `Provider:` | `AWS`, `Vault`, `Bitwarden` |
-| `Feature:` | `Proxy`, `Upgrade`, `OverrideEnv`, `NetworkPolicy`, `CustomAnnotations`, `CustomLabels`, `TrustedCABundle`, `RevisionHistoryLimit`, `UnsafeAllowGenericTargets` |
+| `Feature:` | `Proxy`, `Upgrade`, `OverrideEnv`, `NetworkPolicy`, `CustomAnnotations`, `CustomLabels`, `TrustedCABundle`, `RevisionHistoryLimit`, `UnsafeAllowGenericTargets`, `TLSAdherence` |
+| `TechPreview` | Presence label for TechPreviewNoUpgrade / feature-gated suites (e.g. APIServer TLS adherence) |
 | `Skipped:` | `Disconnected` |
 
-Default filter: `Platform: isSubsetOf {AWS,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden)`
+Default filter: `Platform: isSubsetOf {AWS,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden) && !TechPreview`
 
 Override: `make test-e2e E2E_GINKGO_LABEL_FILTER='Provider:Vault'`
+
+TLS adherence (APIServer `tlsAdherence` / `tlsSecurityProfile`, openssl probes): `make test-e2e E2E_GINKGO_LABEL_FILTER='TechPreview && Feature:TLSAdherence'`. Requires a TechPreview cluster with the `TLSAdherence` feature gate, plus `oc` and `openssl` in PATH.
 
 > **Note:** If/when the e2e suite is restructured, update this label taxonomy and the default `E2E_GINKGO_LABEL_FILTER` to match the new suite layout.
 
