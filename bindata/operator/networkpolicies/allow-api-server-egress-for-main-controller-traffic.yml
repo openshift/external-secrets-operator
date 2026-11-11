@@ -16,22 +16,12 @@ spec:
     - Egress
     - Ingress
   egress:
-    # Allow access to Kubernetes API server 
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: openshift-kube-apiserver
-          podSelector: {}
-      ports:
+    # Allow access to Kubernetes API server
+    - ports:
         - protocol: TCP
           port: 6443
   ingress:
     # Allow Prometheus/monitoring to scrape metrics
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: openshift-user-workload-monitoring
-      ports:
+    - ports:
         - protocol: TCP
           port: 8080
-          
