@@ -16,11 +16,18 @@ import (
 )
 
 var (
-	// disallowedLabelMatcher is for restricting the labels defined to apply on all resources
-	// created for `external-secrets` operand deployment. Operator will just update required labels
-	// on the resources, and other labels will be carried as is from the static manifest, hence
-	// adding this rule to restrict users from updating one of aforementioned labels.
-	disallowedLabelMatcher = regexp.MustCompile(`^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$`)
+	// disallowedLabelMatcher rejects user/ESM-supplied label keys that must remain
+	// operator-controlled. Matching keys are silently skipped in getResourceLabels
+	// (same pattern as before; no CEL rejection on the CR, to avoid upgrade breakage).
+	// Covers:
+	//   - reserved policy domains aligned with annotations CEL: kubernetes.io / k8s.io /
+	//     openshift.io (including subdomains, e.g. pod-security.kubernetes.io,
+	//     security.openshift.io) and cert-manager.io
+	//   - operand identity domains: external-secrets.io, exact "app", and
+	//     servicebinding.io/controller
+	disallowedLabelMatcher = regexp.MustCompile(
+		`^([^/]*\.)?(kubernetes\.io|k8s\.io|openshift\.io)/|^cert-manager\.io/|^external-secrets\.io/|^servicebinding\.io/controller$|^app$`,
+	)
 )
 
 // reconcileExternalSecretsDeployment runs the full install/reconcile of the external-secrets

@@ -25,13 +25,17 @@ The regex validates key format (alphanumeric start/end, optional DNS prefix), pr
 
 ## 3. Label Domain Restrictions
 
-Labels are restricted at the controller level via `disallowedLabelMatcher` regex in `install_external_secrets.go`:
+Labels are restricted at the controller level via `disallowedLabelMatcher` regex in `install_external_secrets.go`. Matching **user-supplied** / ESM global labels are **silently skipped** (no CEL on `controllerConfig.labels`, to avoid upgrade breakage for already-stored CRs). This is intentionally broader than the historical identity-only denylist and is aligned with the reserved domains blocked for annotations via CEL:
 
 ```regex
-^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$
+^([^/]*\.)?(kubernetes\.io|k8s\.io|openshift\.io)/|^cert-manager\.io/|^external-secrets\.io/|^servicebinding\.io/controller$|^app$
 ```
 
-Matching **user-supplied** labels are silently skipped. The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled.
+That covers:
+- Policy-significant domains and subdomains: `kubernetes.io` / `k8s.io` / `openshift.io` (e.g. `pod-security.kubernetes.io/*`, `security.openshift.io/*`) and `cert-manager.io`
+- Operand identity keys: `external-secrets.io/*`, exact `app`, and `servicebinding.io/controller`
+
+The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled. Namespace PSA labels (`pod-security.kubernetes.io/{enforce,audit,warn}=restricted`) are applied separately by the operator as **fill-if-absent** after user label merge: existing keys (OpenShift PSA sync or admin) are never overwritten, `*-version` labels and `security.openshift.io/scc.podSecurityLabelSync` are left alone, and PSA keys are never taken from CR input.
 
 ## 4. Environment Variable Reservation
 
