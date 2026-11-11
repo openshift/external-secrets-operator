@@ -177,6 +177,21 @@ var (
 		"app.kubernetes.io/part-of":    common.ExternalSecretsOperatorCommonName,
 	}
 
+	// operandNamespacePodSecurityLabelSyncKey is OpenShift's per-namespace switch for the
+	// PSA label syncer. The operator never sets this key; it only reacts to its value:
+	//   - "false": sync is off → operator overwrites PSA labels to restricted
+	//   - absent or "true": sync may run → operator only fill-if-absent
+	operandNamespacePodSecurityLabelSyncKey = "security.openshift.io/scc.podSecurityLabelSync"
+
+	// operandNamespacePodSecurityLabels are the restricted Pod Security Admission labels
+	// applied to the operand Namespace. OpenShift SCC remains the primary enforcement;
+	// these labels are defense-in-depth. The operator does not set *-version labels.
+	operandNamespacePodSecurityLabels = map[string]string{
+		"pod-security.kubernetes.io/enforce": "restricted",
+		"pod-security.kubernetes.io/audit":   "restricted",
+		"pod-security.kubernetes.io/warn":    "restricted",
+	}
+
 	// featureContainerArgs maps ExternalSecretsManager feature names to the container
 	// argument appended when that feature is enabled and the deployment declares support
 	// via updateOptionalFeatures. Only features listed in both ESM (enabled) and the

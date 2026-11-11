@@ -29,6 +29,15 @@ func getTestLabels(extraLabels map[string]string) map[string]string {
 	return labels
 }
 
+func assertOperandNamespacePodSecurityLabels(t *testing.T, ns *corev1.Namespace) {
+	t.Helper()
+	for k, v := range operandNamespacePodSecurityLabels {
+		if ns.Labels[k] != v {
+			t.Errorf("expected PSA label %s=%s, got %q", k, v, ns.Labels[k])
+		}
+	}
+}
+
 func TestCreateOrApplyNamespace(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -59,6 +68,7 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 							t.Errorf("expected label %s=%s, got %s", k, v, ns.Labels[k])
 						}
 					}
+					assertOperandNamespacePodSecurityLabels(t, ns)
 					return nil
 				})
 			},
@@ -73,7 +83,7 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 						existing := &corev1.Namespace{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:   commontest.TestExternalSecretsNamespace,
-								Labels: controllerDefaultResourceLabels,
+								Labels: desiredNamespaceLabels(testResourceMetadata(commontest.TestExternalSecretsConfig())),
 							},
 						}
 						existing.DeepCopyInto(namespace)
@@ -113,10 +123,193 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 							t.Errorf("expected label %s=%s, got %s", k, v, ns.Labels[k])
 						}
 					}
+					assertOperandNamespacePodSecurityLabels(t, ns)
 					return nil
 				})
 			},
 			wantUpdate: true,
+		},
+		{
+			name:             "namespace missing PSA labels triggers fill-if-absent update",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: maps.Clone(controllerDefaultResourceLabels),
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+					ns, ok := obj.(*corev1.Namespace)
+					if !ok {
+						t.Errorf("expected Namespace object, got %T", obj)
+					}
+					assertOperandNamespacePodSecurityLabels(t, ns)
+					return nil
+				})
+			},
+			wantUpdate: true,
+		},
+		{
+			name:             "OpenShift audit/warn preserved while missing enforce is filled",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						labels := maps.Clone(controllerDefaultResourceLabels)
+						labels["pod-security.kubernetes.io/audit"] = "restricted"
+						labels["pod-security.kubernetes.io/warn"] = "restricted"
+						labels["pod-security.kubernetes.io/audit-version"] = "latest"
+						labels["pod-security.kubernetes.io/warn-version"] = "latest"
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: labels,
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+					ns, ok := obj.(*corev1.Namespace)
+					if !ok {
+						t.Errorf("expected Namespace object, got %T", obj)
+					}
+					if ns.Labels["pod-security.kubernetes.io/enforce"] != "restricted" {
+						t.Errorf("expected enforce=restricted, got %q", ns.Labels["pod-security.kubernetes.io/enforce"])
+					}
+					if ns.Labels["pod-security.kubernetes.io/audit"] != "restricted" {
+						t.Errorf("expected existing audit=restricted preserved, got %q", ns.Labels["pod-security.kubernetes.io/audit"])
+					}
+					if ns.Labels["pod-security.kubernetes.io/warn"] != "restricted" {
+						t.Errorf("expected existing warn=restricted preserved, got %q", ns.Labels["pod-security.kubernetes.io/warn"])
+					}
+					if ns.Labels["pod-security.kubernetes.io/audit-version"] != "latest" {
+						t.Errorf("expected audit-version=latest preserved, got %q", ns.Labels["pod-security.kubernetes.io/audit-version"])
+					}
+					if _, has := ns.Labels["security.openshift.io/scc.podSecurityLabelSync"]; has {
+						t.Error("operator must not set podSecurityLabelSync")
+					}
+					return nil
+				})
+			},
+			wantUpdate: true,
+		},
+		{
+			name:             "existing non-restricted PSA values are not overwritten when sync is absent",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						labels := maps.Clone(controllerDefaultResourceLabels)
+						labels["pod-security.kubernetes.io/enforce"] = "privileged"
+						labels["pod-security.kubernetes.io/audit"] = "baseline"
+						labels["pod-security.kubernetes.io/warn"] = "baseline"
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: labels,
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+			},
+			wantUpdate: false,
+		},
+		{
+			name:             "existing non-restricted PSA values are not overwritten when sync is true",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						labels := maps.Clone(controllerDefaultResourceLabels)
+						labels[operandNamespacePodSecurityLabelSyncKey] = "true"
+						labels["pod-security.kubernetes.io/enforce"] = "privileged"
+						labels["pod-security.kubernetes.io/audit"] = "baseline"
+						labels["pod-security.kubernetes.io/warn"] = "baseline"
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: labels,
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+			},
+			wantUpdate: false,
+		},
+		{
+			name:             "podSecurityLabelSync=false overwrites non-restricted PSA labels",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						labels := maps.Clone(controllerDefaultResourceLabels)
+						labels[operandNamespacePodSecurityLabelSyncKey] = "false"
+						labels["pod-security.kubernetes.io/enforce"] = "privileged"
+						labels["pod-security.kubernetes.io/audit"] = "baseline"
+						labels["pod-security.kubernetes.io/warn"] = "baseline"
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: labels,
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+				m.UpdateWithRetryCalls(func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+					ns, ok := obj.(*corev1.Namespace)
+					if !ok {
+						t.Errorf("expected Namespace object, got %T", obj)
+					}
+					assertOperandNamespacePodSecurityLabels(t, ns)
+					if ns.Labels[operandNamespacePodSecurityLabelSyncKey] != "false" {
+						t.Errorf("expected podSecurityLabelSync=false preserved, got %q", ns.Labels[operandNamespacePodSecurityLabelSyncKey])
+					}
+					return nil
+				})
+			},
+			wantUpdate: true,
+		},
+		{
+			name:             "podSecurityLabelSync=false with restricted PSA needs no update",
+			resourceMetadata: testResourceMetadata(commontest.TestExternalSecretsConfig()),
+			preReq: func(r *Reconciler, m *fakes.FakeCtrlClient) {
+				m.ExistsCalls(func(ctx context.Context, ns types.NamespacedName, obj client.Object) (bool, error) {
+					if namespace, ok := obj.(*corev1.Namespace); ok {
+						labels := desiredNamespaceLabels(testResourceMetadata(commontest.TestExternalSecretsConfig()))
+						labels[operandNamespacePodSecurityLabelSyncKey] = "false"
+						existing := &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   commontest.TestExternalSecretsNamespace,
+								Labels: labels,
+							},
+						}
+						existing.DeepCopyInto(namespace)
+						return true, nil
+					}
+					return false, nil
+				})
+			},
+			wantUpdate: false,
 		},
 		{
 			name: "namespace exists with different annotations, update triggered and obsolete annotations removed",
@@ -131,7 +324,7 @@ func TestCreateOrApplyNamespace(t *testing.T) {
 						existing := &corev1.Namespace{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:   commontest.TestExternalSecretsNamespace,
-								Labels: controllerDefaultResourceLabels,
+								Labels: desiredNamespaceLabels(common.ResourceMetadata{Labels: controllerDefaultResourceLabels}),
 								Annotations: map[string]string{
 									"obsolete-key": "to-be-removed",
 									"other":        "preserved",
@@ -436,6 +629,18 @@ func TestGetResourceLabels(t *testing.T) {
 			escLabels: map[string]string{"external-secrets.io/foo": "bar", "valid": "ok"},
 			wantLabels: getTestLabels(map[string]string{
 				"valid": "ok",
+			}),
+		},
+		{
+			name: "policy-significant reserved domain labels are silently skipped",
+			esm:  nil,
+			escLabels: map[string]string{
+				"pod-security.kubernetes.io/enforce":             "privileged",
+				"security.openshift.io/scc.podSecurityLabelSync": "false",
+				"example.com/team":                               "ok",
+			},
+			wantLabels: getTestLabels(map[string]string{
+				"example.com/team": "ok",
 			}),
 		},
 		{

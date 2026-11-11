@@ -25,13 +25,22 @@ The regex validates key format (alphanumeric start/end, optional DNS prefix), pr
 
 ## 3. Label Domain Restrictions
 
-Labels are restricted at the controller level via `disallowedLabelMatcher` regex in `install_external_secrets.go`:
+Labels are restricted at the controller level via `disallowedLabelMatcher` regex in `install_external_secrets.go`. Matching **user-supplied** / ESM global labels are **silently skipped** (no CEL on `controllerConfig.labels`, to avoid upgrade breakage for already-stored CRs). This is intentionally broader than the historical identity-only denylist and is aligned with the reserved domains blocked for annotations via CEL:
 
 ```regex
-^app.kubernetes.io\/|^external-secrets.io\/|^rbac.authorization.k8s.io\/|^servicebinding.io\/controller$|^app$
+^([^/]*\.)?(kubernetes\.io|k8s\.io|openshift\.io)/|^cert-manager\.io/|^external-secrets\.io/|^servicebinding\.io/controller$|^app$
 ```
 
-Matching **user-supplied** labels are silently skipped. The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled.
+That covers:
+- Policy-significant domains and subdomains: `kubernetes.io` / `k8s.io` / `openshift.io` (e.g. `pod-security.kubernetes.io/*`, `security.openshift.io/*`) and `cert-manager.io`
+- Operand identity keys: `external-secrets.io/*`, exact `app`, and `servicebinding.io/controller`
+
+The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled. Namespace PSA labels (`pod-security.kubernetes.io/{enforce,audit,warn}=restricted`) are applied separately after user label merge and are never taken from CR input. Behavior depends on OpenShift's `security.openshift.io/scc.podSecurityLabelSync` (the operator never sets this key):
+
+- **absent or `true`** (sync may run / forced): **fill-if-absent** only — existing PSA keys (OpenShift sync, admin, GitOps) are left unchanged; missing keys get `restricted`.
+- **`false`** (sync off): **overwrite** PSA mode labels to `restricted`.
+
+`*-version` labels are left alone. GitOps/admin owners that must keep non-operator PSA values should leave sync absent/`true` and set the PSA keys they care about; do not set `podSecurityLabelSync=false` unless operator ownership of those labels is intended.
 
 ## 4. Environment Variable Reservation
 
