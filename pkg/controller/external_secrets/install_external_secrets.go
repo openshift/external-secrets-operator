@@ -160,6 +160,7 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 	}
 
 	common.ApplyResourceMetadata(desired, resourceMetadata)
+	applyOperandNamespacePodSecurityLabels(desired)
 
 	fetched := &corev1.Namespace{}
 	exists, err := r.Exists(r.ctx, client.ObjectKeyFromObject(desired), fetched)
@@ -190,16 +191,91 @@ func (r *Reconciler) createOrApplyNamespace(esc *operatorv1alpha1.ExternalSecret
 	return nil
 }
 
+// desiredNamespaceLabels returns resourceMetadata labels plus PSA defaults (fill-if-absent).
+// Used for create expectations and tests; update path applies PSA via
+// applyOperandNamespacePodSecurityLabels based on podSecurityLabelSync.
+func desiredNamespaceLabels(resourceMetadata common.ResourceMetadata) map[string]string {
+	labels := make(map[string]string, len(resourceMetadata.Labels)+len(operandNamespacePodSecurityLabels))
+	maps.Copy(labels, resourceMetadata.Labels)
+	for k, v := range operandNamespacePodSecurityLabels {
+		if _, exists := labels[k]; !exists {
+			labels[k] = v
+		}
+	}
+	return labels
+}
+
+// operandNamespacePodSecurityLabelSyncDisabled reports whether the Namespace has opted out
+// of OpenShift PSA label synchronization (podSecurityLabelSync=false).
+func operandNamespacePodSecurityLabelSyncDisabled(ns *corev1.Namespace) bool {
+	return ns.Labels != nil && ns.Labels[operandNamespacePodSecurityLabelSyncKey] == "false"
+}
+
+// applyOperandNamespacePodSecurityLabels applies restricted PSA labels:
+//   - podSecurityLabelSync=false → overwrite to restricted (sync off; operator may own PSA)
+//   - absent or true → fill-if-absent only (do not fight OpenShift sync / GitOps owners)
+//
+// Never sets podSecurityLabelSync or *-version labels.
+func applyOperandNamespacePodSecurityLabels(ns *corev1.Namespace) {
+	if ns.Labels == nil {
+		ns.Labels = make(map[string]string, len(operandNamespacePodSecurityLabels))
+	}
+	if operandNamespacePodSecurityLabelSyncDisabled(ns) {
+		maps.Copy(ns.Labels, operandNamespacePodSecurityLabels)
+		return
+	}
+	for k, v := range operandNamespacePodSecurityLabels {
+		if _, exists := ns.Labels[k]; !exists {
+			ns.Labels[k] = v
+		}
+	}
+}
+
+// operandNamespacePodSecurityLabelsNeedUpdate reports whether PSA labels on the Namespace
+// differ from what applyOperandNamespacePodSecurityLabels would produce.
+func operandNamespacePodSecurityLabelsNeedUpdate(existing *corev1.Namespace) bool {
+	if operandNamespacePodSecurityLabelSyncDisabled(existing) {
+		if existing.Labels == nil {
+			return len(operandNamespacePodSecurityLabels) > 0
+		}
+		for k, v := range operandNamespacePodSecurityLabels {
+			if existing.Labels[k] != v {
+				return true
+			}
+		}
+		return false
+	}
+	if existing.Labels == nil {
+		return len(operandNamespacePodSecurityLabels) > 0
+	}
+	for k := range operandNamespacePodSecurityLabels {
+		if _, exists := existing.Labels[k]; !exists {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Reconciler) resourceMetadataNeedsUpdate(existing *corev1.Namespace, resourceMetadata common.ResourceMetadata) bool {
 	needsUpdate := false
 	if namespaceLabelsNeedUpdate(existing, resourceMetadata.Labels) {
 		needsUpdate = true
 		r.log.V(1).Info("Namespace labels changed, updating", "name", existing.GetName())
-		// Merge existing labels with desired labels (desired labels take precedence)
+		// Merge existing labels with resourceMetadata labels (operator identity labels take precedence)
 		if existing.Labels == nil {
 			existing.Labels = make(map[string]string)
 		}
 		maps.Copy(existing.Labels, resourceMetadata.Labels)
+	}
+
+	if operandNamespacePodSecurityLabelsNeedUpdate(existing) {
+		needsUpdate = true
+		if operandNamespacePodSecurityLabelSyncDisabled(existing) {
+			r.log.V(1).Info("Namespace PSA labels out of sync with restricted (podSecurityLabelSync=false), overwriting", "name", existing.GetName())
+		} else {
+			r.log.V(1).Info("Namespace missing PSA labels, adding defaults for absent keys", "name", existing.GetName())
+		}
+		applyOperandNamespacePodSecurityLabels(existing)
 	}
 
 	if namespaceAnnotationsNeedUpdate(existing, resourceMetadata.Annotations) || len(resourceMetadata.DeletedAnnotationKeys) != 0 {
@@ -272,7 +348,7 @@ func (r *Reconciler) getResourceLabels(esc *operatorv1alpha1.ExternalSecretsConf
 	if common.IsESMSpecEmpty(r.esm) && r.esm.Spec.GlobalConfig != nil {
 		for k, v := range r.esm.Spec.GlobalConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
-				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k, "value", v)
+				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsmanagers.operator.openshift.io", "label", k)
 				continue
 			}
 			resourceMetadata.Labels[k] = v
@@ -281,7 +357,7 @@ func (r *Reconciler) getResourceLabels(esc *operatorv1alpha1.ExternalSecretsConf
 	if len(esc.Spec.ControllerConfig.Labels) != 0 {
 		for k, v := range esc.Spec.ControllerConfig.Labels {
 			if disallowedLabelMatcher.MatchString(k) {
-				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k, "value", v)
+				r.log.V(1).Info("skip adding unallowed label configured in externalsecretsconfig.operator.openshift.io", "label", k)
 				continue
 			}
 			resourceMetadata.Labels[k] = v

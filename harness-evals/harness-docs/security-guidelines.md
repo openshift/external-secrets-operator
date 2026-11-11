@@ -35,7 +35,12 @@ That covers:
 - Policy-significant domains and subdomains: `kubernetes.io` / `k8s.io` / `openshift.io` (e.g. `pod-security.kubernetes.io/*`, `security.openshift.io/*`) and `cert-manager.io`
 - Operand identity keys: `external-secrets.io/*`, exact `app`, and `servicebinding.io/controller`
 
-The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled. Namespace PSA labels (`pod-security.kubernetes.io/{enforce,audit,warn}=restricted`) are applied separately by the operator as **fill-if-absent** after user label merge: existing keys (OpenShift PSA sync or admin) are never overwritten, `*-version` labels and `security.openshift.io/scc.podSecurityLabelSync` are left alone, and PSA keys are never taken from CR input.
+The operator still sets `app: external-secrets` (and other defaults) via `controllerDefaultResourceLabels` in `constants.go` so `app`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `app.kubernetes.io/part-of` remain operator-controlled. Namespace PSA labels (`pod-security.kubernetes.io/{enforce,audit,warn}=restricted`) are applied separately after user label merge and are never taken from CR input. Behavior depends on OpenShift's `security.openshift.io/scc.podSecurityLabelSync` (the operator never sets this key):
+
+- **absent or `true`** (sync may run / forced): **fill-if-absent** only — existing PSA keys (OpenShift sync, admin, GitOps) are left unchanged; missing keys get `restricted`.
+- **`false`** (sync off): **overwrite** PSA mode labels to `restricted`.
+
+`*-version` labels are left alone. GitOps/admin owners that must keep non-operator PSA values should leave sync absent/`true` and set the PSA keys they care about; do not set `podSecurityLabelSync=false` unless operator ownership of those labels is intended.
 
 ## 4. Environment Variable Reservation
 
