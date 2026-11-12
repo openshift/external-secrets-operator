@@ -242,7 +242,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(crdv1.AddToScheme(scheme))
-	utilruntime.Must(configv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.Install(scheme))
 
 	utilruntime.Must(operatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme

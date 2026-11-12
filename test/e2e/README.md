@@ -22,6 +22,7 @@ make test-e2e E2E_GINKGO_LABEL_FILTER=""
 | `Provider` | `AWS`, `Bitwarden`, `Vault` | External secret backend integration |
 | `API` | `Bitwarden` | Direct HTTP tests against bitwarden-sdk-server |
 | `Feature` | see below | Optional capability or functional area |
+| `TechPreview` | *(presence)* | Specs that require TechPreviewNoUpgrade / feature-gated APIs (disjoint from default CI) |
 
 ### Feature values
 
@@ -40,16 +41,17 @@ make test-e2e E2E_GINKGO_LABEL_FILTER=""
 | `Replicas` | Per-component replica scaling and leader election |
 | `TrustedCABundle` | trustedCABundle ConfigMap mounting and validation |
 | `Upgrade` | Post-upgrade migration checks (temporary) |
+| `TLSAdherence` | Centralized APIServer TLS profile adherence (operator + operand openssl probes) |
 
 ## Default filter
 
 `make test-e2e` uses:
 
 ```text
-Platform: isSubsetOf {AWS,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden)
+Platform: isSubsetOf {AWS,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden) && !TechPreview
 ```
 
-This runs portable tests plus AWS provider tests, and **API:Bitwarden** health/auth (bitwarden-sdk-server is deployed automatically — no pre-provisioned secrets). Excludes `Feature:Proxy`, `Feature:Upgrade`, and all `Provider:Bitwarden` specs (including Bitwarden provider sync and API Secrets API).
+This runs portable tests plus AWS provider tests, and **API:Bitwarden** health/auth (bitwarden-sdk-server is deployed automatically — no pre-provisioned secrets). Excludes `Feature:Proxy`, `Feature:Upgrade`, all `Provider:Bitwarden` specs (including Bitwarden provider sync and API Secrets API), and `TechPreview` (APIServer-mutating TLS adherence).
 
 ## Prerequisites
 
@@ -74,6 +76,7 @@ The bitwarden-sdk-server plugin uses **`bitwarden-tls-certs`** (TLS materials fo
 |-------------|-------------------------------|
 | Cluster-wide OpenShift proxy (`proxy.config.openshift.io/cluster`) | `Feature:Proxy` |
 | OpenShift with `redhat-operators` catalog (`openshift-marketplace`) | Main e2e Describe (`e2e_test.go`) — root `BeforeAll` installs Red Hat cert-manager Operator via OLM if not already present |
+| TechPreviewNoUpgrade (or equivalent) with `TLSAdherence` feature gate; `openssl` and `oc` in PATH | `TechPreview` / `Feature:TLSAdherence` |
 
 If a prerequisite is missing, the affected spec **fails** with a message pointing here — it does not skip.
 
@@ -102,7 +105,8 @@ If a prerequisite is missing, the affected spec **fails** with a message pointin
 | `Feature:UnsafeAllowGenericTargets` | UnsafeAllowGenericTargets feature propagation |
 | `Feature:CustomAnnotations` | Annotation lifecycle tests |
 | `Feature:CustomLabels` | Label lifecycle tests |
-| `Platform: isSubsetOf {GCP,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden)` | Portable + GCP/AWS cross-platform tests on a GCP cluster |
+| `TechPreview && Feature:TLSAdherence` | APIServer TLS adherence |
+| `Platform: isSubsetOf {GCP,Generic} && !(Feature: containsAny {Proxy, Upgrade}) && !(Provider: containsAny Bitwarden) && !TechPreview` | Portable + GCP/AWS cross-platform tests on a GCP cluster |
 
 ### Combining labels
 
@@ -157,6 +161,26 @@ File: `operand_args_test.go`
 | Feature | Describe |
 |---------|----------|
 | `OverrideOperandArgs` | Operand Args Env Overrides |
+
+### `TechPreview` + `Feature:TLSAdherence`
+
+Files: `tls_adherence_test.go`, `tls_adherence_helpers_test.go`
+
+Run with:
+
+```bash
+make test-e2e E2E_GINKGO_LABEL_FILTER='TechPreview && Feature:TLSAdherence'
+```
+
+Suite-wide `AfterSuite` deletes the cluster `ExternalSecretsConfig`, cluster-scoped operand CR instances, and the operand namespace (same as any `make test-e2e` run).
+
+- Mutates `apiserver.config.openshift.io/cluster` (`tlsAdherence` + `tlsSecurityProfile`)
+- Asserts operand `--tls-*` args and openssl handshakes against operator metrics (`:8443`), webhook (`:443`), and bitwarden-sdk-server (`:9998`)
+- Matrix: adherence off → Strict + empty profile (Intermediate defaults) → Intermediate → Modern → Custom TLS 1.3
+- Best-effort APIServer restore after the matrix: if `tlsAdherence` was unset, cleanup sets `LegacyAdheringComponentsOnly` (CEL does not allow clearing it once set, so the cluster will not follow a different future default automatically)
+- Waits for operator and operands healthy after that restore
+- Requires TechPreview / `TLSAdherence` feature gate, `oc`, and `openssl`
+- CI (`tls-scanner` / `tls-scanner-periodic` in openshift/release): runs **after** `tls-scanner-run` so the external scanner keeps a stable APIServer state; e2e then exercises the profile matrix and restores
 
 File: `trusted_ca_bundle_test.go`
 
