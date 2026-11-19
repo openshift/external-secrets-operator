@@ -59,6 +59,9 @@ const (
 	tlsAdherenceHealthyTimeout = 5 * time.Minute
 	tlsAdherencePollInterval   = 5 * time.Second
 	opensslProbeTimeout        = 20 * time.Second
+	// opensslProbeRetry* covers transient port-forward / endpoint flaps after TLS rollouts.
+	opensslProbeRetryTimeout  = 2 * time.Minute
+	opensslProbeRetryInterval = 2 * time.Second
 )
 
 // tlsEndpoint describes a TLS server probed via oc port-forward + openssl s_client.
@@ -309,47 +312,76 @@ func assertOpenSSLProbes(ctx context.Context, expect opensslProbeExpectation) {
 
 	for _, ep := range tlsProbeEndpoints() {
 		By(fmt.Sprintf("openssl probes against %s (%s)", ep.name, ep.resource))
-		func() {
-			localPort, stop := startPortForward(ctx, ep)
-			defer stop()
-
-			if expect.rejectTLS11 {
-				// Offer ECDSA and RSA TLS1.1 suites: bitwarden e2e cert is ECDSA; operator/webhook are typically RSA.
-				// AES128-SHA alone would fail cipher selection on ECDSA endpoints and look like a version reject.
-				out := runOpenSSLClient(ctx, localPort, "-tls1_1", "-cipher", "ECDHE-ECDSA-AES128-SHA:AES128-SHA:@SECLEVEL=0")
-				if opensslClientCannotNegotiate(out) {
-					By(fmt.Sprintf("Skipping TLS1.1 rejection probe for %s: local openssl cannot offer TLS1.1", ep.name))
-				} else {
-					Expect(opensslHandshakeSucceeded(out)).To(BeFalse(),
-						"%s must not complete a TLS1.1 handshake; openssl output:\n%s", ep.name, out)
-					Expect(opensslServerRejected(out)).To(BeTrue(),
-						"%s should reject TLS1.1 with a server-side failure (not a client/transport error); openssl output:\n%s", ep.name, out)
-				}
-			}
-			if expect.acceptTLS12 {
-				out := runOpenSSLClient(ctx, localPort, "-tls1_2")
-				Expect(opensslHandshakeSucceeded(out)).To(BeTrue(),
-					"%s should accept TLS1.2; openssl output:\n%s", ep.name, out)
-				Expect(opensslNegotiatedVersion(out, "1.2")).To(BeTrue(),
-					"%s should negotiate TLSv1.2 (Protocol line or New, TLSv1.2 summary); openssl output:\n%s", ep.name, out)
-			} else {
-				out := runOpenSSLClient(ctx, localPort, "-tls1_2")
-				Expect(opensslClientCannotNegotiate(out)).To(BeFalse(),
-					"local openssl must be able to offer TLS1.2 to validate rejection; openssl output:\n%s", out)
-				Expect(opensslHandshakeSucceeded(out)).To(BeFalse(),
-					"%s must not complete a TLS1.2 handshake; openssl output:\n%s", ep.name, out)
-				Expect(opensslServerRejected(out)).To(BeTrue(),
-					"%s should reject TLS1.2 with a server-side failure (not a client/transport error); openssl output:\n%s", ep.name, out)
-			}
-			if expect.acceptTLS13 {
-				out := runOpenSSLClient(ctx, localPort, "-tls1_3")
-				Expect(opensslHandshakeSucceeded(out)).To(BeTrue(),
-					"%s should accept TLS1.3; openssl output:\n%s", ep.name, out)
-				Expect(opensslNegotiatedVersion(out, "1.3")).To(BeTrue(),
-					"%s should negotiate TLSv1.3 (Protocol line or New, TLSv1.3 summary); openssl output:\n%s", ep.name, out)
-			}
-		}()
+		// Retry the whole port-forward + probe cycle: oc port-forward can exit after the
+		// readiness dial (endpoint flap / pod restart), which surfaces as connection refused
+		// and must not be treated as a TLS version rejection.
+		Eventually(func() error {
+			return probeTLSEndpointOnce(ctx, ep, expect)
+		}, opensslProbeRetryTimeout, opensslProbeRetryInterval).Should(Succeed())
 	}
+}
+
+func probeTLSEndpointOnce(ctx context.Context, ep tlsEndpoint, expect opensslProbeExpectation) error {
+	localPort, stop := startPortForward(ctx, ep)
+	defer stop()
+
+	if expect.rejectTLS11 {
+		// Offer ECDSA and RSA TLS1.1 suites: bitwarden e2e cert is ECDSA; operator/webhook are typically RSA.
+		// AES128-SHA alone would fail cipher selection on ECDSA endpoints and look like a version reject.
+		out := runOpenSSLClient(ctx, localPort, "-tls1_1", "-cipher", "ECDHE-ECDSA-AES128-SHA:AES128-SHA:@SECLEVEL=0")
+		if opensslClientCannotNegotiate(out) {
+			By(fmt.Sprintf("Skipping TLS1.1 rejection probe for %s: local openssl cannot offer TLS1.1", ep.name))
+		} else if err := assertOpenSSLRejected(ep.name, "TLS1.1", out); err != nil {
+			return err
+		}
+	}
+	if expect.acceptTLS12 {
+		out := runOpenSSLClient(ctx, localPort, "-tls1_2")
+		if err := assertOpenSSLAccepted(ep.name, "1.2", out); err != nil {
+			return err
+		}
+	} else {
+		out := runOpenSSLClient(ctx, localPort, "-tls1_2")
+		if opensslClientCannotNegotiate(out) {
+			return fmt.Errorf("local openssl must be able to offer TLS1.2 to validate rejection; openssl output:\n%s", out)
+		}
+		if err := assertOpenSSLRejected(ep.name, "TLS1.2", out); err != nil {
+			return err
+		}
+	}
+	if expect.acceptTLS13 {
+		out := runOpenSSLClient(ctx, localPort, "-tls1_3")
+		if err := assertOpenSSLAccepted(ep.name, "1.3", out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func assertOpenSSLRejected(endpoint, label, out string) error {
+	if opensslTransportFailed(out) {
+		return fmt.Errorf("%s %s probe hit a transport failure (retrying): %s", endpoint, label, out)
+	}
+	if opensslHandshakeSucceeded(out) {
+		return fmt.Errorf("%s must not complete a %s handshake; openssl output:\n%s", endpoint, label, out)
+	}
+	if !opensslServerRejected(out) {
+		return fmt.Errorf("%s should reject %s with a server-side failure (not a client/transport error); openssl output:\n%s", endpoint, label, out)
+	}
+	return nil
+}
+
+func assertOpenSSLAccepted(endpoint, minor, out string) error {
+	if opensslTransportFailed(out) {
+		return fmt.Errorf("%s TLS%s probe hit a transport failure (retrying): %s", endpoint, minor, out)
+	}
+	if !opensslHandshakeSucceeded(out) {
+		return fmt.Errorf("%s should accept TLS%s; openssl output:\n%s", endpoint, minor, out)
+	}
+	if !opensslNegotiatedVersion(out, minor) {
+		return fmt.Errorf("%s should negotiate TLSv%s (Protocol line or New, TLSv%s summary); openssl output:\n%s", endpoint, minor, minor, out)
+	}
+	return nil
 }
 
 // syncBuffer is a mutex-protected bytes.Buffer for concurrent cmd stderr reads.
@@ -469,6 +501,19 @@ func opensslClientCannotNegotiate(out string) bool {
 		strings.Contains(lower, "unsupported protocol") ||
 		strings.Contains(lower, "no ciphers available") ||
 		strings.Contains(lower, "no cipher match")
+}
+
+// opensslTransportFailed reports dial/port-forward failures that are not TLS policy decisions.
+func opensslTransportFailed(out string) bool {
+	lower := strings.ToLower(out)
+	return strings.Contains(lower, "connection refused") ||
+		strings.Contains(lower, "connection reset") ||
+		strings.Contains(lower, "connect:errno") ||
+		strings.Contains(lower, "connect error") ||
+		strings.Contains(lower, "network is unreachable") ||
+		strings.Contains(lower, "no route to host") ||
+		strings.Contains(lower, "[openssl probe timed out]") ||
+		strings.Contains(lower, "[openssl probe canceled]")
 }
 
 // opensslServerRejected reports evidence the peer rejected the handshake.
