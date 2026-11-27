@@ -18,7 +18,7 @@ export XDG_CONFIG_HOME ?= $(PROJECT_ROOT)/_output/.config
 # To re-generate any image for another specific version without changing the standard setup, you can:
 # - use the IMG_VERSION as arg of the specific image build and push targets (e.g make IMG_VERSION=1.1.0 bundle-build bundle-push)
 # - use environment variables to overwrite this value (e.g export IMG_VERSION=1.1.0)
-IMG_VERSION ?= 1.1.1
+IMG_VERSION ?= 1.1.2
 
 # Validate IMG_VERSION is valid semver (Major.Minor.Patch), fallback to default if not.
 ifneq ($(shell echo '$(IMG_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && echo valid),valid)
@@ -470,6 +470,10 @@ check-git-diff: update ## Check for any uncommitted changes including untracked 
 .PHONY: govulncheck
 govulncheck: $(GOVULNCHECK) $(OUTPUTS_PATH) ## Run govulncheck vulnerability scan.
 	@./hack/govulncheck.sh $(GOVULNCHECK) $(OUTPUTS_PATH)
+
+.PHONY: validate-renovate-config
+validate-renovate-config: ## Validate renovate config.
+	./hack/renovate-config-validator.sh
 
 ##@ Maintenance
 
