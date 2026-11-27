@@ -21,9 +21,27 @@ set -o errexit
 # - https://pkg.go.dev/vuln/GO-2025-3521 - Kubernetes GitRepo Volume Inadvertent Local Repository Access in k8s.io/kubernetes
 # - https://pkg.go.dev/vuln/GO-2025-3547 - Kubernetes kube-apiserver Vulnerable to Race Condition in k8s.io/kubernetes
 #
-## Below vulnerabilities are in the go packages and requires the fix to be available downstream.
-# - https://pkg.go.dev/vuln/GO-2026-5856 - Encrypted Client Hello privacy leak in crypto/tls
-KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-5856"
+## Below vulnerabilities are fixed only in the Go 1.26.x stdlib (net/http, crypto/tls,
+## crypto/x509, net/textproto) or require golang.org/x/net@v0.60.0+, which itself requires
+## Go 1.26. This operator currently builds with Go 1.25 (see go.mod and Dockerfile); these
+## remain until the toolchain is bumped to 1.26.
+# - https://pkg.go.dev/vuln/GO-2026-6603 - net/http: HTTP/2 server memory exhaustion due to Trailer headers
+# - https://pkg.go.dev/vuln/GO-2026-6605 - net/http: HTTP/1 client connection desynchronization after CONNECT rejection
+# - https://pkg.go.dev/vuln/GO-2026-6607 - crypto/tls: reject malformed ECH outer extension references
+# - https://pkg.go.dev/vuln/GO-2026-6608 - net/textproto, mime/multipart: memory limit bypass when parsing MIME headers
+# - https://pkg.go.dev/vuln/GO-2026-6610 - net/http/internal/http2: transport accepts multiple Content-Length headers
+# - https://pkg.go.dev/vuln/GO-2026-6611 - net/http: excessive CPU consumption from repeated initial window changes
+# - https://pkg.go.dev/vuln/GO-2026-6612 - net/http: double flow control refund on HTTP/2 server streams
+# - https://pkg.go.dev/vuln/GO-2026-6613 - net/http: HTTP/1 server connection desynchronization after 2xx CONNECT response
+# - https://pkg.go.dev/vuln/GO-2026-6617 - net/http: HTTP/2 server crash due to HPACK encoder race
+# - https://pkg.go.dev/vuln/GO-2026-6809 - crypto/x509: mitigation for security concerns with a specific Certificate Authority
+# - https://pkg.go.dev/vuln/GO-2026-6859 - net/http: HTTP/1 server crash due to MaxBytesReader header race
+#
+## Below vulnerability is in cert-manager's ACME/DNS01 solver controller. This operator only
+## imports cert-manager's API types (for scheme registration and List/Get/Watch of its CRs) and
+## never runs cert-manager's own controllers, so the vulnerable code path is not exercised here.
+# - https://pkg.go.dev/vuln/GO-2026-6889 - cert-manager: Direct ACME Challenge resources can bypass Issuer DNS01 solver policy
+KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-6603|GO-2026-6605|GO-2026-6607|GO-2026-6608|GO-2026-6610|GO-2026-6611|GO-2026-6612|GO-2026-6613|GO-2026-6617|GO-2026-6809|GO-2026-6859|GO-2026-6889"
 
 GOVULNCHECK_BIN="${1:-}"
 OUTPUT_DIR="${2:-}"
