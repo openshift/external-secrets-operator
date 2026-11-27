@@ -471,6 +471,10 @@ check-git-diff: update ## Check for any uncommitted changes including untracked 
 govulncheck: $(GOVULNCHECK) $(OUTPUTS_PATH) ## Run govulncheck vulnerability scan.
 	@./hack/govulncheck.sh $(GOVULNCHECK) $(OUTPUTS_PATH)
 
+.PHONY: validate-renovate-config
+validate-renovate-config: ## Validate renovate config.
+	./hack/renovate-config-validator.sh
+
 ##@ Maintenance
 
 .PHONY: update

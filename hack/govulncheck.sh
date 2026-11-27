@@ -23,8 +23,7 @@ set -o errexit
 #
 ## Below vulnerabilities are fixed only in the Go 1.26.x stdlib (net/http, crypto/tls,
 ## crypto/x509, net/textproto) or require golang.org/x/net@v0.60.0+, which itself requires
-## Go 1.26. This operator currently builds with Go 1.25 (see go.mod and Dockerfile); these
-## remain until the toolchain is bumped to 1.26.
+## Go 1.26. This operator currently builds with Go 1.25.
 # - https://pkg.go.dev/vuln/GO-2026-6603 - net/http: HTTP/2 server memory exhaustion due to Trailer headers
 # - https://pkg.go.dev/vuln/GO-2026-6605 - net/http: HTTP/1 client connection desynchronization after CONNECT rejection
 # - https://pkg.go.dev/vuln/GO-2026-6607 - crypto/tls: reject malformed ECH outer extension references
@@ -39,7 +38,7 @@ set -o errexit
 #
 ## Below vulnerability is in cert-manager's ACME/DNS01 solver controller. This operator only
 ## imports cert-manager's API types (for scheme registration and List/Get/Watch of its CRs) and
-## never runs cert-manager's own controllers, so the vulnerable code path is not exercised here.
+## never runs cert-manager's own controllers, so the vulnerable code path is not present in excecutable path.
 # - https://pkg.go.dev/vuln/GO-2026-6889 - cert-manager: Direct ACME Challenge resources can bypass Issuer DNS01 solver policy
 KNOWN_VULNS_PATTERN="GO-2025-3521|GO-2025-3547|GO-2026-6603|GO-2026-6605|GO-2026-6607|GO-2026-6608|GO-2026-6610|GO-2026-6611|GO-2026-6612|GO-2026-6613|GO-2026-6617|GO-2026-6809|GO-2026-6859|GO-2026-6889"
 

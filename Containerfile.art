@@ -1,6 +1,6 @@
-FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_9_golang_1.25 AS builder
+FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.25-rhel9 AS builder
 
-# Values for below ARGs will passed from tekton configs for konflux builds.
+# Values for below ARGs are passed from tekton configs for konflux builds.
 ## Release version of the external-secrets-operator source code used in the build.
 ARG RELEASE_VERSION
 ## Commit hash that considered for the image build.
@@ -11,13 +11,12 @@ ARG SOURCE_URL
 ARG SOURCE_DIR="/go/src/github.com/openshift/external-secrets-operator"
 
 WORKDIR $SOURCE_DIR
-# ART builds from source repos without git submodules
 COPY . .
 COPY LICENSE /licenses/
 
 RUN IMG_VERSION=${BUILD_VERSION:-${RELEASE_VERSION#v}} SOURCE_GIT_COMMIT=${SOURCE_GIT_COMMIT:-${COMMIT_SHA}} make build
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:83006d535923fcf1345067873524a3980316f51794f01d8655be55d6e9387183
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:08d4c70f1baf6537a0728656cf7942d561e74a35916509d205b6519861266352
 
 ARG RELEASE_VERSION
 ARG COMMIT_SHA

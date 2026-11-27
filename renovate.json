@@ -1,0 +1,45 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": [
+		"https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json?raw=true"
+	],
+	"assigneesFromCodeOwners": true,
+	"automergeStrategy": "auto",
+	"automergeType": "pr",
+	"commitMessagePrefix": "[{{baseBranch}}] NO-JIRA: ",
+	"ignoreTests": false,
+	"rebaseLabel": "needs-rebase",
+	"rebaseWhen": "behind-base-branch",
+	"recreateWhen": "always",
+	"timezone": "Asia/Kolkata",
+	"schedule": ["* 9 * * 1"],
+	"dockerfile": {
+		"enabled": true,
+		"packageRules": [
+			{
+				"description": "Disable all Containerfile image updates by default",
+				"matchDatasources": ["docker"],
+				"enabled": false
+			},
+			{
+				"description": "Digest-only updates for ubi9/ubi-minimal in Containerfile.art",
+				"matchDatasources": ["docker"],
+				"matchPackageNames": ["registry.access.redhat.com/ubi9/ubi-minimal"],
+				"matchFileNames": ["Containerfile.art"],
+				"matchUpdateTypes": ["digest"],
+				"minimumReleaseAge": "3 days",
+				"enabled": true,
+				"automerge": false
+			}
+		]
+	},
+	"tekton": {
+		"enabled": false
+	},
+	"git-submodules": {
+		"enabled": false
+	},
+	"gomod": {
+		"enabled": false
+	}
+}
