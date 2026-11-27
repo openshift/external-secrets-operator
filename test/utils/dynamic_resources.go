@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/restmapper"
 
+	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,14 +140,15 @@ func (d DynamicResourceLoader) getResourceInterface(unstructuredObj *unstructure
 }
 
 func (d DynamicResourceLoader) noErrorSkipExists(err error) {
-	if !k8serrors.IsAlreadyExists(err) {
-		require.NoError(d.t, err)
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
+		// Use Gomega so Ginkgo reports the API error instead of testify FailNow's <nil> panic.
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 }
 
 func (d DynamicResourceLoader) noErrorSkipNotExisting(err error) {
-	if !k8serrors.IsNotFound(err) {
-		require.NoError(d.t, err)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 }
 
